@@ -170,6 +170,15 @@ writeFileSync(
 		shouldAddHelpers: false,
 		maxDuration: 60,
 		memory: 1769,
+		/**
+		 * Vercel injects NODE_ENV for framework builds but not for functions
+		 * declared through the Build Output API, and Better Auth keys
+		 * `useSecureCookies` off it. Unset, it issued the session cookie without
+		 * the `__Secure-` prefix, the app's proxy looked for the prefixed name
+		 * over HTTPS, found nothing, and bounced every signed-in user back to
+		 * /sign-in. It also selects JSON logging over the colourised dev sink.
+		 */
+		environment: { NODE_ENV: "production" },
 		// Beside the database: Neon is us-east-1, and every request makes
 		// several round trips to it.
 		regions: ["iad1"],
