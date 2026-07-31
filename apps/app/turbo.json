@@ -1,0 +1,32 @@
+{
+	"$schema": "https://turborepo.dev/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", ".env*"],
+			"outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"],
+			"env": ["NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_AUTH_URL"],
+			"passThroughEnv": [
+				"AUTH_COOKIE_DOMAIN",
+				"AUTH_TRUSTED_ORIGINS",
+				"BETTER_AUTH_SECRET",
+				"BETTER_AUTH_URL",
+				"DATABASE_URL"
+			]
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true,
+			"passThroughEnv": [
+				"AUTH_COOKIE_DOMAIN",
+				"AUTH_TRUSTED_ORIGINS",
+				"BETTER_AUTH_SECRET",
+				"BETTER_AUTH_URL",
+				"DATABASE_URL",
+				"NEXT_PUBLIC_API_URL",
+				"NEXT_PUBLIC_AUTH_URL"
+			]
+		}
+	}
+}

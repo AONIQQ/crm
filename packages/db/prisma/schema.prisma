@@ -1,0 +1,306 @@
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = ""
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  // CRM ownership. Better Auth owns every field above and `bun run
+  // auth:generate` rewrites them; these back-relations are ours and have to be
+  // put back if that ever wipes them.
+  ownedCompanies Company[]  @relation("CompanyOwner")
+  ownedContacts  Contact[]  @relation("ContactOwner")
+  ownedDeals     Deal[]     @relation("DealOwner")
+  activities     Activity[] @relation("ActivityAuthor")
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model RateLimit {
+  id          String @id
+  key         String
+  count       Int
+  lastRequest BigInt
+
+  @@unique([key])
+  @@map("rateLimit")
+}
+
+// ---------------------------------------------------------------------------
+// CRM
+//
+// Companies are the top-level object; contacts and deals hang off them, and
+// everything that happens is an Activity on a timeline.
+// ---------------------------------------------------------------------------
+
+enum DealStage {
+  DEMO_BOOKED
+  QUALIFIED_TO_BUY
+  /// Terminal, not a step forward — disqualified, and excluded from pipeline value.
+  UNQUALIFIED_TO_BUY
+  DECISION_MAKER_BOUGHT_IN
+  CONTRACT_SENT
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  TASK
+  /// Written by the system when Deal.stage changes.
+  STAGE_CHANGE
+  /// Written by the enrichment agent.
+  ENRICHMENT
+}
+
+enum EnrichmentStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  /// The lookup failed and is worth retrying — see Company.enrichmentError.
+  FAILED
+  /// There is nothing to find (unknown domain, free email host). Not an error.
+  SKIPPED
+}
+
+model Company {
+  id          String  @id @default(cuid())
+  name        String
+  /// Bare and normalised ("stripe.com"). Unique because two records for one
+  /// domain is the fastest way to rot a CRM, and it is the enrichment key.
+  domain      String? @unique
+  website     String?
+  description String?
+
+  // Brand, from Context.dev.
+  logoUrl     String?
+  logoDarkUrl String?
+  /// Square mark, used in table rows.
+  iconUrl     String?
+  /// Hex. An accent only — brand colours would fight the design tokens.
+  brandColor  String?
+
+  // Firmographics.
+  industry    String?
+  subIndustry String?
+  city        String?
+  stateCode   String?
+  country     String?
+  countryCode String?
+
+  // Contact details and socials.
+  phone       String?
+  email       String?
+  linkedinUrl String?
+  twitterUrl  String?
+  githubUrl   String?
+  pricingUrl  String?
+  careersUrl  String?
+
+  ownerId          String?
+  owner            User?    @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  primaryContactId String?  @unique
+  primaryContact   Contact? @relation("PrimaryContact", fields: [primaryContactId], references: [id], onDelete: SetNull)
+
+  enrichmentStatus EnrichmentStatus @default(PENDING)
+  enrichedAt       DateTime?
+  enrichmentError  String?
+  enrichment       CompanyEnrichment?
+
+  contacts   Contact[]  @relation("CompanyContacts")
+  deals      Deal[]
+  activities Activity[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([ownerId])
+  @@index([name])
+  @@map("company")
+}
+
+/// The raw Context.dev payload, kept so re-deriving a field costs nothing and
+/// no credits.
+model CompanyEnrichment {
+  companyId String   @id
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source    String   @default("context.dev")
+  raw       Json
+  fetchedAt DateTime @default(now())
+
+  @@map("companyEnrichment")
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String?
+  /// Unique, matching HubSpot, so a CSV import can be re-run safely. The cost:
+  /// two people behind one info@ address need one email between them.
+  email       String?  @unique
+  phone       String?
+  title       String?
+  linkedinUrl String?
+  companyId   String?
+  company     Company? @relation("CompanyContacts", fields: [companyId], references: [id], onDelete: SetNull)
+  ownerId     String?
+  owner       User?    @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  primaryOf   Company? @relation("PrimaryContact")
+
+  deals      DealContact[]
+  activities Activity[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([companyId])
+  @@index([ownerId])
+  @@map("contact")
+}
+
+model Deal {
+  id        String  @id @default(cuid())
+  name      String
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// Required: every deal has a name against it.
+  ownerId   String
+  owner     User    @relation("DealOwner", fields: [ownerId], references: [id])
+
+  stage             DealStage @default(DEMO_BOOKED)
+  stageChangedAt    DateTime  @default(now())
+  amount            Decimal?  @db.Decimal(14, 2)
+  currency          String    @default("USD")
+  expectedCloseDate DateTime?
+  closedAt          DateTime?
+  closedReason      String?
+
+  contacts   DealContact[]
+  activities Activity[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([companyId])
+  @@index([ownerId])
+  @@index([stage])
+  @@index([expectedCloseDate])
+  @@map("deal")
+}
+
+model DealContact {
+  dealId    String
+  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  role      String?
+
+  @@id([dealId, contactId])
+  @@index([contactId])
+  @@map("dealContact")
+}
+
+model Activity {
+  id      String       @id @default(cuid())
+  type    ActivityType
+  subject String?
+  body    String?
+
+  /// Set when the thing already happened.
+  occurredAt  DateTime?
+  /// Set when it is scheduled. Overdue is dueAt in the past with no completedAt.
+  dueAt       DateTime?
+  completedAt DateTime?
+
+  /// Always stamped when it can be resolved, even for deal and contact
+  /// activity, so a company timeline is one indexed range scan rather than
+  /// three joins.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("ActivityAuthor", fields: [createdById], references: [id])
+  /// { from, to } for STAGE_CHANGE; the credit cost for ENRICHMENT.
+  meta        Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, createdAt])
+  @@index([dealId, createdAt])
+  @@index([contactId, createdAt])
+  @@index([dueAt])
+  @@index([createdById])
+  @@map("activity")
+}

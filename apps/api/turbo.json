@@ -1,0 +1,48 @@
+{
+	"$schema": "https://turborepo.dev/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"build": {
+			"dependsOn": ["$TURBO_EXTENDS$", "trpc:generate"],
+			"outputs": ["dist/**", "src/generated/**"]
+		},
+		"check-types": {
+			"dependsOn": ["$TURBO_EXTENDS$", "trpc:generate"]
+		},
+		"trpc:generate": {
+			"dependsOn": ["^build"],
+			"inputs": ["src/**/*.ts"],
+			"outputs": ["src/generated/**"]
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true,
+			"passThroughEnv": [
+				"AUTH_COOKIE_DOMAIN",
+				"AUTH_TRUSTED_ORIGINS",
+				"BETTER_AUTH_SECRET",
+				"BETTER_AUTH_URL",
+				"CACHE_TTL_MS",
+				"DATABASE_URL",
+				"GOOGLE_CLIENT_ID",
+				"GOOGLE_CLIENT_SECRET",
+				"PORT",
+				"REDIS_URL"
+			]
+		},
+		"test": {
+			"passThroughEnv": [
+				"AUTH_COOKIE_DOMAIN",
+				"AUTH_TRUSTED_ORIGINS",
+				"BETTER_AUTH_SECRET",
+				"BETTER_AUTH_URL",
+				"CACHE_TTL_MS",
+				"DATABASE_URL",
+				"GOOGLE_CLIENT_ID",
+				"GOOGLE_CLIENT_SECRET",
+				"PORT",
+				"REDIS_URL"
+			]
+		}
+	}
+}

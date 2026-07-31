@@ -1,0 +1,147 @@
+"use client";
+
+import {
+	DataTable,
+	type DataTableColumn,
+	type DataTableFacet,
+} from "@crm/ui/components/data-table";
+import { EmptyCellValue } from "@crm/ui/components/empty-cell";
+import { relativeTimeFromIso } from "@crm/ui/lib/format";
+import { useQuery } from "@tanstack/react-query";
+import { CompanyCell } from "@/components/crm/company-cell";
+import { OwnerCell } from "@/components/crm/owner-cell";
+import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
+import { useTableQuery } from "@/components/data-table/use-table-query";
+import { useTRPC } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
+import { contactsSearchParams } from "./contacts-search-params";
+
+type ContactRow = RouterOutputs["contacts"]["list"]["rows"][number];
+
+export function contactName(contact: {
+	firstName: string;
+	lastName: string | null;
+}): string {
+	return [contact.firstName, contact.lastName].filter(Boolean).join(" ");
+}
+
+const COLUMNS: DataTableColumn<ContactRow>[] = [
+	{
+		id: "name",
+		header: "Name",
+		sortable: true,
+		hideable: false,
+		width: "w-[22%]",
+		cell: (row) => (
+			<span className="truncate font-medium">{contactName(row)}</span>
+		),
+	},
+	{
+		id: "title",
+		header: "Title",
+		sortable: true,
+		width: "w-[20%]",
+		hideBelow: "lg",
+		cell: (row) =>
+			row.title ? (
+				<span className="truncate">{row.title}</span>
+			) : (
+				<EmptyCellValue />
+			),
+	},
+	{
+		id: "email",
+		header: "Email",
+		sortable: true,
+		width: "w-[24%]",
+		hideBelow: "md",
+		cell: (row) =>
+			row.email ? (
+				<span className="truncate text-muted-foreground">{row.email}</span>
+			) : (
+				<EmptyCellValue />
+			),
+	},
+	{
+		id: "company",
+		header: "Company",
+		sortable: true,
+		width: "w-[18%]",
+		cell: (row) => <CompanyCell company={row.company} />,
+	},
+	{
+		id: "owner",
+		header: "Owner",
+		width: "w-[16%]",
+		hideBelow: "md",
+		cell: (row) => <OwnerCell owner={row.owner} />,
+	},
+	{
+		id: "lastActivity",
+		header: "Last activity",
+		align: "right",
+		width: "w-[12%]",
+		hideBelow: "sm",
+		cell: (row) => (
+			<span className="text-muted-foreground">
+				{relativeTimeFromIso(row.lastActivityAt)}
+			</span>
+		),
+	},
+];
+
+export function ContactsTable() {
+	const openRecord = useOpenRecord();
+	const trpc = useTRPC();
+	const { query, input } = useTableQuery(contactsSearchParams);
+
+	const contacts = useQuery({
+		...trpc.contacts.list.queryOptions(input),
+		placeholderData: (previous) => previous,
+	});
+	const users = useQuery(trpc.users.list.queryOptions());
+	const companies = useQuery(trpc.companies.options.queryOptions({ q: "" }));
+
+	const facetCounts = contacts.data?.facetCounts;
+
+	const facets: DataTableFacet[] = [
+		{
+			id: "owner",
+			label: "Owner",
+			options: [
+				{ value: "unassigned", label: "Unassigned" },
+				...(users.data ?? []).map((user) => ({
+					value: user.id,
+					label: user.name,
+				})),
+			].filter((option) => (facetCounts?.owner?.[option.value] ?? 0) > 0),
+		},
+		{
+			id: "company",
+			label: "Company",
+			options: [
+				{ value: "none", label: "No company" },
+				...(companies.data ?? []).map((company) => ({
+					value: company.id,
+					label: company.name,
+				})),
+			].filter((option) => (facetCounts?.company?.[option.value] ?? 0) > 0),
+		},
+	];
+
+	return (
+		<DataTable
+			query={query}
+			columns={COLUMNS}
+			rows={contacts.data?.rows ?? []}
+			total={contacts.data?.total ?? 0}
+			facetCounts={facetCounts}
+			facets={facets}
+			getRowId={(row) => row.id}
+			loading={contacts.isFetching}
+			searchPlaceholder="Search by name, email or company…"
+			onRowClick={(row) => openRecord({ kind: "contact", id: row.id })}
+			empty="No contacts match this view."
+		/>
+	);
+}
