@@ -71,7 +71,30 @@ execSync(
 		`--outfile=${JSON.stringify(join(funcDir, "index.mjs"))}`,
 		...EXTERNALS.map((e) => `--external ${e}`),
 	].join(" "),
-	{ cwd: apiDir, stdio: "inherit" },
+	// NODE_ENV matters at *build* time, not just at run time: bun constant-folds
+	// `process.env.NODE_ENV`, so `isProduction` in @crm/auth is burned into the
+	// bundle as a literal. Built without this, it folds to `false`, Better Auth
+	// drops the `__Secure-` cookie prefix, the app's proxy looks for the
+	// prefixed name over HTTPS and bounces every signed-in user to /sign-in.
+	{ cwd: apiDir, stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } },
+);
+
+/**
+ * Pin NODE_ENV at run time too.
+ *
+ * The line above settles everything bun folded, but vendored and external
+ * packages still read `process.env.NODE_ENV` themselves, and Vercel does not
+ * inject it into functions declared through the Build Output API (it also
+ * strips the name from a function's `environment` map, since it is reserved).
+ *
+ * `??=` so a real environment value still wins, and prepended rather than
+ * `--define`d because it has to run before any bundled module body reads it.
+ */
+console.log("• pinning NODE_ENV in the bundle...");
+const entry = join(funcDir, "index.mjs");
+writeFileSync(
+	entry,
+	`process.env.NODE_ENV ??= "production";\n${readFileSync(entry, "utf8")}`,
 );
 
 /**
