@@ -1,26 +1,8 @@
-import { Logger, ValidationPipe } from "@nestjs/common";
-import { NestFactory } from "@nestjs/core";
-import helmet from "helmet";
-import { AppModule } from "./app.module";
-import { ContextLogger } from "./logging/context-logger";
+import { Logger } from "@nestjs/common";
+import { createApp } from "./create-app";
 
 async function bootstrap() {
-	const logger = new ContextLogger();
-
-	const app = await NestFactory.create(AppModule, {
-		bodyParser: false,
-		logger,
-	});
-
-	app.use(helmet());
-	app.useGlobalPipes(
-		new ValidationPipe({
-			whitelist: true,
-			forbidNonWhitelisted: true,
-			transform: true,
-			transformOptions: { enableImplicitConversion: true },
-		}),
-	);
+	const app = await createApp();
 	app.enableShutdownHooks();
 
 	const port = process.env.PORT ?? 3001;
