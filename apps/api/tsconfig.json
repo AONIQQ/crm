@@ -2,10 +2,36 @@
 	"$schema": "https://json.schemastore.org/tsconfig",
 	"extends": "@crm/typescript-config/nestjs.json",
 	"compilerOptions": {
-		"types": ["bun"],
+		"types": [
+			"bun"
+		],
 		"experimentalDecorators": true,
-		"emitDecoratorMetadata": true
+		"emitDecoratorMetadata": true,
+		"baseUrl": ".",
+		"paths": {
+			"@crm/auth": [
+				"../../packages/auth/src/index.ts"
+			],
+			"@crm/auth/client": [
+				"../../packages/auth/src/client.ts"
+			],
+			"@crm/db": [
+				"../../packages/db/src/index.ts"
+			],
+			"@crm/db/client": [
+				"../../packages/db/src/client.ts"
+			],
+			"@crm/db/enums": [
+				"../../packages/db/src/generated/prisma/enums.ts"
+			]
+		}
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts"],
-	"exclude": ["node_modules", "dist"]
+	"include": [
+		"src/**/*.ts",
+		"test/**/*.ts"
+	],
+	"exclude": [
+		"node_modules",
+		"dist"
+	]
 }
