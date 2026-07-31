@@ -1,0 +1,5 @@
+This directory is deliberately empty.
+
+The API ships no static assets, but a project with no framework preset
+expects an output directory to exist. Everything is served by the function
+in `api/`, which `vercel.json` rewrites all paths to.
