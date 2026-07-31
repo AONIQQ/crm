@@ -13,18 +13,16 @@ import { z } from "zod";
 
 const t = initTRPC.create();
 const publicProcedure = t.procedure;
-import { timelineInput, timelineCountsInput, myTasksInput, activityCreateInput, activityUpdateInput, completeInput, activityIdInput } from "../activities/activities.contracts";
+import { timelineInput, timelineCountsInput, myTasksInput, activityCreateInput, completeInput } from "../activities/activities.contracts";
 import { companyListInput, companyIdInput, companyOptionsInput, companyCreateInput, companyUpdateArgs, setPrimaryContactInput } from "../companies/companies.contracts";
 import { contactListInput, contactIdInput, contactCreateInput, contactUpdateArgs } from "../contacts/contacts.contracts";
-import { dealListInput, dealIdInput, dealCreateInput, dealUpdateArgs, setStageInput, setContactsInput } from "../deals/deals.contracts";
-import { boardInput } from "../deals/deals.board";
-import { importInput } from "../import/import.contracts";
+import { dashboardSummaryInput } from "../dashboard/dashboard.contracts";
+import { dealListInput, dealIdInput, dealCreateInput, dealUpdateArgs, setStageInput } from "../deals/deals.contracts";
 import type { ActivitiesRouter } from "../activities/activities.router";
 import type { CompaniesRouter } from "../companies/companies.router";
 import type { ContactsRouter } from "../contacts/contacts.router";
 import type { DashboardRouter } from "../dashboard/dashboard.router";
 import type { DealsRouter } from "../deals/deals.router";
-import type { ImportRouter } from "../import/import.router";
 import type { SearchRouter } from "../search/search.router";
 import type { UsersRouter } from "../users/users.router";
 
@@ -42,15 +40,9 @@ const appRouter = t.router({
     create: publicProcedure
       .input(activityCreateInput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ActivitiesRouter["create"]>>),
-    update: publicProcedure
-      .input(activityUpdateInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ActivitiesRouter["update"]>>),
     complete: publicProcedure
       .input(completeInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ActivitiesRouter["complete"]>>),
-    remove: publicProcedure
-      .input(activityIdInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ActivitiesRouter["remove"]>>)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ActivitiesRouter["complete"]>>)
     }),
   companies: t.router({
     list: publicProcedure
@@ -68,9 +60,6 @@ const appRouter = t.router({
     update: publicProcedure
       .input(companyUpdateArgs)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CompaniesRouter["update"]>>),
-    remove: publicProcedure
-      .input(companyIdInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CompaniesRouter["remove"]>>),
     enrich: publicProcedure
       .input(companyIdInput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CompaniesRouter["enrich"]>>),
@@ -93,22 +82,17 @@ const appRouter = t.router({
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["create"]>>),
     update: publicProcedure
       .input(contactUpdateArgs)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["update"]>>),
-    remove: publicProcedure
-      .input(contactIdInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["remove"]>>)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["update"]>>)
     }),
   dashboard: t.router({
     summary: publicProcedure
+      .input(dashboardSummaryInput)
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DashboardRouter["summary"]>>)
     }),
   deals: t.router({
     list: publicProcedure
       .input(dealListInput)
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["list"]>>),
-    board: publicProcedure
-      .input(boardInput)
-      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["board"]>>),
     byId: publicProcedure
       .input(dealIdInput)
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["byId"]>>),
@@ -120,18 +104,7 @@ const appRouter = t.router({
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["update"]>>),
     setStage: publicProcedure
       .input(setStageInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["setStage"]>>),
-    setContacts: publicProcedure
-      .input(setContactsInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["setContacts"]>>),
-    remove: publicProcedure
-      .input(dealIdInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["remove"]>>)
-    }),
-  import: t.router({
-    run: publicProcedure
-      .input(importInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ImportRouter["run"]>>)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<DealsRouter["setStage"]>>)
     }),
   search: t.router({
     quick: publicProcedure

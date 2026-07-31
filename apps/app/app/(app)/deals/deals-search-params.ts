@@ -1,4 +1,3 @@
-import { parseAsStringLiteral } from "nuqs/server";
 import { createListSearchParams } from "@/components/data-table/list-search-params";
 
 export const dealsSearchParams = createListSearchParams({
@@ -8,14 +7,3 @@ export const dealsSearchParams = createListSearchParams({
 	tabId: "status",
 	facetIds: ["owner", "stage", "closing"] as const,
 });
-
-/** `?view=board` swaps the table for the pipeline columns. */
-export const dealsViewParser = parseAsStringLiteral([
-	"table",
-	"board",
-] as const).withDefault("table");
-
-export const loadDealsView = (searchParams: Record<string, unknown>) =>
-	dealsViewParser.parseServerSide(
-		searchParams.view as string | string[] | undefined,
-	);

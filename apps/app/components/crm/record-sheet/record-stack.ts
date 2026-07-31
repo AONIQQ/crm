@@ -1,22 +1,52 @@
 "use client";
 
-import { parseAsArrayOf, parseAsString, useQueryState } from "nuqs";
+import {
+	parseAsArrayOf,
+	parseAsString,
+	parseAsStringLiteral,
+	useQueryStates,
+} from "nuqs";
 import { useCallback, useMemo } from "react";
 
-export const RECORD_KINDS = ["company", "contact", "deal"] as const;
+const RECORD_KINDS = ["company", "contact", "deal"] as const;
 
 export type RecordKind = (typeof RECORD_KINDS)[number];
 
 export type RecordRef = { kind: RecordKind; id: string };
 
+/** The quick-add forms a record sheet can have open inside it. */
+const RECORD_FORMS = ["contact", "deal"] as const;
+
+export type RecordForm = (typeof RECORD_FORMS)[number];
+
+/** The panel a quick-add form belongs to. */
+const FORM_TAB: Record<RecordForm, string> = {
+	contact: "contacts",
+	deal: "deals",
+};
+
 /**
- * Which records are open, innermost last.
+ * Everything about what the sheet is showing: which records are open
+ * (innermost last), which tab of the innermost one, and which quick-add form
+ * inside that.
  *
  * A stack rather than a single id because the interesting move is sideways:
  * from a company to one of its deals to somebody on that deal. Closing the
  * deal should put you back on the company you came from, not on the table.
+ *
+ * All three ride in one hook so a write to any of them can clear the others.
+ * Moving to another record has to reset the tab and drop a half-typed form —
+ * otherwise they reappear, out of context, on whatever you opened next.
+ *
+ * `tab` and `add` replace rather than push: flicking through tabs is reading,
+ * not navigating, and a Back button that walks you through four panels before
+ * it closes the sheet is a Back button nobody presses twice.
  */
-const stackParser = parseAsArrayOf(parseAsString, ",").withDefault([]);
+const params = {
+	record: parseAsArrayOf(parseAsString, ",").withDefault([]),
+	tab: parseAsString,
+	add: parseAsStringLiteral(RECORD_FORMS),
+};
 
 export function recordKey(ref: RecordRef): string {
 	return `${ref.kind}:${ref.id}`;
@@ -32,19 +62,26 @@ function parseRef(raw: string): RecordRef | null {
 }
 
 export function useRecordStack() {
-	const [raw, setRaw] = useQueryState("record", stackParser);
+	const [{ record }, setParams] = useQueryStates(params);
 
 	const stack = useMemo(
-		() => raw.map(parseRef).filter((ref): ref is RecordRef => ref !== null),
-		[raw],
+		() => record.map(parseRef).filter((ref): ref is RecordRef => ref !== null),
+		[record],
 	);
 
 	const write = useCallback(
 		(next: RecordRef[], history: "push" | "replace") => {
-			// `null` clears the param rather than leaving `?record=` behind.
-			void setRaw(next.length === 0 ? null : next.map(recordKey), { history });
+			void setParams(
+				// `null` clears each param rather than leaving `?record=` behind.
+				{
+					record: next.length === 0 ? null : next.map(recordKey),
+					tab: null,
+					add: null,
+				},
+				{ history },
+			);
 		},
-		[setRaw],
+		[setParams],
 	);
 
 	/**
@@ -90,4 +127,38 @@ export function useRecordStack() {
 /** Opens a record from anywhere — a table row, a link, a search hit. */
 export function useOpenRecord() {
 	return useRecordStack().open;
+}
+
+/**
+ * What the open record sheet is showing — the tab, and the quick-add form
+ * inside it.
+ *
+ * In the URL rather than component state, like every other view state here:
+ * "the Attio deal, on Activity" is then a link you can send someone, and a
+ * half-finished "add a contact" survives a refresh instead of being silently
+ * discarded.
+ */
+export function useRecordSheetView(fallbackTab: string) {
+	const [{ tab, add }, setParams] = useQueryStates(params);
+
+	// A form open in a panel implies the panel: landing on `?add=contact`
+	// should show the contacts tab, not leave the form mounted out of sight
+	// behind whichever tab happened to be the default.
+	const active = add ? FORM_TAB[add] : (tab ?? fallbackTab);
+
+	const setTab = useCallback(
+		(next: string) => {
+			// Leaving the panel abandons the form that lived in it, and the
+			// default tab is the absence of the param rather than a value.
+			void setParams({ tab: next === fallbackTab ? null : next, add: null });
+		},
+		[setParams, fallbackTab],
+	);
+
+	const setForm = useCallback(
+		(next: RecordForm | null) => void setParams({ add: next }),
+		[setParams],
+	);
+
+	return { tab: active, setTab, form: add, setForm };
 }

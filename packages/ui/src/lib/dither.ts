@@ -10,9 +10,3 @@ const BLOOM_CLASS: Record<Bloom, string> = {
 export function bloomClass(bloom: Bloom = "off"): string {
 	return BLOOM_CLASS[bloom];
 }
-
-export const DITHER_CLASS = "dither";
-
-export function bloomColorForBgClass(bgClass: string): string {
-	return `var(--color-${bgClass.replace(/^bg-/, "")})`;
-}

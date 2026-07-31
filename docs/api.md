@@ -81,9 +81,28 @@ Everything the app reads or writes goes through `nestjs-trpc` routers under
 There is no HTTP response cache in front of tRPC. Freshness is TanStack Query's
 job: a mutation invalidates the query keys it affected, and the list refetches.
 
-- **Invalidate on the client, in the mutation's `onSuccess`**, using the
-  `queryKey` from `trpc.<router>.<procedure>.queryKey()` — invalidate the
-  narrowest key that covers what changed.
+- **Invalidate on the client, in the mutation's `onSuccess`** — but **through
+  `useCrmCache()`** (`apps/app/lib/trpc/cache.ts`), not by listing keys at the
+  call site. Say *what changed* (`cache.deal(id)`, `cache.company(id)`,
+  `cache.contact(id)`, `cache.activity()`) and the module owns the fan-out. Twelve
+  hand-written key lists is how they drifted: a stage change did not refresh the
+  timeline entry it writes, creating a deal did not refresh the board, and nothing
+  refreshed the overview, so a rep could close a deal and watch their own numbers
+  not move. **A new mutation adds a call there, not a new list of keys.**
+- **Pass `{ settle: "record" }`** when the caller is an inline editor. The
+  default waits for every affected view to refetch, which is right when the point
+  of the action *is* the view changing (a card moving between board columns);
+  `"record"` waits only for the edited record so the field's spinner clears as
+  soon as the value under it is right, and lets the table behind the sheet catch
+  up on its own.
+- **An infinite query needs `pathKey()`, not `queryKey()`.** tRPC stamps the
+  query type into the key, so `queryKey()` yields `{ type: "query" }` and
+  `infiniteQueryOptions` caches under `{ type: "infinite" }` — the two cannot
+  partially match, and invalidating with the wrong one is silent: it reports
+  success, refetches the sibling non-infinite queries, and leaves the infinite
+  one stale until a reload. `pathKey()` carries no type and matches both, which
+  is what you want whenever a procedure is read both ways (`activities.timeline`
+  is, as a paged history and as a pinned top-ten).
 - **`cache-manager` is still there** (`apps/api/src/cache`, Redis when
   `REDIS_URL` is set) but it is used deliberately, per value, by services that
   want it — `AuthService.getProfile` is the model: read through, write on miss,
@@ -92,4 +111,9 @@ job: a mutation invalidates the query keys it affected, and the list refetches.
 - **Background writes the browser cannot see** — enrichment finishing, most
   obviously — are not invalidations at all, because no client action caused
   them. Poll for those: `refetchInterval` while the record's status is
-  `PENDING`/`RUNNING`, and stop once it settles.
+  `PENDING`/`RUNNING`, and stop once it settles. Use `isEnriching()` and
+  `ENRICHMENT_POLL_MS` from `components/crm/enrichment-status` so the rule is one
+  definition. **A list polls too, not just the record sheet** — the company sheet
+  polled and the companies table did not, so a newly added company's logo and
+  industry appeared in the sheet and stayed blank in the table behind it until a
+  reload.

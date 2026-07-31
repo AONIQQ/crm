@@ -1,5 +1,6 @@
 "use client";
 
+import ChevronDown from "@carbon/icons-react/es/ChevronDown";
 import type { DealStage } from "@crm/db/enums";
 import { Button } from "@crm/ui/components/button";
 import {
@@ -18,12 +19,14 @@ import {
 	DropdownMenuTrigger,
 } from "@crm/ui/components/dropdown-menu";
 import { Field, FieldLabel } from "@crm/ui/components/field";
+import { Icon } from "@crm/ui/components/icon";
 import { Spinner } from "@crm/ui/components/spinner";
 import { Textarea } from "@crm/ui/components/textarea";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { parseAsString, useQueryStates } from "nuqs";
 import { useId, useState } from "react";
 import { toast } from "sonner";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 import {
 	DEAL_STAGE_OPTIONS,
@@ -46,28 +49,12 @@ const closeReasonParams = {
 /** Invalidates everywhere a stage is visible. */
 function useStageMutation(onDone?: () => void) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+	const cache = useCrmCache();
 
 	return useMutation(
 		trpc.deals.setStage.mutationOptions({
-			onSuccess: async () => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.deals.list.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.deals.byId.queryKey(),
-					}),
-					// A stage change writes a STAGE_CHANGE activity stamped with the
-					// company, so the company page's timeline and last-activity change
-					// too.
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.byId.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.list.queryKey(),
-					}),
-				]);
+			onSuccess: async (_, variables) => {
+				await cache.deal(variables.id);
 				onDone?.();
 			},
 			onError: (error) => toast.error(error.message),
@@ -76,7 +63,12 @@ function useStageMutation(onDone?: () => void) {
 }
 
 /**
- * The stage picker that appears on a deal row and on the deal page.
+ * The one place a deal's stage is set — a table cell, a board card, or the
+ * header of the deal's own sheet.
+ *
+ * `inline` is for a cell in a list, where a bordered control in every row
+ * would out-shout the rows. `control` is for a sheet header, where it sits
+ * beside real buttons and has to look like one.
  *
  * Losing stages divert through `CloseReasonDialog`: the API refuses them
  * without a reason, so asking here is friendlier than a toast full of the
@@ -85,9 +77,11 @@ function useStageMutation(onDone?: () => void) {
 export function DealStageMenu({
 	dealId,
 	stage,
+	variant = "inline",
 }: {
 	dealId: string;
 	stage: DealStage;
+	variant?: "inline" | "control";
 }) {
 	const [, setCloseParams] = useQueryStates(closeReasonParams);
 	const setStage = useStageMutation();
@@ -96,17 +90,32 @@ export function DealStageMenu({
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
 				{/* The row underneath opens a record on click; this control does not. */}
-				<button
-					type="button"
-					onClick={(event) => event.stopPropagation()}
-					disabled={setStage.isPending}
-					className="flex min-w-0 items-center text-left hover:text-foreground disabled:opacity-50"
-				>
-					<DealStageIndicator stage={stage} />
-				</button>
+				{variant === "control" ? (
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={setStage.isPending}
+						onClick={(event) => event.stopPropagation()}
+					>
+						<DealStageIndicator stage={stage} className="text-foreground" />
+						<Icon icon={ChevronDown} className="text-muted-foreground" />
+					</Button>
+				) : (
+					<button
+						type="button"
+						onClick={(event) => event.stopPropagation()}
+						disabled={setStage.isPending}
+						className="flex min-w-0 items-center text-left hover:text-foreground disabled:opacity-50"
+					>
+						<DealStageIndicator stage={stage} />
+					</button>
+				)}
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
-				align="start"
+				// The header control sits at the right edge of the sheet, so its menu
+				// hangs from that edge rather than being pushed back by collision
+				// detection a beat after it opens.
+				align={variant === "control" ? "end" : "start"}
 				className="min-w-52"
 				onClick={(event) => event.stopPropagation()}
 			>

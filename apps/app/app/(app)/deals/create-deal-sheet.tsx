@@ -28,12 +28,13 @@ import {
 	SheetTrigger,
 } from "@crm/ui/components/sheet";
 import { Spinner } from "@crm/ui/components/spinner";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { parseAsBoolean, useQueryState } from "nuqs";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { dealStageLabel, OPEN_STAGES } from "@/components/crm/deal-stage";
 import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
 const UNSET = "";
@@ -46,7 +47,7 @@ export function CreateDealSheet({
 }) {
 	const openRecord = useOpenRecord();
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+	const cache = useCrmCache();
 
 	// URL state, like every other view state here — see CreateCompanySheet.
 	const [open, setOpen] = useQueryState(
@@ -74,17 +75,7 @@ export function CreateDealSheet({
 	const create = useMutation(
 		trpc.deals.create.mutationOptions({
 			onSuccess: async (deal) => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.deals.list.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.byId.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.list.queryKey(),
-					}),
-				]);
+				await cache.deal(deal.id);
 				toast.success(`${deal.name} added.`);
 				await setOpen(null);
 				setName("");

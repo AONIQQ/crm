@@ -1,8 +1,9 @@
-import { ActivityType, type Db, type DealStage } from "@crm/db";
+import { ActivityType, type Db, DealStage } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import { OPEN_DEAL_STAGES } from "../deals/deal-stage";
+import type { DashboardSummaryInput } from "./dashboard.contracts";
 
 const OWNER_SELECT = {
 	id: true,
@@ -11,42 +12,109 @@ const OWNER_SELECT = {
 	image: true,
 } as const;
 
+/** Months in the trend chart, the current one included. */
+const TREND_MONTHS = 6;
+
+/**
+ * Window behind the rolling rates — win rate, average deal size, cycle time.
+ *
+ * A quarter is long enough that one good week does not swing it and short
+ * enough that it still describes how the rep is selling now.
+ */
+const RATE_WINDOW_DAYS = 90;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** "Feb". The chart has room for three letters, not "February". */
+const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { month: "short" });
+
+/** Local month boundary, `offset` months from the one `from` falls in. */
+function monthStart(from: Date, offset: number): Date {
+	return new Date(from.getFullYear(), from.getMonth() + offset, 1);
+}
+
+/** Months since year zero — subtract two to get a bucket index. */
+function monthKey(date: Date): number {
+	return date.getFullYear() * 12 + date.getMonth();
+}
+
 @Injectable()
 export class DashboardService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
 	/**
-	 * What a rep wants on opening the app: where the pipeline is, what closes
-	 * this month, what they are late on, and what just happened.
+	 * How the rep is doing: what they have closed, what is still open, the rates
+	 * that describe how they sell, and what needs attention today.
 	 *
-	 * Everything is aggregated in Postgres. The alternative — fetching deals and
-	 * summing them here — is a page that gets slower every quarter.
+	 * The open pipeline spans all history, so it is aggregated in Postgres — the
+	 * alternative is a page that gets slower every quarter. Everything derived
+	 * from closed and newly created deals comes off one bounded read of the last
+	 * six months and is folded up here: that window does not grow with history,
+	 * it is a single index scan instead of a dozen aggregates, and it keeps the
+	 * KPI strip and the chart underneath it on exactly the same month boundaries
+	 * rather than letting SQL's idea of a month drift from JavaScript's.
 	 */
-	async summary(actingUserId: string) {
+	async summary(actingUserId: string, input: DashboardSummaryInput) {
+		const mine = input.scope === "me";
+		const owned = mine ? { ownerId: actingUserId } : {};
+
 		const now = new Date();
-		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-		const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+		const startOfMonth = monthStart(now, 0);
+		const startOfNextMonth = monthStart(now, 1);
+		const startOfPrevMonth = monthStart(now, -1);
+		const trendStart = monthStart(now, -(TREND_MONTHS - 1));
+		const rateStart = new Date(now.getTime() - RATE_WINDOW_DAYS * DAY_MS);
 
 		const [
-			byStage,
-			closingThisMonth,
+			openByStage,
+			recentDeals,
+			closingThisMonthTotals,
+			biggestOpen,
 			overdueTasks,
 			recentActivity,
-			wonThisMonth,
 		] = await Promise.all([
 			this.db.deal.groupBy({
 				by: ["stage"],
-				where: { stage: { in: [...OPEN_DEAL_STAGES] } },
+				where: { ...owned, stage: { in: [...OPEN_DEAL_STAGES] } },
+				_count: { _all: true },
+				_sum: { amount: true },
+			}),
+			// One read covers the trend chart, this month vs. last, and the
+			// 90-day rates. `amount` is the only wide column and there are four
+			// of them, so this stays cheap even for a busy team.
+			this.db.deal.findMany({
+				where: {
+					...owned,
+					OR: [
+						{ createdAt: { gte: trendStart } },
+						{ closedAt: { gte: trendStart } },
+					],
+				},
+				select: {
+					amount: true,
+					stage: true,
+					createdAt: true,
+					closedAt: true,
+				},
+			}),
+			// A count and a sum, not rows: the KPI strip quotes "due this month"
+			// as one figure, and no list on the page shows the deals behind it.
+			this.db.deal.aggregate({
+				where: {
+					...owned,
+					stage: { in: [...OPEN_DEAL_STAGES] },
+					expectedCloseDate: { gte: startOfMonth, lt: startOfNextMonth },
+				},
 				_count: { _all: true },
 				_sum: { amount: true },
 			}),
 			this.db.deal.findMany({
-				where: {
-					stage: { in: [...OPEN_DEAL_STAGES] },
-					expectedCloseDate: { gte: startOfMonth, lt: startOfNextMonth },
-				},
-				orderBy: [{ expectedCloseDate: "asc" }],
-				take: 10,
+				where: { ...owned, stage: { in: [...OPEN_DEAL_STAGES] } },
+				orderBy: [
+					{ amount: { sort: "desc", nulls: "last" } },
+					{ expectedCloseDate: "asc" },
+				],
+				take: 6,
 				select: {
 					id: true,
 					name: true,
@@ -54,10 +122,13 @@ export class DashboardService {
 					amount: true,
 					currency: true,
 					expectedCloseDate: true,
+					stageChangedAt: true,
 					company: { select: { id: true, name: true, iconUrl: true } },
 					owner: { select: OWNER_SELECT },
 				},
 			}),
+			// Always the acting user's, in either scope: nobody else's tasks are
+			// theirs to tick off.
 			this.db.activity.findMany({
 				where: {
 					type: ActivityType.TASK,
@@ -76,6 +147,7 @@ export class DashboardService {
 				},
 			}),
 			this.db.activity.findMany({
+				where: mine ? { createdById: actingUserId } : {},
 				orderBy: [{ createdAt: "desc" }],
 				take: 12,
 				select: {
@@ -90,18 +162,10 @@ export class DashboardService {
 					deal: { select: { id: true, name: true } },
 				},
 			}),
-			this.db.deal.aggregate({
-				where: {
-					stage: "CLOSED_WON",
-					closedAt: { gte: startOfMonth, lt: startOfNextMonth },
-				},
-				_count: { _all: true },
-				_sum: { amount: true },
-			}),
 		]);
 
 		const stages = OPEN_DEAL_STAGES.map((stage) => {
-			const group = byStage.find((row) => row.stage === stage);
+			const group = openByStage.find((row) => row.stage === stage);
 			return {
 				stage: stage as DealStage,
 				count: group?._count._all ?? 0,
@@ -109,24 +173,90 @@ export class DashboardService {
 			};
 		});
 
+		const firstBucket = monthKey(trendStart);
+		const trend = Array.from({ length: TREND_MONTHS }, (_, index) => ({
+			month: MONTH_LABEL.format(monthStart(trendStart, index)),
+			won: 0,
+			created: 0,
+		}));
+
+		const wonThisMonth = { count: 0, valueCents: 0 };
+		const wonPrevMonth = { count: 0, valueCents: 0 };
+		let wins = 0;
+		let losses = 0;
+		let wonCents = 0;
+		let cycleDays = 0;
+
+		for (const deal of recentDeals) {
+			const cents = toCents(deal.amount) ?? 0;
+
+			// A deal closed inside the window but opened before it lands in no
+			// created bucket — the index is negative, and the lookup misses.
+			const created = trend[monthKey(deal.createdAt) - firstBucket];
+			if (created) created.created += cents;
+
+			const { closedAt, stage } = deal;
+			if (!closedAt) continue;
+			const won = stage === DealStage.CLOSED_WON;
+
+			if (won) {
+				const closed = trend[monthKey(closedAt) - firstBucket];
+				if (closed) closed.won += cents;
+
+				if (closedAt >= startOfMonth && closedAt < startOfNextMonth) {
+					wonThisMonth.count += 1;
+					wonThisMonth.valueCents += cents;
+				} else if (closedAt >= startOfPrevMonth && closedAt < startOfMonth) {
+					wonPrevMonth.count += 1;
+					wonPrevMonth.valueCents += cents;
+				}
+			}
+
+			if (closedAt < rateStart) continue;
+			if (won) {
+				wins += 1;
+				wonCents += cents;
+				cycleDays += (closedAt.getTime() - deal.createdAt.getTime()) / DAY_MS;
+			} else if (stage === DealStage.CLOSED_LOST) {
+				// Disqualified deals are deliberately neither: they never reached a
+				// decision, so counting them would turn the win rate into a
+				// measure of lead quality.
+				losses += 1;
+			}
+		}
+
+		const decided = wins + losses;
+
 		return {
+			scope: input.scope,
 			pipeline: {
 				stages,
-				totalCents: stages.reduce(
-					(total, stage) => total + stage.valueCents,
-					0,
-				),
-				totalDeals: stages.reduce((total, stage) => total + stage.count, 0),
+				totalCents: stages.reduce((total, s) => total + s.valueCents, 0),
+				totalDeals: stages.reduce((total, s) => total + s.count, 0),
 			},
-			wonThisMonth: {
-				count: wonThisMonth._count._all,
-				valueCents: toCents(wonThisMonth._sum.amount) ?? 0,
+			wonThisMonth,
+			wonPrevMonth,
+			/** Rolling rates over `windowDays`. `null` where nothing has closed. */
+			performance: {
+				windowDays: RATE_WINDOW_DAYS,
+				wins,
+				losses,
+				winRate: decided === 0 ? null : wins / decided,
+				avgDealCents: wins === 0 ? null : Math.round(wonCents / wins),
+				avgCycleDays: wins === 0 ? null : Math.round(cycleDays / wins),
 			},
-			closingThisMonth: closingThisMonth.map(
-				({ amount, expectedCloseDate, ...deal }) => ({
+			/** Six months of closed-won value against new pipeline created. */
+			trend,
+			closingThisMonthTotal: {
+				count: closingThisMonthTotals._count._all,
+				valueCents: toCents(closingThisMonthTotals._sum.amount) ?? 0,
+			},
+			biggestOpen: biggestOpen.map(
+				({ amount, expectedCloseDate, stageChangedAt, ...deal }) => ({
 					...deal,
 					amountCents: toCents(amount),
 					expectedCloseDate: expectedCloseDate?.toISOString() ?? null,
+					stageChangedAt: stageChangedAt.toISOString(),
 				}),
 			),
 			overdueTasks: overdueTasks.map(({ dueAt, ...task }) => ({

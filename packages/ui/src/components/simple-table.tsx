@@ -28,10 +28,16 @@ const ALIGN_CLASS = {
 	center: "text-center",
 } as const;
 
+const PANEL_SURFACE = {
+	popover: "bg-popover [&_th]:bg-popover",
+	page: "bg-background [&_th]:bg-background",
+} as const;
+
 export function SimpleTable({
 	columns,
 	children,
 	variant = "default",
+	surface = "popover",
 	className,
 	containerClassName,
 	headerClassName,
@@ -46,6 +52,12 @@ export function SimpleTable({
 	 * a column of blocks and scrolls with the page.
 	 */
 	variant?: "default" | "panel";
+	/**
+	 * What the pinned header sits on, so it hides the rows passing under it
+	 * instead of showing a strip of the wrong surface: `popover` inside a sheet,
+	 * `page` inside a panel on the page itself.
+	 */
+	surface?: keyof typeof PANEL_SURFACE;
 	className?: string;
 	containerClassName?: string;
 	headerClassName?: string;
@@ -64,7 +76,7 @@ export function SimpleTable({
 		>
 			<TableHeader
 				className={cn(
-					panel && "sticky top-0 z-10 bg-popover [&_th]:bg-popover",
+					panel && ["sticky top-0 z-10", PANEL_SURFACE[surface]],
 					headerClassName,
 				)}
 			>

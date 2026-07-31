@@ -23,11 +23,12 @@ import {
 	SheetTrigger,
 } from "@crm/ui/components/sheet";
 import { Spinner } from "@crm/ui/components/spinner";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { parseAsBoolean, useQueryState } from "nuqs";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
 const NONE = "none";
@@ -40,7 +41,7 @@ export function CreateContactSheet({
 }) {
 	const openRecord = useOpenRecord();
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+	const cache = useCrmCache();
 
 	// URL state, like every other view state here — see CreateCompanySheet.
 	const [open, setOpen] = useQueryState(
@@ -65,18 +66,7 @@ export function CreateContactSheet({
 	const create = useMutation(
 		trpc.contacts.create.mutationOptions({
 			onSuccess: async (contact) => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.contacts.list.queryKey(),
-					}),
-					// The company's own page shows its contacts and their count.
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.byId.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.list.queryKey(),
-					}),
-				]);
+				await cache.contact(contact.id);
 				toast.success(
 					`${[contact.firstName, contact.lastName].filter(Boolean).join(" ")} added.`,
 				);

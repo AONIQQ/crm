@@ -53,11 +53,6 @@ export class CompaniesRouter {
 		return this.companies.update(input.id, input.data);
 	}
 
-	@Mutation({ input: companyIdInput })
-	async remove(@Input("id") id: string) {
-		return this.companies.remove(id);
-	}
-
 	/** Re-runs the brand lookup, ignoring Context.dev's cache. */
 	@Mutation({ input: companyIdInput })
 	async enrich(@Input("id") id: string) {

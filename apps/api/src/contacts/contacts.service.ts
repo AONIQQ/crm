@@ -263,16 +263,6 @@ export class ContactsService {
 		}
 	}
 
-	async remove(id: string): Promise<{ id: string }> {
-		try {
-			await this.db.contact.delete({ where: { id } });
-		} catch (error) {
-			throw this.translate(error, id);
-		}
-		this.logger.log({ message: "Contact deleted", contactId: id });
-		return { id };
-	}
-
 	/** `q` matches a name, an email address, or where they work. */
 	private searchFilter(q: string): Prisma.ContactWhereInput {
 		const term = q.trim();

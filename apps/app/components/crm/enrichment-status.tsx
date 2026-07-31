@@ -45,6 +45,21 @@ export function EnrichmentIndicator({
 	);
 }
 
+/**
+ * Still going to change on its own.
+ *
+ * Enrichment is background work with no client action behind it, so there is
+ * nothing to invalidate — the only way to notice it finished is to ask. Anything
+ * rendering an enriched field (a logo, an industry) polls on this while it is
+ * true and stops the moment it settles.
+ */
+export function isEnriching(status: EnrichmentStatus): boolean {
+	return status === "PENDING" || status === "RUNNING";
+}
+
+/** How often to ask, in ms, while the agent is still working. */
+export const ENRICHMENT_POLL_MS = 3_000;
+
 /** Statuses in the order the facet dropdown should list them. */
 export const ENRICHMENT_FACET_OPTIONS = (
 	Object.keys(PRESENTATION) as EnrichmentStatus[]

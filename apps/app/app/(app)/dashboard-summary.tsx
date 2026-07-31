@@ -4,269 +4,369 @@ import { Button } from "@crm/ui/components/button";
 import {
 	Card,
 	CardAction,
-	CardContent,
+	CardDescription,
 	CardHeader,
+	CardPanel,
+	CardPanelEmpty,
 	CardTitle,
 } from "@crm/ui/components/card";
+import { CardTableEmpty } from "@crm/ui/components/card-table";
 import { Checkbox } from "@crm/ui/components/checkbox";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
-import { Separator } from "@crm/ui/components/separator";
-import { StatusIndicator } from "@crm/ui/components/status-indicator";
-import { formatMoney, relativeTimeFromIso } from "@crm/ui/lib/format";
 import {
-	useMutation,
-	useQueryClient,
-	useSuspenseQuery,
-} from "@tanstack/react-query";
+	SimpleTable,
+	type SimpleTableColumn,
+	SimpleTableRow,
+} from "@crm/ui/components/simple-table";
+import { Spinner } from "@crm/ui/components/spinner";
+import { StatusIndicator } from "@crm/ui/components/status-indicator";
+import { TableCell } from "@crm/ui/components/table";
+import {
+	formatCount,
+	formatMoneyCompact,
+	relativeTimeFromIso,
+} from "@crm/ui/lib/format";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useQueryState } from "nuqs";
+import type { CSSProperties } from "react";
 import { toast } from "sonner";
-import { dealStageLabel } from "@/components/crm/deal-stage";
-import { OwnerCell } from "@/components/crm/owner-cell";
+import {
+	DealStageIndicator,
+	dealStageColor,
+} from "@/components/crm/deal-stage";
 import { RecordLink } from "@/components/crm/record-sheet/record-link";
 import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
-import {
-	ActivityIcon,
-	activityLabel,
-} from "@/components/crm/timeline/activity-icon";
+import { activityLabel } from "@/components/crm/timeline/activity-icon";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
+import { overviewParsers } from "./overview-search-params";
+import { SalesDashboard } from "./sales-dashboard";
 
-const dateFormat = new Intl.DateTimeFormat(undefined, {
-	month: "short",
-	day: "numeric",
-});
+/**
+ * Cell padding, in one constant.
+ *
+ * `SimpleTable` sets its own header padding and leaves the body to the caller,
+ * so a table where one column forgot `py-2.5` is a row half a line taller than
+ * the ones around it — which is most of what made these lists look ragged.
+ */
+const CELL = "px-3 py-2.5 align-middle";
 
+/**
+ * Every list on the overview is a table: a header row naming the columns, rows
+ * divided by hairlines, and no icon in the leading cell. A glyph per row is
+ * what this page deliberately does not do.
+ *
+ * The two panels below the charts are framed and set to one height because
+ * their rows scroll; the activity log at the bottom is unframed and runs as
+ * long as it needs to, because nothing sits beside it to end level with.
+ */
 export function DashboardSummary() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+	const cache = useCrmCache();
 	const openRecord = useOpenRecord();
 
-	const { data } = useSuspenseQuery(trpc.dashboard.summary.queryOptions());
+	// Read, not written, here: the toggle in the page header owns the setter, and
+	// both sides agree because the value lives in the URL rather than in a
+	// provider threaded between them.
+	const [scope] = useQueryState("scope", overviewParsers.scope);
+
+	const summaryQuery = useQuery({
+		...trpc.dashboard.summary.queryOptions({ scope }),
+		// Switching scope keeps the previous numbers on screen while the new ones
+		// load, the same way the tables hold their rows while paging.
+		placeholderData: (previous) => previous,
+	});
 
 	const complete = useMutation(
 		trpc.activities.complete.mutationOptions({
-			onSuccess: async () => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.dashboard.summary.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.timeline.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.myTasks.queryKey(),
-					}),
-				]);
-			},
+			onSuccess: () => cache.activity(),
 			onError: (error) => toast.error(error.message),
 		}),
 	);
 
-	const {
-		pipeline,
-		wonThisMonth,
-		closingThisMonth,
-		overdueTasks,
-		recentActivity,
-	} = data;
+	const summary = summaryQuery.data;
+
+	if (!summary) {
+		return (
+			<div className="flex flex-1 justify-center py-12">
+				<Spinner />
+			</div>
+		);
+	}
+
+	const { biggestOpen, overdueTasks, recentActivity } = summary;
+
+	const mine = scope === "me";
+	const largestOpenCents = biggestOpen[0]?.amountCents ?? 0;
+
+	const openColumns: SimpleTableColumn[] = [
+		{ header: "Deal" },
+		{ header: "Stage", width: "w-32", className: "hidden lg:table-cell" },
+		{
+			srLabel: "Share of the largest",
+			width: "w-24",
+			className: "hidden sm:table-cell",
+		},
+		{ header: "Value", width: "w-20", align: "right" },
+	];
+
+	const taskColumns: SimpleTableColumn[] = [
+		{ srLabel: "Done", width: "w-8" },
+		{ header: "Task" },
+		{ header: "Overdue", width: "w-24", align: "right" },
+	];
+
+	const activityColumns: SimpleTableColumn[] = [
+		{ header: "Activity" },
+		{ header: "Company", width: "w-44", className: "hidden md:table-cell" },
+		{ header: "Deal", width: "w-48", className: "hidden lg:table-cell" },
+		{ header: "Who", width: "w-32", className: "hidden md:table-cell" },
+		{ header: "When", width: "w-20", align: "right" },
+	];
 
 	return (
 		<div className="flex flex-col gap-6">
-			<Card>
-				<CardHeader>
-					<CardTitle>Pipeline</CardTitle>
-					<CardAction>
-						<span className="text-muted-foreground text-xs">
-							{pipeline.totalDeals} open ·{" "}
-							<span className="tabular-nums">
-								{formatMoney(pipeline.totalCents)}
-							</span>
-						</span>
-					</CardAction>
-				</CardHeader>
-				<Separator />
-				<CardContent>
-					<div className="grid gap-3 @md/page-content:grid-cols-2 @3xl/page-content:grid-cols-4">
-						{pipeline.stages.map((stage) => (
-							<Link
-								key={stage.stage}
-								href={`/deals?stage=${stage.stage}`}
-								className="flex flex-col gap-1 border p-3 hover:bg-muted/40"
-							>
-								<span className="text-muted-foreground text-xs">
-									{dealStageLabel(stage.stage)}
-								</span>
-								<span className="font-medium text-xl tabular-nums">
-									{formatMoney(stage.valueCents)}
-								</span>
-								<span className="text-muted-foreground text-xs tabular-nums">
-									{stage.count} {stage.count === 1 ? "deal" : "deals"}
-								</span>
-							</Link>
-						))}
-					</div>
-				</CardContent>
-			</Card>
+			<SalesDashboard summary={summary} />
 
+			{/*
+			 * Two panels of one fixed height rather than four cards that each grew
+			 * to fit their rows: the pair always ends level, and the activity list
+			 * below them stays where a rep last saw it however many deals are open.
+			 */}
 			<div className="grid gap-6 @3xl/page-content:grid-cols-2">
-				<Card>
+				<Card className="min-w-0">
 					<CardHeader>
-						<CardTitle>Closing this month</CardTitle>
+						<CardTitle>Deals in progress</CardTitle>
+						<CardDescription>
+							The largest open deals, and how long each has sat in its stage
+						</CardDescription>
 						<CardAction>
-							<span className="text-muted-foreground text-xs">
-								{wonThisMonth.count} won ·{" "}
-								<span className="tabular-nums">
-									{formatMoney(wonThisMonth.valueCents)}
-								</span>
-							</span>
+							<Button asChild variant="ghost" size="sm">
+								<Link href="/deals">Open deals</Link>
+							</Button>
 						</CardAction>
 					</CardHeader>
-					<Separator />
-					<CardContent>
-						{closingThisMonth.length === 0 ? (
-							<p className="py-6 text-center text-muted-foreground text-xs">
-								Nothing is due to close this month.
-							</p>
+					<CardPanel>
+						{biggestOpen.length === 0 ? (
+							<CardPanelEmpty>
+								Nothing open. Time to fill the pipeline.
+							</CardPanelEmpty>
 						) : (
-							<ul className="divide-y">
-								{closingThisMonth.map((deal) => (
-									<li key={deal.id} className="flex items-center gap-3 py-2.5">
-										<button
-											type="button"
-											onClick={() => openRecord({ kind: "deal", id: deal.id })}
-											className="flex min-w-0 flex-1 flex-col text-left hover:underline"
-										>
-											<span className="truncate font-medium text-sm">
-												{deal.name}
-											</span>
-											<span className="truncate text-muted-foreground text-xs">
-												{deal.company.name} · {dealStageLabel(deal.stage)}
-											</span>
-										</button>
-										<span className="shrink-0 text-muted-foreground text-xs">
-											{deal.expectedCloseDate
-												? dateFormat.format(new Date(deal.expectedCloseDate))
-												: null}
-										</span>
-										<span className="shrink-0 tabular-nums text-sm">
+							<SimpleTable variant="panel" surface="page" columns={openColumns}>
+								{biggestOpen.map((deal) => (
+									<SimpleTableRow
+										key={deal.id}
+										clickable
+										onClick={() => openRecord({ kind: "deal", id: deal.id })}
+									>
+										<TableCell className={CELL}>
+											<DealCell
+												name={deal.name}
+												company={deal.company.name}
+												// Rendered on the server and again in the browser,
+												// often a minute apart — the text is meant to drift.
+												meta={relativeTimeFromIso(deal.stageChangedAt)}
+											/>
+										</TableCell>
+										<TableCell className={`${CELL} hidden lg:table-cell`}>
+											<DealStageIndicator stage={deal.stage} />
+										</TableCell>
+										<TableCell className={`${CELL} hidden sm:table-cell`}>
+											<ValueMeter
+												share={
+													largestOpenCents > 0
+														? ((deal.amountCents ?? 0) / largestOpenCents) * 100
+														: 0
+												}
+												color={dealStageColor(deal.stage)}
+											/>
+										</TableCell>
+										<TableCell className={`${CELL} text-right tabular-nums`}>
 											{deal.amountCents === null ? (
 												<EmptyCellValue />
 											) : (
-												formatMoney(deal.amountCents, deal.currency)
+												formatMoneyCompact(deal.amountCents, deal.currency)
 											)}
-										</span>
-										<OwnerCell owner={deal.owner} />
-									</li>
+										</TableCell>
+									</SimpleTableRow>
 								))}
-							</ul>
+							</SimpleTable>
 						)}
-					</CardContent>
+					</CardPanel>
 				</Card>
 
-				<Card>
+				<Card className="min-w-0">
 					<CardHeader>
-						<CardTitle>My overdue tasks</CardTitle>
-						<CardAction>
-							{overdueTasks.length > 0 ? (
-								<StatusIndicator
-									tone="error"
-									className="text-xs"
-									label={`${overdueTasks.length} overdue`}
-								/>
-							) : null}
-						</CardAction>
+						<CardTitle>Overdue tasks</CardTitle>
+						<CardDescription>
+							{overdueTasks.length === 0
+								? "Every task you have logged is either done or still to come"
+								: `${formatCount(overdueTasks.length, "task")} past due`}
+						</CardDescription>
 					</CardHeader>
-					<Separator />
-					<CardContent>
+					<CardPanel>
 						{overdueTasks.length === 0 ? (
-							<p className="py-6 text-center text-muted-foreground text-xs">
-								Nothing overdue. Good.
-							</p>
+							<CardPanelEmpty>Nothing overdue. Good.</CardPanelEmpty>
 						) : (
-							<ul className="divide-y">
+							<SimpleTable variant="panel" surface="page" columns={taskColumns}>
 								{overdueTasks.map((task) => (
-									<li key={task.id} className="flex items-center gap-3 py-2.5">
-										<Checkbox
-											checked={false}
-											disabled={complete.isPending}
-											aria-label="Mark as done"
-											onCheckedChange={() =>
-												complete.mutate({ id: task.id, completed: true })
-											}
-										/>
-										<span className="flex min-w-0 flex-1 flex-col">
-											<span className="truncate text-sm">{task.subject}</span>
-											<span className="flex min-w-0 text-xs">
-												{task.deal ? (
-													<RecordLink kind="deal" id={task.deal.id}>
-														{task.deal.name}
-													</RecordLink>
-												) : task.company ? (
-													<RecordLink kind="company" id={task.company.id}>
-														{task.company.name}
-													</RecordLink>
-												) : null}
+									<SimpleTableRow key={task.id}>
+										<TableCell className={CELL}>
+											<Checkbox
+												checked={false}
+												disabled={complete.isPending}
+												aria-label="Mark as done"
+												onCheckedChange={() =>
+													complete.mutate({ id: task.id, completed: true })
+												}
+											/>
+										</TableCell>
+										<TableCell className={CELL}>
+											<span className="flex min-w-0 flex-col">
+												<span className="truncate">{task.subject}</span>
+												<span className="flex min-w-0 text-muted-foreground">
+													{task.deal ? (
+														<RecordLink kind="deal" id={task.deal.id}>
+															{task.deal.name}
+														</RecordLink>
+													) : task.company ? (
+														<RecordLink kind="company" id={task.company.id}>
+															{task.company.name}
+														</RecordLink>
+													) : null}
+												</span>
 											</span>
-										</span>
-										<StatusIndicator
-											tone="error"
-											className="shrink-0 text-xs"
-											label={relativeTimeFromIso(task.dueAt)}
-										/>
-									</li>
+										</TableCell>
+										<TableCell className={`${CELL} text-right`}>
+											<StatusIndicator
+												tone="error"
+												label={relativeTimeFromIso(task.dueAt)}
+											/>
+										</TableCell>
+									</SimpleTableRow>
 								))}
-							</ul>
+							</SimpleTable>
 						)}
-					</CardContent>
+					</CardPanel>
 				</Card>
 			</div>
 
-			<Card>
+			<Card className="min-w-0">
 				<CardHeader>
-					<CardTitle>Recent activity</CardTitle>
+					<CardTitle>
+						{mine ? "Your recent activity" : "Recent activity"}
+					</CardTitle>
+					<CardDescription>
+						{mine
+							? "Every note, task and stage change you have logged"
+							: "Every note, task and stage change across the workspace"}
+					</CardDescription>
 					<CardAction>
 						<Button asChild variant="ghost" size="sm">
 							<Link href="/companies">All companies</Link>
 						</Button>
 					</CardAction>
 				</CardHeader>
-				<Separator />
-				<CardContent>
-					{recentActivity.length === 0 ? (
-						<p className="py-6 text-center text-muted-foreground text-xs">
-							Nothing has happened yet.
-						</p>
-					) : (
-						<ul className="divide-y">
-							{recentActivity.map((entry) => (
-								<li key={entry.id} className="flex items-start gap-3 py-2.5">
-									<span className="mt-0.5 text-muted-foreground">
-										<ActivityIcon type={entry.type} />
+				{recentActivity.length === 0 ? (
+					<CardTableEmpty>Nothing has happened yet.</CardTableEmpty>
+				) : (
+					<SimpleTable columns={activityColumns}>
+						{recentActivity.map((entry) => (
+							<SimpleTableRow key={entry.id}>
+								<TableCell className={CELL}>
+									<span className="truncate">
+										{entry.subject ?? activityLabel(entry.type)}
 									</span>
-									<span className="flex min-w-0 flex-1 flex-col">
-										<span className="truncate text-sm">
-											{entry.subject ?? activityLabel(entry.type)}
-										</span>
-										<span className="flex min-w-0 items-center gap-1 truncate text-muted-foreground text-xs">
-											{entry.company ? (
-												<RecordLink kind="company" id={entry.company.id}>
-													{entry.company.name}
-												</RecordLink>
-											) : null}
-											<span className="truncate">
-												{entry.deal ? ` · ${entry.deal.name}` : null}
-												{` · ${entry.createdBy.name}`}
-											</span>
-										</span>
-									</span>
-									<span className="shrink-0 text-muted-foreground text-xs">
+								</TableCell>
+								<TableCell className={`${CELL} hidden md:table-cell`}>
+									{entry.company ? (
+										<RecordLink kind="company" id={entry.company.id}>
+											{entry.company.name}
+										</RecordLink>
+									) : (
+										<EmptyCellValue />
+									)}
+								</TableCell>
+								<TableCell className={`${CELL} hidden lg:table-cell`}>
+									{entry.deal ? (
+										<RecordLink kind="deal" id={entry.deal.id}>
+											{entry.deal.name}
+										</RecordLink>
+									) : (
+										<EmptyCellValue />
+									)}
+								</TableCell>
+								<TableCell
+									className={`${CELL} hidden truncate text-muted-foreground md:table-cell`}
+								>
+									{entry.createdBy.name}
+								</TableCell>
+								<TableCell
+									className={`${CELL} text-right text-muted-foreground`}
+								>
+									{/* Rendered on the server and again in the browser, often a
+									    minute apart — the text is meant to drift. */}
+									<span suppressHydrationWarning>
 										{relativeTimeFromIso(entry.createdAt)}
 									</span>
-								</li>
-							))}
-						</ul>
-					)}
-				</CardContent>
+								</TableCell>
+							</SimpleTableRow>
+						))}
+					</SimpleTable>
+				)}
 			</Card>
 		</div>
+	);
+}
+
+/**
+ * A deal's name over the account it belongs to — two lines in one cell, so the
+ * table keeps four columns in a half-width panel instead of seven.
+ */
+function DealCell({
+	name,
+	company,
+	meta,
+}: {
+	name: string;
+	company: string;
+	meta?: string;
+}) {
+	return (
+		<span className="flex min-w-0 flex-col">
+			<span className="truncate font-medium">{name}</span>
+			<span className="truncate text-muted-foreground" suppressHydrationWarning>
+				{meta ? `${company} · ${meta}` : company}
+			</span>
+		</span>
+	);
+}
+
+/**
+ * A deal's or a rep's share of the biggest one on the list.
+ *
+ * The same bar the charts use, in plain HTML: `bloom-*` is a theme-independent
+ * utility in `globals.css` precisely so a meter beside a row matches the plot
+ * above it. Hidden below `sm`, where the number alone has to carry it.
+ */
+function ValueMeter({ share, color }: { share: number; color: string }) {
+	return (
+		<span
+			className="bloom-low flex h-1.5 w-full overflow-hidden bg-muted"
+			style={{ "--bloom-color": color } as CSSProperties}
+		>
+			<span
+				className="h-full w-(--share)"
+				style={
+					{
+						backgroundColor: color,
+						// Rounded: a bar 24px wide cannot render the difference, and the
+						// raw ratio puts fourteen decimal places in the markup.
+						"--share": `${Math.round(Math.max(Math.min(share, 100), 0))}%`,
+					} as CSSProperties
+				}
+			/>
+		</span>
 	);
 }

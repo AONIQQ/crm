@@ -31,7 +31,7 @@ type StringParser = ParserBuilder<string> & { defaultValue: string };
  * signature here would collide with `page: number` and make every setter
  * untypeable.
  */
-export type ListParsers<TKey extends string> = {
+type ListParsers<TKey extends string> = {
 	q: StringParser;
 	sort: StringParser;
 	dir: ParserBuilder<SortDirection> & { defaultValue: SortDirection };

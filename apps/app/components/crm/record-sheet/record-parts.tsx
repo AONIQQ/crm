@@ -5,16 +5,19 @@ import { Spinner } from "@crm/ui/components/spinner";
 import { formatMoney } from "@crm/ui/lib/format";
 import type { ReactNode } from "react";
 import {
-	DetailSheet,
 	DetailSheetHeader,
 	type DetailSheetTab,
 	DetailSheetTabs,
 } from "@/components/detail-sheet";
-import { RecordBack } from "./record-link";
 import { useRecordStack } from "./record-stack";
 
 /**
  * The frame every record sheet is poured into.
+ *
+ * The contents of the panel, not the panel: the one dialog every record is
+ * shown in belongs to `RecordSheetHost`, so stepping sideways from a company
+ * to one of its deals swaps what is in here without rebuilding the panel
+ * around it.
  *
  * The header renders before the record has loaded — a sheet has to have a
  * title from the first frame or the dialog is unlabelled, and a panel that
@@ -22,55 +25,45 @@ import { useRecordStack } from "./record-stack";
  * loading.
  */
 export function RecordSheetFrame({
-	open,
-	onOpenChange,
 	loading,
 	error,
 	title,
 	description,
+	note,
 	media,
-	eyebrow,
 	actions,
 	stats,
 	tabs,
 	tab,
 	onTabChange,
 }: {
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
 	loading: boolean;
 	error: string | null;
 	title: string;
 	description?: ReactNode;
+	note?: ReactNode;
 	media?: ReactNode;
-	eyebrow?: ReactNode;
 	actions?: ReactNode;
 	stats?: ReactNode;
 	tabs: DetailSheetTab[];
 	tab: string;
 	onTabChange: (tab: string) => void;
 }) {
-	// The eyebrow row is skipped rather than rendered empty: `space-y` would
-	// still put a gap under a zero-height div, leaving the header top-heavy on
-	// the records that have nothing to say up there.
-	const { stack } = useRecordStack();
-	const nested = stack.length > 1;
+	// Back and close read from the same stack, so the frame does not need them
+	// passed down: Back appears when there is a record underneath, and closing
+	// leaves the trail.
+	const { stack, close, closeAll } = useRecordStack();
 
 	return (
-		<DetailSheet open={open} onOpenChange={onOpenChange}>
+		<>
 			<DetailSheetHeader
-				eyebrow={
-					nested || eyebrow ? (
-						<>
-							<RecordBack />
-							{eyebrow}
-						</>
-					) : null
-				}
 				media={media}
 				title={title}
 				description={description}
+				note={note}
 				actions={actions}
+				onBack={stack.length > 1 ? close : undefined}
+				onClose={closeAll}
 			/>
 
 			{loading ? (
@@ -92,7 +85,7 @@ export function RecordSheetFrame({
 					/>
 				</>
 			)}
-		</DetailSheet>
+		</>
 	);
 }
 
@@ -107,5 +100,57 @@ export function DealAmount({
 	if (amountCents === null) return <EmptyCellValue />;
 	return (
 		<span className="tabular-nums">{formatMoney(amountCents, currency)}</span>
+	);
+}
+
+/**
+ * A record's meta line: `attio.com · London · Software`, with the first part
+ * optionally a link. Assembled here so a company, a contact and a deal all
+ * separate their facts the same way.
+ */
+export function MetaLine({
+	lead,
+	parts,
+}: {
+	lead?: ReactNode;
+	parts: (string | null | undefined)[];
+}) {
+	const rest = parts.filter((part): part is string => Boolean(part));
+
+	return (
+		<>
+			{lead}
+			{rest.map((part, index) => (
+				<span key={part}>
+					{index === 0 && !lead ? null : " · "}
+					{part}
+				</span>
+			))}
+		</>
+	);
+}
+
+/** The domain, as a link, which is what a domain is. */
+export function DomainLink({
+	domain,
+	website,
+}: {
+	domain: string | null;
+	website: string | null;
+}) {
+	const href = website ?? (domain ? `https://${domain}` : null);
+	const label = domain ?? website;
+	if (!href || !label) return null;
+
+	return (
+		<a
+			href={href}
+			target="_blank"
+			rel="noreferrer noopener"
+			onClick={(event) => event.stopPropagation()}
+			className="text-foreground underline-offset-2 hover:underline"
+		>
+			{label}
+		</a>
 	);
 }

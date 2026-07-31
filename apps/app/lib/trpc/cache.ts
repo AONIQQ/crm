@@ -1,0 +1,168 @@
+"use client";
+
+import { type QueryKey, useQueryClient } from "@tanstack/react-query";
+import { useTRPC } from "./client";
+
+/**
+ * What a write invalidates, in one place.
+ *
+ * Every mutation used to list its own keys in `onSuccess`, and the lists drifted
+ * apart: a stage change wrote a `STAGE_CHANGE` activity without invalidating the
+ * timeline it landed on, creating a deal from the deals page never refreshed the
+ * list, and nothing at all invalidated the overview — so a rep could close a
+ * deal and watch their own numbers not move. The fan-out belongs to the shape of
+ * the data, not to the button that happened to trigger it, so it lives here and
+ * each call site says only *what changed*.
+ *
+ * Per the API rules: freshness is TanStack Query's job, invalidated from the
+ * mutation's `onSuccess` with the narrowest key that covers what changed. What
+ * counts as "narrowest" is per-entity, which is exactly what these functions
+ * encode.
+ */
+
+type Settle = "all" | "record";
+
+type Options = {
+	/**
+	 * Which refetches to wait for.
+	 *
+	 * `"all"` (the default) keeps the caller pending until every affected view is
+	 * fresh — right when the point of the action *is* the view changing, like a
+	 * row leaving the filtered list once its stage no longer matches.
+	 *
+	 * `"record"` waits only for the changed record's own query and lets the rest
+	 * refetch behind it, so an inline editor's spinner clears as soon as the value
+	 * under it is right rather than when the table behind the sheet has caught up.
+	 */
+	settle?: Settle;
+};
+
+export type CrmCache = {
+	/** A company's name, logo, industry, owner, primary contact or enrichment. */
+	company(id?: string, options?: Options): Promise<void>;
+	/** A contact's name, title, email or which company they belong to. */
+	contact(id?: string, options?: Options): Promise<void>;
+	/** A deal's stage, amount, close date or owner — and so every sales number. */
+	deal(id?: string, options?: Options): Promise<void>;
+	/** A note, a task, or a task being ticked off. */
+	activity(options?: Options): Promise<void>;
+	/** An import writes across every table, so nothing is assumed to survive. */
+	everything(): Promise<void>;
+};
+
+export function useCrmCache(): CrmCache {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+
+	const run = (
+		record: QueryKey[],
+		rest: QueryKey[],
+		{ settle = "all" }: Options = {},
+	): Promise<void> => {
+		const awaited = settle === "all" ? [...record, ...rest] : record;
+		const behind = settle === "all" ? [] : rest;
+
+		for (const queryKey of behind) {
+			void queryClient.invalidateQueries({ queryKey });
+		}
+
+		return Promise.all(
+			awaited.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+		).then(() => undefined);
+	};
+
+	/**
+	 * The timeline history is an infinite query, so `pathKey()` — tRPC stamps the
+	 * query type into `queryKey()`, and `{ type: "query" }` cannot partially match
+	 * the `{ type: "infinite" }` the history is cached under. Getting this wrong
+	 * is silent: it reports success, refetches the sibling non-infinite queries,
+	 * and leaves the history stale until a reload.
+	 */
+	const activityKeys = () => [
+		trpc.activities.timeline.pathKey(),
+		trpc.activities.timelineCounts.queryKey(),
+		trpc.activities.myTasks.queryKey(),
+	];
+
+	/** Where a record's name and logo are rendered other than on itself. */
+	const listKeys = () => [
+		trpc.companies.list.queryKey(),
+		trpc.contacts.list.queryKey(),
+		trpc.deals.list.queryKey(),
+		// The ⌘K switcher searches names and domains, so a rename it cannot see
+		// is a record the rep cannot find.
+		trpc.search.quick.queryKey(),
+	];
+
+	return {
+		company: (id, options) =>
+			run(
+				[
+					id
+						? trpc.companies.byId.queryKey({ id })
+						: trpc.companies.byId.queryKey(),
+				],
+				[
+					...listKeys(),
+					// A company's name and logo ride along on every contact and deal.
+					trpc.contacts.byId.queryKey(),
+					trpc.deals.byId.queryKey(),
+					trpc.dashboard.summary.queryKey(),
+				],
+				options,
+			),
+
+		contact: (id, options) =>
+			run(
+				[
+					id
+						? trpc.contacts.byId.queryKey({ id })
+						: trpc.contacts.byId.queryKey(),
+				],
+				[
+					...listKeys(),
+					// Contact count and primary contact live on the company; a contact
+					// can also be on a deal. Moving someone between companies changes
+					// both, so the whole path is invalidated rather than one id.
+					trpc.companies.byId.queryKey(),
+					trpc.deals.byId.queryKey(),
+				],
+				options,
+			),
+
+		deal: (id, options) =>
+			run(
+				[id ? trpc.deals.byId.queryKey({ id }) : trpc.deals.byId.queryKey()],
+				[
+					...listKeys(),
+					// Open deal count, open value and last activity all sit on the
+					// company.
+					trpc.companies.byId.queryKey(),
+					// Setting a stage writes a STAGE_CHANGE activity onto the deal's and
+					// the company's timeline.
+					...activityKeys(),
+					// Pipeline, closed-won, win rate, cycle time, the leaderboard — the
+					// entire overview is a function of the deals table.
+					trpc.dashboard.summary.queryKey(),
+				],
+				options,
+			),
+
+		activity: (options) =>
+			run(
+				activityKeys(),
+				[
+					// "Last activity" columns move whenever anything is logged, and the
+					// record's own page shows the entry.
+					...listKeys(),
+					trpc.companies.byId.queryKey(),
+					trpc.contacts.byId.queryKey(),
+					trpc.deals.byId.queryKey(),
+					trpc.dashboard.summary.queryKey(),
+				],
+				options,
+			),
+
+		everything: () => queryClient.invalidateQueries(),
+	};
+}

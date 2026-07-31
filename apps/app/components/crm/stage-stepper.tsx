@@ -1,25 +1,35 @@
 "use client";
 
-import type { DealStage } from "@crm/db/enums";
-import { Button } from "@crm/ui/components/button";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { parseAsString, useQueryStates } from "nuqs";
+import { DealStage } from "@crm/db/enums";
+import { cn } from "@crm/ui/lib/utils";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-	CLOSED_STAGES,
 	DealStageIndicator,
 	dealStageLabel,
-	LOSING_STAGES,
+	isClosedStage,
 	OPEN_STAGES,
 } from "@/components/crm/deal-stage";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
 /**
- * The open pipeline as a row of steps, with the closing outcomes beside it.
+ * Won is the end of the pipeline, so it is the last step on the rail.
  *
- * Only the four open stages are steps: `CLOSED_WON`, `CLOSED_LOST` and
- * `UNQUALIFIED_TO_BUY` are outcomes, and drawing them as "further along the
- * line" would say a lost deal is progress.
+ * Lost and unqualified are not — they are exits, they can happen from any
+ * step, and the API refuses them without a reason. Those stay in the stage
+ * control in the header, which knows to ask why.
+ */
+const RAIL = [...OPEN_STAGES, DealStage.CLOSED_WON] as readonly DealStage[];
+
+/**
+ * How far along the deal is, as a rail of segments.
+ *
+ * Mostly the picture, not the picker — jumping backwards, reopening and
+ * closing-as-lost live in the stage control in the sheet header, next to the
+ * record's name where the other sheets keep their state. What is here is the
+ * move a rep makes constantly: nudging a deal to the next step, in one click,
+ * all the way through to won.
  */
 export function StageStepper({
 	dealId,
@@ -29,90 +39,71 @@ export function StageStepper({
 	stage: DealStage;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
-	const [, setCloseParams] = useQueryStates({
-		closing: parseAsString,
-		closingStage: parseAsString,
-	});
+	const cache = useCrmCache();
 
 	const setStage = useMutation(
 		trpc.deals.setStage.mutationOptions({
 			onSuccess: async (result) => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.deals.byId.queryKey({ id: dealId }),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.deals.list.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.byId.queryKey(),
-					}),
-				]);
+				await cache.deal(dealId);
 				if (result.changed) toast.success("Stage updated.");
 			},
 			onError: (error) => toast.error(error.message),
 		}),
 	);
 
-	const currentIndex = OPEN_STAGES.indexOf(stage);
-	const isClosed = CLOSED_STAGES.includes(stage);
-
-	const move = (next: DealStage) => {
-		if (LOSING_STAGES.includes(next)) {
-			void setCloseParams({ closing: dealId, closingStage: next });
-			return;
-		}
-		setStage.mutate({ id: dealId, stage: next });
-	};
+	// A deal that was lost or disqualified never reached won, so the rail shows
+	// its four open steps unlit and hands the last segment to the outcome.
+	const exited = isClosedStage(stage) && stage !== DealStage.CLOSED_WON;
+	const steps = exited ? OPEN_STAGES : RAIL;
+	const currentIndex = steps.indexOf(stage);
 
 	return (
-		<div className="flex flex-col gap-3">
-			<div className="flex flex-wrap items-center gap-1">
-				{OPEN_STAGES.map((option, index) => {
-					const reached = !isClosed && index <= currentIndex;
-					return (
-						<Button
-							key={option}
-							variant={reached ? "secondary" : "ghost"}
-							size="sm"
-							aria-current={option === stage ? "step" : undefined}
+		<ol className="flex w-full gap-1">
+			{steps.map((option, index) => {
+				const reached = !exited && index <= currentIndex;
+				const current = !exited && option === stage;
+				return (
+					<li key={option} className="flex min-w-0 flex-1">
+						<button
+							type="button"
+							aria-current={current ? "step" : undefined}
 							disabled={setStage.isPending}
-							onClick={() => move(option)}
+							onClick={() => setStage.mutate({ id: dealId, stage: option })}
+							className={cn(
+								"min-w-0 flex-1 border-t-2 pt-2 text-left text-xs transition-colors disabled:pointer-events-none disabled:opacity-50",
+								reached
+									? "border-foreground text-foreground"
+									: "border-border text-muted-foreground hover:border-muted-foreground hover:text-foreground",
+								current && "font-medium",
+							)}
 						>
-							{dealStageLabel(option)}
-						</Button>
-					);
-				})}
-			</div>
+							<span className="block truncate">
+								{/* The last segment is the outcome slot: the win the deal is
+								    heading for while it is open, and the actual result once
+								    it is not. */}
+								{current && option === DealStage.CLOSED_WON ? (
+									<DealStageIndicator stage={stage} className="text-xs" />
+								) : (
+									dealStageLabel(option)
+								)}
+							</span>
+						</button>
+					</li>
+				);
+			})}
 
-			<div className="flex flex-wrap items-center gap-2">
-				{isClosed ? (
-					<>
-						<DealStageIndicator stage={stage} className="text-sm" />
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={setStage.isPending}
-							onClick={() => move("DEMO_BOOKED")}
-						>
-							Reopen
-						</Button>
-					</>
-				) : (
-					CLOSED_STAGES.map((option) => (
-						<Button
-							key={option}
-							variant="outline"
-							size="sm"
-							disabled={setStage.isPending}
-							onClick={() => move(option)}
-						>
-							{dealStageLabel(option)}
-						</Button>
-					))
-				)}
-			</div>
-		</div>
+			{/*
+			 * Lost or disqualified, as the final segment. Not a button: coming back
+			 * into the pipeline means choosing a step, which the four to its left
+			 * already do, and a rail whose end undoes itself on click is a trap.
+			 */}
+			{exited ? (
+				<li className="flex min-w-0 flex-1">
+					<div className="min-w-0 flex-1 border-foreground border-t-2 pt-2">
+						<DealStageIndicator stage={stage} className="text-xs" />
+					</div>
+				</li>
+			) : null}
+		</ol>
 	);
 }

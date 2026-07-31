@@ -18,7 +18,7 @@ export const listInput = z.object({
 export type ListInput = z.infer<typeof listInput>;
 
 /** Facet id → value → number of rows that would match. */
-export type FacetCounts = Record<string, Record<string, number>>;
+type FacetCounts = Record<string, Record<string, number>>;
 
 export type ListResult<TRow> = {
 	rows: TRow[];

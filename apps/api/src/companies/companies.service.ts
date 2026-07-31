@@ -385,16 +385,6 @@ export class CompaniesService {
 		return result;
 	}
 
-	async remove(id: string): Promise<{ id: string }> {
-		try {
-			await this.db.company.delete({ where: { id } });
-		} catch (error) {
-			throw this.translate(error, id);
-		}
-		this.logger.log({ message: "Company deleted", companyId: id });
-		return { id };
-	}
-
 	/**
 	 * Points a company at the person to call.
 	 *

@@ -45,19 +45,28 @@ type CartesianProps = {
 	showLegend?: boolean;
 	/** Format an x-axis tick (e.g. shorten a date). */
 	formatX?: (value: string) => string;
+	/**
+	 * Format a plotted value in the tooltip. Pass this whenever the series is
+	 * money or a rate — a raw `1250000` in the tooltip tells a reader nothing.
+	 */
+	formatValue?: (value: number | string) => string;
 };
 
 function seriesKeys(config: ChartConfig, series?: string[]) {
 	return series ?? Object.keys(config);
 }
 
-const tooltip = (formatX?: (value: string) => string) => (
+const tooltip = (
+	formatX?: (value: string) => string,
+	formatValue?: (value: number | string) => string,
+) => (
 	<ChartTooltip
 		cursor={false}
 		content={
 			<ChartTooltipContent
 				indicator="dot"
 				labelFormatter={formatX ? (label) => formatX(String(label)) : undefined}
+				valueFormatter={formatValue}
 			/>
 		}
 	/>
@@ -220,6 +229,7 @@ function AreaTrend({
 	showXAxis = true,
 	showLegend = false,
 	formatX,
+	formatValue,
 	stacked = false,
 	variant = "gradient",
 	bloom = "low",
@@ -270,7 +280,7 @@ function AreaTrend({
 					tick={<EdgeTick formatX={formatX} />}
 					{...X_AXIS_PROPS}
 				/>
-				{tooltip(formatX)}
+				{tooltip(formatX, formatValue)}
 				{keys.map((key) => (
 					<Area
 						key={key}
@@ -337,6 +347,7 @@ function BarTrend({
 	showXAxis = true,
 	showLegend = false,
 	formatX,
+	formatValue,
 	stacked = false,
 }: CartesianProps & { stacked?: boolean }) {
 	const keys = seriesKeys(config, series);
@@ -355,13 +366,13 @@ function BarTrend({
 					tick={<EdgeTick formatX={formatX} />}
 					{...X_AXIS_PROPS}
 				/>
-				{tooltip(formatX)}
+				{tooltip(formatX, formatValue)}
 				{keys.map((key) => (
 					<Bar
 						key={key}
 						dataKey={key}
 						fill={`var(--color-${key})`}
-						radius={2}
+						radius={0}
 						stackId={stacked ? "stack" : undefined}
 						maxBarSize={40}
 					/>
@@ -384,11 +395,13 @@ function BarStat({
 	className,
 	height = 200,
 	onBarClick,
+	formatValue,
 }: {
 	data: DonutSlice[];
 	className?: string;
 	height?: number;
 	onBarClick?: (key: string) => void;
+	formatValue?: (value: number | string) => string;
 }) {
 	const config: ChartConfig = Object.fromEntries(
 		data.map((d) => [d.key, { label: d.label, color: d.color }]),
@@ -411,11 +424,17 @@ function BarStat({
 				/>
 				<ChartTooltip
 					cursor={false}
-					content={<ChartTooltipContent hideLabel nameKey="key" />}
+					content={
+						<ChartTooltipContent
+							hideLabel
+							nameKey="key"
+							valueFormatter={formatValue}
+						/>
+					}
 				/>
 				<Bar
 					dataKey="value"
-					radius={2}
+					radius={0}
 					maxBarSize={40}
 					className={onBarClick ? "cursor-pointer" : undefined}
 					onClick={
@@ -454,6 +473,7 @@ function DonutStat({
 	centerValue,
 	centerLabel,
 	onSliceClick,
+	formatValue,
 }: {
 	data: DonutSlice[];
 	className?: string;
@@ -461,6 +481,7 @@ function DonutStat({
 	centerValue?: React.ReactNode;
 	centerLabel?: React.ReactNode;
 	onSliceClick?: (key: string) => void;
+	formatValue?: (value: number | string) => string;
 }) {
 	const config: ChartConfig = Object.fromEntries(
 		data.map((d) => [d.key, { label: d.label, color: d.color }]),
@@ -478,7 +499,13 @@ function DonutStat({
 			<PieChart>
 				<ChartTooltip
 					cursor={false}
-					content={<ChartTooltipContent hideLabel nameKey="key" />}
+					content={
+						<ChartTooltipContent
+							hideLabel
+							nameKey="key"
+							valueFormatter={formatValue}
+						/>
+					}
 				/>
 				{/* Faint track so a partial ring still reads as a full circle. */}
 				<Pie

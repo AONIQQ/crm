@@ -24,7 +24,7 @@ export function formatCount(count: number, noun: string): string {
 
 const WELL_FORMED_CURRENCY_CODE = /^[A-Za-z]{3}$/;
 
-export function displayCurrencyCode(currency: string): string {
+function displayCurrencyCode(currency: string): string {
 	return WELL_FORMED_CURRENCY_CODE.test(currency)
 		? currency.toUpperCase()
 		: "USD";
@@ -36,6 +36,30 @@ export function formatMoney(cents: number, currency = "usd"): string {
 		currency: displayCurrencyCode(currency),
 		minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
 	}).format(cents / 100);
+}
+
+/**
+ * `"$128K"` — a headline where the exact dollar is noise.
+ *
+ * Deliberately separate from `formatMoney`: a figure a rep reads at a glance
+ * wants three characters, and a figure they are about to act on wants all of
+ * them. Rounding a row in a table would be a bug; rounding a KPI is the point.
+ */
+export function formatMoneyCompact(cents: number, currency = "usd"): string {
+	return new Intl.NumberFormat(undefined, {
+		style: "currency",
+		currency: displayCurrencyCode(currency),
+		notation: "compact",
+		maximumFractionDigits: cents % 100_000 === 0 ? 0 : 1,
+	}).format(cents / 100);
+}
+
+/** A 0–1 rate as `"62%"`. */
+export function formatPercent(rate: number): string {
+	return new Intl.NumberFormat(undefined, {
+		style: "percent",
+		maximumFractionDigits: 0,
+	}).format(rate);
 }
 
 export function relativeTimeFromIso(iso: string | null | undefined): string {

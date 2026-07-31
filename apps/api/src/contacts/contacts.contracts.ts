@@ -28,7 +28,7 @@ export const contactCreateInput = z.object({
 export type ContactCreateInput = z.infer<typeof contactCreateInput>;
 
 /** `undefined` leaves a field alone; `""` clears it. */
-export const contactUpdateInput = z.object({
+const contactUpdateInput = z.object({
 	firstName: z.string().trim().min(1).optional(),
 	lastName: z.string().optional(),
 	email: z.string().optional(),

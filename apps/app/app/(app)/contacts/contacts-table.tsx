@@ -9,6 +9,7 @@ import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import { relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { CompanyCell } from "@/components/crm/company-cell";
+import { contactName } from "@/components/crm/contact-name";
 import { OwnerCell } from "@/components/crm/owner-cell";
 import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
 import { useTableQuery } from "@/components/data-table/use-table-query";
@@ -17,13 +18,6 @@ import type { RouterOutputs } from "@/lib/trpc/types";
 import { contactsSearchParams } from "./contacts-search-params";
 
 type ContactRow = RouterOutputs["contacts"]["list"]["rows"][number];
-
-export function contactName(contact: {
-	firstName: string;
-	lastName: string | null;
-}): string {
-	return [contact.firstName, contact.lastName].filter(Boolean).join(" ");
-}
 
 const COLUMNS: DataTableColumn<ContactRow>[] = [
 	{
@@ -83,7 +77,7 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 		width: "w-[12%]",
 		hideBelow: "sm",
 		cell: (row) => (
-			<span className="text-muted-foreground">
+			<span className="text-muted-foreground" suppressHydrationWarning>
 				{relativeTimeFromIso(row.lastActivityAt)}
 			</span>
 		),

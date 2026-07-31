@@ -5,8 +5,9 @@ import Renew from "@carbon/icons-react/es/Renew";
 import { Button } from "@crm/ui/components/button";
 import { Icon } from "@crm/ui/components/icon";
 import { Spinner } from "@crm/ui/components/spinner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
 /**
@@ -24,22 +25,12 @@ export function EnrichmentActions({
 	hasDomain: boolean;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
-
-	const invalidateCompany = () =>
-		Promise.all([
-			queryClient.invalidateQueries({
-				queryKey: trpc.companies.byId.queryKey({ id: companyId }),
-			}),
-			queryClient.invalidateQueries({
-				queryKey: trpc.companies.list.queryKey(),
-			}),
-		]);
+	const cache = useCrmCache();
 
 	const enrich = useMutation(
 		trpc.companies.enrich.mutationOptions({
 			onSuccess: async (result) => {
-				await invalidateCompany();
+				await cache.company(companyId);
 				toast.success(
 					result.queued
 						? "Looking it up — this page will update when it finishes."
@@ -53,20 +44,16 @@ export function EnrichmentActions({
 	const research = useMutation(
 		trpc.companies.research.mutationOptions({
 			onSuccess: async () => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.timeline.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.timelineCounts.queryKey(),
-					}),
-				]);
+				await cache.activity();
 				toast.success("Brief added to the timeline.");
 			},
 			onError: (error) => toast.error(error.message),
 		}),
 	);
 
+	// These sit in the sheet header, which on a phone is a full-width drawer
+	// with a logo and a name already in it. The labels drop below `sm` so the
+	// record's name keeps the room rather than two buttons about the agent.
 	return (
 		<>
 			<Button
@@ -82,7 +69,7 @@ export function EnrichmentActions({
 				) : (
 					<Icon icon={Renew} data-icon="inline-start" />
 				)}
-				Re-enrich
+				<span className="hidden sm:inline">Re-enrich</span>
 			</Button>
 
 			<Button
@@ -96,7 +83,7 @@ export function EnrichmentActions({
 				) : (
 					<Icon icon={MagicWand} data-icon="inline-start" />
 				)}
-				Research
+				<span className="hidden sm:inline">Research</span>
 			</Button>
 		</>
 	);

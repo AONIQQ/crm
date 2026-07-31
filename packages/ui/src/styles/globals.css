@@ -251,33 +251,14 @@
 }
 
 /*
- * Dither + bloom — the chart aesthetic (see dashboard-chart.tsx), ported to
- * plain HTML surfaces (status/severity indicators, meters, progress bars).
+ * Bloom — the chart aesthetic (see dashboard-chart.tsx), ported to plain HTML
+ * surfaces (status/severity indicators, meters, progress bars).
  *
- * `.dither` overlays an ordered two-tone dot texture (a light dot + an offset
- * dark dot per 4px tile, matching the chart's SVG <pattern>) on top of any
- * filled element, adapting to the fill beneath it. `.bloom-*` adds a soft
- * colored halo via box-shadow; set `--bloom-color` on the element (defaults to
- * currentColor). Both are theme-independent.
+ * `.bloom-*` adds a soft colored halo via box-shadow; set `--bloom-color` on
+ * the element (it defaults to currentColor). Theme-independent, so a meter
+ * beside a row matches the plot above it.
  */
-:root {
-	--dither-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='1.4' height='1.4' fill='%23ffffff' fill-opacity='.55'/%3E%3Crect x='2' y='2' width='1.4' height='1.4' fill='%23000000' fill-opacity='.5'/%3E%3C/svg%3E");
-}
-
 @layer utilities {
-	.dither {
-		position: relative;
-	}
-	.dither::after {
-		content: "";
-		position: absolute;
-		inset: 0;
-		pointer-events: none;
-		background-image: var(--dither-pattern);
-		background-size: var(--dither-size, 4px) var(--dither-size, 4px);
-		background-repeat: repeat;
-	}
-
 	.bloom-low {
 		box-shadow: 0 0 4px var(--bloom-color, currentColor);
 	}

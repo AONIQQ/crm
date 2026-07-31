@@ -1,11 +1,8 @@
 "use client";
 
-import ArrowLeft from "@carbon/icons-react/es/ArrowLeft";
-import { Button } from "@crm/ui/components/button";
-import { Icon } from "@crm/ui/components/icon";
 import { cn } from "@crm/ui/lib/utils";
 import type { ReactNode } from "react";
-import { type RecordKind, useOpenRecord, useRecordStack } from "./record-stack";
+import { type RecordKind, useOpenRecord } from "./record-stack";
 
 /**
  * A cross-reference to another record.
@@ -43,24 +40,5 @@ export function RecordLink({
 		>
 			{children}
 		</button>
-	);
-}
-
-/**
- * Back to the record you opened this one from.
- *
- * Only appears once there is somewhere to go back to — on the first record in
- * a trail the close button beside it already does the same job.
- */
-export function RecordBack() {
-	const { stack, close } = useRecordStack();
-
-	if (stack.length < 2) return null;
-
-	return (
-		<Button variant="ghost" size="sm" onClick={close}>
-			<Icon icon={ArrowLeft} data-icon="inline-start" />
-			Back
-		</Button>
 	);
 }

@@ -12,8 +12,6 @@ import type { AuthedTrpcContext } from "../trpc/context.types";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import {
 	activityCreateInput,
-	activityIdInput,
-	activityUpdateInput,
 	completeInput,
 	myTasksInput,
 	timelineCountsInput,
@@ -54,18 +52,8 @@ export class ActivitiesRouter {
 		return this.activities.create(input, ctx.user.id);
 	}
 
-	@Mutation({ input: activityUpdateInput })
-	async update(@Input() input: z.infer<typeof activityUpdateInput>) {
-		return this.activities.update(input);
-	}
-
 	@Mutation({ input: completeInput })
 	async complete(@Input() input: z.infer<typeof completeInput>) {
 		return this.activities.complete(input.id, input.completed);
-	}
-
-	@Mutation({ input: activityIdInput })
-	async remove(@Input("id") id: string) {
-		return this.activities.remove(id);
 	}
 }

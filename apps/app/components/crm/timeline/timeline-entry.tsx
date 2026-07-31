@@ -3,10 +3,11 @@
 import { Checkbox } from "@crm/ui/components/checkbox";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
 import { relativeTimeFromIso } from "@crm/ui/lib/format";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { dealStageLabel } from "@/components/crm/deal-stage";
 import { RecordLink } from "@/components/crm/record-sheet/record-link";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { ActivityIcon, activityLabel } from "./activity-icon";
@@ -35,26 +36,11 @@ export function TimelineEntry({
 	showContext?: boolean;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+	const cache = useCrmCache();
 
 	const complete = useMutation(
 		trpc.activities.complete.mutationOptions({
-			onSuccess: async () => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.timeline.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.timelineCounts.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.myTasks.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.dashboard.summary.queryKey(),
-					}),
-				]);
-			},
+			onSuccess: () => cache.activity(),
 			onError: (error) => toast.error(error.message),
 		}),
 	);

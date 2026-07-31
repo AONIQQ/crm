@@ -5,9 +5,10 @@ import { Input } from "@crm/ui/components/input";
 import { Spinner } from "@crm/ui/components/spinner";
 import { Textarea } from "@crm/ui/components/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@crm/ui/components/toggle-group";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { toast } from "sonner";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 import { ActivityIcon, activityLabel } from "./activity-icon";
 import type { TimelineAnchor } from "./timeline";
@@ -18,10 +19,19 @@ const TYPES = ["NOTE", "CALL", "EMAIL", "MEETING", "TASK"] as const;
 
 type ComposableType = (typeof TYPES)[number];
 
+/**
+ * Logging what just happened, without burying what already did.
+ *
+ * Collapsed to a single line until you click it. Expanded, it was taller than
+ * the first three entries of the timeline put together, so opening a company
+ * showed you a form where you expected its history — and the history is what
+ * people come here to read. Writing is one click away; reading is none.
+ */
 export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+	const cache = useCrmCache();
 
+	const [open, setOpen] = useState(false);
 	const [type, setType] = useState<ComposableType>("NOTE");
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
@@ -36,33 +46,11 @@ export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 	const create = useMutation(
 		trpc.activities.create.mutationOptions({
 			onSuccess: async () => {
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.timeline.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.timelineCounts.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.activities.myTasks.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.dashboard.summary.queryKey(),
-					}),
-					// "Last activity" columns move whenever anything is logged.
-					queryClient.invalidateQueries({
-						queryKey: trpc.companies.list.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.contacts.list.queryKey(),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.deals.list.queryKey(),
-					}),
-				]);
+				await cache.activity();
 				setSubject("");
 				setBody("");
 				setDueAt("");
+				setOpen(false);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -70,9 +58,28 @@ export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 
 	const ready = isTask ? subject.trim() !== "" : body.trim() !== "";
 
+	const dismiss = () => {
+		setSubject("");
+		setBody("");
+		setDueAt("");
+		setOpen(false);
+	};
+
+	if (!open) {
+		return (
+			<button
+				type="button"
+				onClick={() => setOpen(true)}
+				className="flex h-9 w-full items-center border bg-transparent px-3 text-left text-muted-foreground text-sm hover:border-ring hover:bg-muted/30"
+			>
+				Log a note, call, email, meeting or task…
+			</button>
+		);
+	}
+
 	return (
 		<form
-			className="flex flex-col gap-3 border-b pb-4"
+			className="flex flex-col gap-3"
 			onSubmit={(event) => {
 				event.preventDefault();
 				create.mutate({
@@ -159,6 +166,15 @@ export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 			)}
 
 			<div className="flex items-center justify-end gap-2">
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					disabled={create.isPending}
+					onClick={dismiss}
+				>
+					Cancel
+				</Button>
 				<Button type="submit" size="sm" disabled={create.isPending || !ready}>
 					{create.isPending ? <Spinner /> : null}
 					{isTask ? "Add task" : `Log ${activityLabel(type).toLowerCase()}`}

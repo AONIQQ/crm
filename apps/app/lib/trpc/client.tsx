@@ -15,7 +15,7 @@ import { getQueryClient } from "./query-client";
 const { TRPCProvider: ContextProvider, useTRPC: useTRPCContext } =
 	createTRPCContext<AppRouter>();
 
-export const TRPCProvider: FC<{
+const TRPCProvider: FC<{
 	children: ReactNode;
 	queryClient: QueryClient;
 	trpcClient: TRPCClient<AppRouter>;

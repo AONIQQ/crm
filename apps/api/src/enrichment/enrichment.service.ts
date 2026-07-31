@@ -69,19 +69,6 @@ export class EnrichmentService {
 		);
 	}
 
-	/**
-	 * Warms Context.dev's cache for a batch of domains.
-	 *
-	 * Free, and the difference between a CSV import queueing a hundred cold
-	 * seven-second lookups and a hundred warm sub-second ones.
-	 */
-	async warm(domains: string[]): Promise<void> {
-		if (!this.context.enabled) return;
-		await Promise.all(
-			[...new Set(domains)].map((domain) => this.context.prefetch(domain)),
-		);
-	}
-
 	/** Whether the agent has an API key at all. */
 	get enabled(): boolean {
 		return this.context.enabled;

@@ -11,7 +11,9 @@ import { relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import {
 	ENRICHMENT_FACET_OPTIONS,
+	ENRICHMENT_POLL_MS,
 	EnrichmentIndicator,
+	isEnriching,
 } from "@/components/crm/enrichment-status";
 import { OwnerCell } from "@/components/crm/owner-cell";
 import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
@@ -100,7 +102,7 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 		width: "w-[12%]",
 		hideBelow: "sm",
 		cell: (row) => (
-			<span className="text-muted-foreground">
+			<span className="text-muted-foreground" suppressHydrationWarning>
 				{relativeTimeFromIso(row.lastActivityAt)}
 			</span>
 		),
@@ -128,6 +130,14 @@ export function CompaniesTable() {
 		// Keeps the previous page on screen while the next one loads, so paging
 		// and typing never blank the table.
 		placeholderData: (previous) => previous,
+		// A company added here is enriched in the background, and the agent
+		// filling in its logo and industry is not a client action anyone can
+		// invalidate on. Ask while any row on this page is still working — a new
+		// company's logo then lands in the table rather than waiting for a reload.
+		refetchInterval: (query) =>
+			query.state.data?.rows.some((row) => isEnriching(row.enrichmentStatus))
+				? ENRICHMENT_POLL_MS
+				: false,
 	});
 	const users = useQuery(trpc.users.list.queryOptions());
 

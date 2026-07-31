@@ -1,9 +1,4 @@
-import {
-	ActivityType,
-	type Db,
-	type Prisma,
-	Prisma as PrismaNamespace,
-} from "@crm/db";
+import { ActivityType, type Db, type Prisma } from "@crm/db";
 import {
 	BadRequestException,
 	Injectable,
@@ -14,7 +9,6 @@ import { blankToNull } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import type {
 	ActivityCreateInput,
-	ActivityUpdateInput,
 	MyTasksInput,
 	TimelineFilter,
 	TimelineInput,
@@ -144,28 +138,6 @@ export class ActivitiesService {
 		return serializeEntry(activity);
 	}
 
-	async update(input: ActivityUpdateInput) {
-		const data: Prisma.ActivityUpdateInput = {};
-
-		if (input.subject !== undefined) data.subject = blankToNull(input.subject);
-		if (input.body !== undefined) data.body = blankToNull(input.body);
-		if (input.dueAt !== undefined) data.dueAt = parseDate(input.dueAt);
-		if (input.occurredAt !== undefined) {
-			data.occurredAt = parseDate(input.occurredAt);
-		}
-
-		try {
-			const activity = await this.db.activity.update({
-				where: { id: input.id },
-				data,
-				select: ENTRY_SELECT,
-			});
-			return serializeEntry(activity);
-		} catch (error) {
-			throw this.translate(error, input.id);
-		}
-	}
-
 	/** Ticks a task off, or puts it back. */
 	async complete(id: string, completed: boolean) {
 		const activity = await this.db.activity.findUnique({
@@ -188,15 +160,6 @@ export class ActivitiesService {
 		});
 
 		return serializeEntry(updated);
-	}
-
-	async remove(id: string): Promise<{ id: string }> {
-		try {
-			await this.db.activity.delete({ where: { id } });
-		} catch (error) {
-			throw this.translate(error, id);
-		}
-		return { id };
 	}
 
 	/** Open tasks assigned to whoever is asking. */
@@ -273,16 +236,6 @@ export class ActivitiesService {
 		}
 
 		return null;
-	}
-
-	private translate(error: unknown, id: string): unknown {
-		if (
-			error instanceof PrismaNamespace.PrismaClientKnownRequestError &&
-			error.code === "P2025"
-		) {
-			return new NotFoundException(`No activity with id ${id}.`);
-		}
-		return error;
 	}
 }
 

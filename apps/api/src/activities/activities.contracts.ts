@@ -1,13 +1,9 @@
 import { ActivityType } from "@crm/db";
 import { z } from "zod";
 
-const typeEnum = z.enum(
-	Object.values(ActivityType) as [ActivityType, ...ActivityType[]],
-);
-
 /** Types a human can log. `STAGE_CHANGE` and `ENRICHMENT` are written by the
  * system and the agent, and are not offered in the composer. */
-export const COMPOSABLE_TYPES = [
+const COMPOSABLE_TYPES = [
 	ActivityType.NOTE,
 	ActivityType.CALL,
 	ActivityType.EMAIL,
@@ -24,7 +20,7 @@ const composableEnum = z.enum(COMPOSABLE_TYPES);
  * pins those at the top, and an entry that appears both pinned and in the
  * history below it reads as two different things having happened.
  */
-export const TIMELINE_FILTERS = [
+const TIMELINE_FILTERS = [
 	"all",
 	"history",
 	"notes",
@@ -85,18 +81,6 @@ export const activityCreateInput = z
 
 export type ActivityCreateInput = z.infer<typeof activityCreateInput>;
 
-export const activityUpdateInput = z.object({
-	id: z.string(),
-	subject: z.string().optional(),
-	body: z.string().optional(),
-	dueAt: z.string().nullable().optional(),
-	occurredAt: z.string().nullable().optional(),
-});
-
-export type ActivityUpdateInput = z.infer<typeof activityUpdateInput>;
-
-export const activityIdInput = z.object({ id: z.string() });
-
 export const completeInput = z.object({
 	id: z.string(),
 	/** `false` reopens a task that was ticked off by mistake. */
@@ -110,5 +94,3 @@ export const myTasksInput = z.object({
 });
 
 export type MyTasksInput = z.infer<typeof myTasksInput>;
-
-export { typeEnum as activityTypeEnum };

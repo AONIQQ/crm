@@ -38,8 +38,10 @@ const PRESENTATION: Record<DealStage, { label: string; tone: StatusTone }> = {
 /** Stages a deal can still be won from — the pipeline. */
 export const OPEN_STAGES = ORDER.slice(0, 4) as readonly DealStage[];
 
-/** Stages a deal is finished in. */
-export const CLOSED_STAGES = ORDER.slice(4) as readonly DealStage[];
+/** Won, lost or disqualified — a deal that is no longer in the pipeline. */
+export function isClosedStage(stage: DealStage): boolean {
+	return !OPEN_STAGES.includes(stage);
+}
 
 /** The two the API refuses without a `closedReason`. */
 export const LOSING_STAGES: readonly DealStage[] = [
@@ -51,6 +53,24 @@ export const DEAL_STAGE_OPTIONS = ORDER.map((value) => ({
 	value,
 	label: PRESENTATION[value].label,
 }));
+
+/**
+ * The chart ramp in pipeline order, so a stage is the same colour in the
+ * overview's donut, its legend and every meter beside a deal.
+ *
+ * Only the open stages get one: a closed deal is not part of a breakdown of
+ * where the pipeline sits, and `StatusTone` already colours won and lost.
+ */
+const OPEN_STAGE_COLORS = [
+	"var(--chart-1)",
+	"var(--chart-2)",
+	"var(--chart-3)",
+	"var(--chart-4)",
+] as const;
+
+export function dealStageColor(stage: DealStage): string {
+	return OPEN_STAGE_COLORS[OPEN_STAGES.indexOf(stage)] ?? "var(--chart-5)";
+}
 
 export function dealStageLabel(stage: DealStage): string {
 	return PRESENTATION[stage].label;

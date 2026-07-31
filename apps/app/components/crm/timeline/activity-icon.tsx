@@ -24,10 +24,6 @@ export function activityLabel(type: ActivityType): string {
 	return PRESENTATION[type].label;
 }
 
-export function activityIcon(type: ActivityType): CarbonIcon {
-	return PRESENTATION[type].icon;
-}
-
 export function ActivityIcon({ type }: { type: ActivityType }) {
 	return <Icon icon={PRESENTATION[type].icon} />;
 }

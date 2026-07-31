@@ -22,7 +22,7 @@ const DEVELOPMENT_LEVELS: LogLevel[] = [
  * JSON at `log` and above in production, colourised with `debug`/`verbose`
  * locally. Read live, not captured at import, so tests can flip it.
  */
-export function consoleLoggerOptions(): ConsoleLoggerOptions {
+function consoleLoggerOptions(): ConsoleLoggerOptions {
 	const isProduction = process.env.NODE_ENV === "production";
 
 	return {
@@ -41,7 +41,7 @@ export function consoleLoggerOptions(): ConsoleLoggerOptions {
  * argument. Fields are hoisted to the top level in JSON and rendered after the
  * text in development.
  */
-export type StructuredMessage = { message: string } & Record<string, unknown>;
+type StructuredMessage = { message: string } & Record<string, unknown>;
 
 /** What `ConsoleLogger` emits in JSON mode, plus our correlation fields. */
 interface JsonLogRecord {
@@ -132,7 +132,7 @@ export class ContextLogger extends ConsoleLogger {
 }
 
 /** Enough of a UUID to eyeball-match lines in a local terminal. */
-export function shortId(requestId: string): string {
+function shortId(requestId: string): string {
 	return requestId.slice(0, 8);
 }
 

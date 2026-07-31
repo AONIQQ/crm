@@ -36,9 +36,4 @@ export class ContactsRouter {
 	async update(@Input() input: z.infer<typeof contactUpdateArgs>) {
 		return this.contacts.update(input.id, input.data);
 	}
-
-	@Mutation({ input: contactIdInput })
-	async remove(@Input("id") id: string) {
-		return this.contacts.remove(id);
-	}
 }

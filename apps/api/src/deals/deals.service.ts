@@ -27,13 +27,11 @@ import {
 	LOSING_DEAL_STAGES,
 	OPEN_DEAL_STAGES,
 } from "./deal-stage";
-import type { BoardInput } from "./deals.board";
 import type {
 	ClosingWindow,
 	DealCreateInput,
 	DealListInput,
 	DealUpdateInput,
-	SetContactsInput,
 	SetStageInput,
 } from "./deals.contracts";
 import { CLOSING_WINDOWS } from "./deals.contracts";
@@ -130,73 +128,6 @@ export class DealsService {
 			/** Open pipeline value across everything matching the filters. */
 			openValueCents: toCents(openValue._sum.amount),
 		} satisfies ListResult<unknown> & { openValueCents: number | null };
-	}
-
-	/**
-	 * The pipeline as columns.
-	 *
-	 * One query, grouped in memory rather than four round trips: the open
-	 * pipeline is small by construction, and a board that issues a query per
-	 * column gets slower every time someone adds a stage.
-	 */
-	async board(input: BoardInput) {
-		const where: Prisma.DealWhereInput = {
-			...this.searchFilter(input.q),
-			stage: { in: [...OPEN_DEAL_STAGES] },
-		};
-
-		if (input.owner !== FACET_ALL) {
-			where.ownerId = input.owner;
-		}
-
-		const [deals, totals] = await Promise.all([
-			this.db.deal.findMany({
-				where,
-				orderBy: [
-					{ stage: "asc" },
-					{ expectedCloseDate: "asc" },
-					{ name: "asc" },
-				],
-				select: {
-					id: true,
-					name: true,
-					stage: true,
-					amount: true,
-					currency: true,
-					expectedCloseDate: true,
-					company: { select: COMPANY_SELECT },
-					owner: { select: OWNER_SELECT },
-				},
-			}),
-			this.db.deal.groupBy({
-				by: ["stage"],
-				where,
-				_count: { _all: true },
-				_sum: { amount: true },
-			}),
-		]);
-
-		const columns = OPEN_DEAL_STAGES.map((stage) => {
-			const group = totals.find((row) => row.stage === stage);
-			const cards = deals
-				.filter((deal) => deal.stage === stage)
-				.slice(0, input.limit)
-				.map(({ amount, expectedCloseDate, ...deal }) => ({
-					...deal,
-					amountCents: toCents(amount),
-					expectedCloseDate: expectedCloseDate?.toISOString() ?? null,
-				}));
-
-			return {
-				stage,
-				cards,
-				/** The whole column, even when only `limit` cards are shown. */
-				total: group?._count._all ?? 0,
-				valueCents: toCents(group?._sum.amount ?? null) ?? 0,
-			};
-		});
-
-		return { columns };
 	}
 
 	async byId(id: string) {
@@ -373,55 +304,6 @@ export class DealsService {
 		});
 
 		return { ...updated, changed: true };
-	}
-
-	/** Replaces the people on a deal wholesale — the UI edits the whole set. */
-	async setContacts(input: SetContactsInput) {
-		const deal = await this.db.deal.findUnique({
-			where: { id: input.dealId },
-			select: { companyId: true },
-		});
-
-		if (!deal) {
-			throw new NotFoundException(`No deal with id ${input.dealId}.`);
-		}
-
-		const contactIds = [...new Set(input.contacts.map((c) => c.contactId))];
-
-		if (contactIds.length > 0) {
-			const belong = await this.db.contact.count({
-				where: { id: { in: contactIds }, companyId: deal.companyId },
-			});
-			if (belong !== contactIds.length) {
-				throw new BadRequestException(
-					"Every contact on a deal has to work at the company the deal is with.",
-				);
-			}
-		}
-
-		await this.db.$transaction([
-			this.db.dealContact.deleteMany({ where: { dealId: input.dealId } }),
-			this.db.dealContact.createMany({
-				data: input.contacts.map((contact) => ({
-					dealId: input.dealId,
-					contactId: contact.contactId,
-					role: contact.role || null,
-				})),
-				skipDuplicates: true,
-			}),
-		]);
-
-		return { dealId: input.dealId, count: contactIds.length };
-	}
-
-	async remove(id: string): Promise<{ id: string }> {
-		try {
-			await this.db.deal.delete({ where: { id } });
-		} catch (error) {
-			throw this.translate(error, id);
-		}
-		this.logger.log({ message: "Deal deleted", dealId: id });
-		return { id };
 	}
 
 	private searchFilter(q: string): Prisma.DealWhereInput {

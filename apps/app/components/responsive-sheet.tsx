@@ -2,24 +2,18 @@
 
 import {
 	Drawer,
-	DrawerClose,
 	DrawerContent,
 	DrawerDescription,
-	DrawerFooter,
 	DrawerHeader,
 	DrawerTitle,
-	DrawerTrigger,
 } from "@crm/ui/components/drawer";
 import {
 	type SheetSize,
 	Sheet as UISheet,
-	SheetClose as UISheetClose,
 	SheetContent as UISheetContent,
 	SheetDescription as UISheetDescription,
-	SheetFooter as UISheetFooter,
 	SheetHeader as UISheetHeader,
 	SheetTitle as UISheetTitle,
-	SheetTrigger as UISheetTrigger,
 } from "@crm/ui/components/sheet";
 import { useIsMobile } from "@crm/ui/hooks/use-mobile";
 import { cn } from "@crm/ui/lib/utils";
@@ -58,26 +52,6 @@ function Sheet({ children, ...props }: RootProps) {
 	);
 }
 
-function SheetTrigger(
-	props: React.ComponentProps<"button"> & { asChild?: boolean },
-) {
-	return useResponsive() ? (
-		<DrawerTrigger {...props} />
-	) : (
-		<UISheetTrigger {...props} />
-	);
-}
-
-function SheetClose(
-	props: React.ComponentProps<"button"> & { asChild?: boolean },
-) {
-	return useResponsive() ? (
-		<DrawerClose {...props} />
-	) : (
-		<UISheetClose {...props} />
-	);
-}
-
 function SheetContent({
 	children,
 	side,
@@ -89,6 +63,8 @@ function SheetContent({
 	side?: "top" | "right" | "bottom" | "left";
 	size?: SheetSize;
 	showCloseButton?: boolean;
+	/** Radix's "where does focus land" hook — both branches forward it. */
+	onOpenAutoFocus?: (event: Event) => void;
 }) {
 	if (useResponsive()) {
 		// A bottom drawer is otherwise content-height, so a short body (or a tab
@@ -128,14 +104,6 @@ function SheetHeader(props: React.ComponentProps<"div">) {
 	);
 }
 
-function SheetFooter(props: React.ComponentProps<"div">) {
-	return useResponsive() ? (
-		<DrawerFooter {...props} />
-	) : (
-		<UISheetFooter {...props} />
-	);
-}
-
 function SheetTitle(props: {
 	className?: string;
 	size?: "default" | "lg";
@@ -159,13 +127,4 @@ function SheetDescription(props: {
 	);
 }
 
-export {
-	Sheet,
-	SheetClose,
-	SheetContent,
-	SheetDescription,
-	SheetFooter,
-	SheetHeader,
-	SheetTitle,
-	SheetTrigger,
-};
+export { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle };

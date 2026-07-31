@@ -34,7 +34,7 @@ export type CompanyCreateInput = z.infer<typeof companyCreateInput>;
  * editors on the detail page can send one field at a time. An empty string
  * clears a value; `null` on `ownerId` unassigns.
  */
-export const companyUpdateInput = z.object({
+const companyUpdateInput = z.object({
 	name: z.string().trim().min(1).optional(),
 	domain: z.string().optional(),
 	website: z.string().optional(),

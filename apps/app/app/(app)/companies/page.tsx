@@ -42,7 +42,7 @@ export default async function CompaniesPage({
 	void queryClient.prefetchQuery(trpc.users.list.queryOptions());
 
 	return (
-		<PageShell>
+		<PageShell className="min-h-0">
 			<PageShellHeader>
 				<PageShellHeading>
 					<PageShellTitle>Companies</PageShellTitle>
@@ -55,7 +55,7 @@ export default async function CompaniesPage({
 				</PageShellActions>
 			</PageShellHeader>
 
-			<PageShellContent>
+			<PageShellContent className="min-h-0">
 				<HydrateClient>
 					<CompaniesTable />
 				</HydrateClient>

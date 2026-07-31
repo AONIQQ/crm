@@ -55,7 +55,7 @@ export type DealCreateInput = z.infer<typeof dealCreateInput>;
 
 /** `undefined` leaves a field alone. Stage is not here — it goes through
  * `setStage`, which also writes the timeline entry. */
-export const dealUpdateInput = z.object({
+const dealUpdateInput = z.object({
 	name: z.string().trim().min(1).optional(),
 	companyId: z.string().optional(),
 	ownerId: z.string().optional(),
@@ -81,15 +81,3 @@ export const setStageInput = z.object({
 });
 
 export type SetStageInput = z.infer<typeof setStageInput>;
-
-export const setContactsInput = z.object({
-	dealId: z.string(),
-	contacts: z.array(
-		z.object({
-			contactId: z.string(),
-			role: z.string().trim().optional(),
-		}),
-	),
-});
-
-export type SetContactsInput = z.infer<typeof setContactsInput>;

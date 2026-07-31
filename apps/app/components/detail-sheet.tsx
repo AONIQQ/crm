@@ -1,5 +1,19 @@
 "use client";
 
+import ArrowLeft from "@carbon/icons-react/es/ArrowLeft";
+import Close from "@carbon/icons-react/es/Close";
+import { Button } from "@crm/ui/components/button";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@crm/ui/components/empty";
+import type { CarbonIcon } from "@crm/ui/components/icon";
+import { Icon } from "@crm/ui/components/icon";
+import { Separator } from "@crm/ui/components/separator";
 import type { SheetSize } from "@crm/ui/components/sheet";
 import {
 	Tabs,
@@ -7,8 +21,13 @@ import {
 	TabsList,
 	TabsTrigger,
 } from "@crm/ui/components/tabs";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@crm/ui/components/tooltip";
 import { cn } from "@crm/ui/lib/utils";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import {
 	Sheet,
 	SheetContent,
@@ -17,14 +36,29 @@ import {
 	SheetTitle,
 } from "@/components/responsive-sheet";
 
+/** One gutter for the whole panel, so every band lines up down the left edge. */
+const GUTTER = "px-5";
+
+/**
+ * Section headings are eyebrows, not titles.
+ *
+ * The only title in a record sheet is the record's name. "Details" and "About"
+ * are labels on a filing cabinet — they need to be findable when you scan for
+ * them and invisible when you are not.
+ */
+const SECTION_TITLE =
+	"font-medium text-muted-foreground text-xs uppercase tracking-wider";
+
 /**
  * The chrome every record sheet is built from.
  *
  * One shape for all of them — header, a strip of numbers, tabs, a scrolling
  * body — so a rep who has opened a company knows where everything is on a deal
- * without looking. The parts are separate components rather than props on one
- * because the tabs' contents differ per record and a `renderX` prop for each
- * would be worse than composing them.
+ * without looking.
+ *
+ * `showCloseButton={false}`: the close control is part of the header's action
+ * group instead of floating over the top-right corner, which is the only way
+ * a record's own buttons can sit up there without being crowded by it.
  */
 export function DetailSheet({
 	open,
@@ -39,11 +73,24 @@ export function DetailSheet({
 	className?: string;
 	children: ReactNode;
 }) {
+	const content = useRef<HTMLDivElement>(null);
+
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
 			<SheetContent
+				ref={content}
 				side="right"
 				size={size}
+				showCloseButton={false}
+				// Opening a record is a read, not a form. Left alone, Radix puts
+				// focus on the first control in the panel, so the sheet arrives with
+				// a focus ring already drawn on a button nobody pressed. Focusing the
+				// panel itself keeps assistive tech inside the dialog and announces
+				// the record's name, without anything looking pre-clicked.
+				onOpenAutoFocus={(event) => {
+					event.preventDefault();
+					content.current?.focus();
+				}}
 				className={cn("flex flex-col gap-0 p-0", className)}
 			>
 				{children}
@@ -53,36 +100,43 @@ export function DetailSheet({
 }
 
 export function DetailSheetHeader({
-	eyebrow,
+	media,
 	title,
 	description,
-	media,
+	note,
 	actions,
-	className,
-	children,
+	onBack,
+	onClose,
 }: {
-	eyebrow?: ReactNode;
-	title: ReactNode;
-	description?: ReactNode;
 	media?: ReactNode;
-	/** Buttons, wrapped so the close control never lands on top of them. */
+	title: ReactNode;
+	/** The one line that says what this is — domain, company, location. */
+	description?: ReactNode;
+	/** Only when there is something to say: an agent running, a failure. */
+	note?: ReactNode;
 	actions?: ReactNode;
-	className?: string;
-	children?: ReactNode;
+	/** Up one record, when this was opened from another one. */
+	onBack?: () => void;
+	onClose: () => void;
 }) {
 	return (
-		<SheetHeader
-			className={cn("gap-0 space-y-3 border-b p-5 pr-14", className)}
-		>
-			{eyebrow ? (
-				<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-					{eyebrow}
-				</div>
-			) : null}
+		<SheetHeader className={cn("gap-0 border-b py-4", GUTTER)}>
+			<div className="flex items-start gap-3">
+				{onBack ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button variant="ghost" size="icon-sm" onClick={onBack}>
+								<Icon icon={ArrowLeft} />
+								<span className="sr-only">Back</span>
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent>Back</TooltipContent>
+					</Tooltip>
+				) : null}
 
-			<div className="flex items-start gap-4">
 				{media}
-				<div className="min-w-0 flex-1 space-y-1">
+
+				<div className="min-w-0 flex-1 space-y-1 pt-0.5">
 					<SheetTitle size="lg" className="wrap-anywhere">
 						{title}
 					</SheetTitle>
@@ -91,49 +145,52 @@ export function DetailSheetHeader({
 							{description}
 						</SheetDescription>
 					) : null}
+					{note ? (
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-xs">
+							{note}
+						</div>
+					) : null}
+				</div>
+
+				{/*
+				 * Actions and close travel together, so the record's own buttons can
+				 * never end up underneath the close control.
+				 */}
+				<div className="flex shrink-0 items-center gap-1">
+					{actions}
+					{actions ? (
+						<Separator orientation="vertical" className="mx-1 h-5" />
+					) : null}
+					<Button variant="ghost" size="icon-sm" onClick={onClose}>
+						<Icon icon={Close} />
+						<span className="sr-only">Close</span>
+					</Button>
 				</div>
 			</div>
-
-			{actions ? (
-				<div className="flex flex-wrap items-center gap-2">{actions}</div>
-			) : null}
-
-			{children}
 		</SheetHeader>
 	);
 }
 
-/** A row of the four or five numbers you would otherwise go hunting for. */
-export function DetailSheetStats({
-	className,
-	children,
-}: {
-	className?: string;
-	children: ReactNode;
-}) {
-	return (
-		<dl className={cn("flex shrink-0 divide-x border-b", className)}>
-			{children}
-		</dl>
-	);
+/**
+ * The numbers you would otherwise open a tab to find.
+ *
+ * Deliberately not the counts already printed on the tabs beside them — a
+ * strip that repeats "Contacts 3" under a tab reading "Contacts 3" is a band
+ * of furniture, not information.
+ */
+export function DetailSheetStats({ children }: { children: ReactNode }) {
+	return <dl className="flex shrink-0 divide-x border-b">{children}</dl>;
 }
 
 export function DetailSheetStat({
 	label,
-	className,
 	children,
 }: {
 	label: ReactNode;
-	className?: string;
 	children: ReactNode;
 }) {
 	return (
-		<div
-			className={cn(
-				"flex min-w-0 flex-1 flex-col gap-1.5 px-5 py-3",
-				className,
-			)}
-		>
+		<div className={cn("flex min-w-0 flex-1 flex-col gap-1 py-2.5", GUTTER)}>
 			<dt className="truncate text-muted-foreground text-xs">{label}</dt>
 			<dd className="min-w-0 truncate text-sm">{children}</dd>
 		</div>
@@ -160,28 +217,33 @@ export function DetailSheetTabs({
 	tabs,
 	value,
 	onValueChange,
-	className,
 }: {
 	tabs: DetailSheetTab[];
 	value: string;
 	onValueChange: (value: string) => void;
-	className?: string;
 }) {
 	return (
 		<Tabs
 			value={value}
 			onValueChange={onValueChange}
-			className={cn("flex min-h-0 flex-1 flex-col gap-0", className)}
+			className="flex min-h-0 flex-1 flex-col gap-0"
 		>
+			{/*
+			 * Tabs only. A panel's actions live in the panel — a button bolted to
+			 * the right of the tab strip reads as part of the navigation, and the
+			 * one thing it is not is somewhere you can go.
+			 */}
 			<TabsList
 				variant="line"
-				className="w-full shrink-0 justify-start gap-4 border-b px-5"
+				className={cn("w-full shrink-0 justify-start gap-6 border-b", GUTTER)}
 			>
 				{tabs.map((tab) => (
 					<TabsTrigger key={tab.value} value={tab.value}>
 						{tab.label}
 						{tab.count ? (
-							<span className="tabular-nums opacity-60">{tab.count}</span>
+							<span className="text-muted-foreground tabular-nums">
+								{tab.count}
+							</span>
 						) : null}
 					</TabsTrigger>
 				))}
@@ -207,17 +269,9 @@ export function DetailSheetTabs({
 }
 
 /** The scroll container for a tab made of sections rather than one table. */
-export function DetailSheetBody({
-	className,
-	children,
-}: {
-	className?: string;
-	children: ReactNode;
-}) {
+export function DetailSheetBody({ children }: { children: ReactNode }) {
 	return (
-		<div
-			className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", className)}
-		>
+		<div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
 			{children}
 		</div>
 	);
@@ -236,15 +290,15 @@ export function DetailSheetSection({
 }) {
 	return (
 		<section
-			className={cn("space-y-3 border-b p-5 last:border-b-0", className)}
+			className={cn(
+				"space-y-3 border-b py-4 last:border-b-0",
+				GUTTER,
+				className,
+			)}
 		>
 			{title || action ? (
-				<div className="flex items-center justify-between gap-3">
-					{title ? (
-						<h3 className="font-medium text-foreground text-sm">{title}</h3>
-					) : (
-						<span />
-					)}
+				<div className="flex h-6 items-center justify-between gap-3">
+					{title ? <h3 className={SECTION_TITLE}>{title}</h3> : <span />}
 					{action}
 				</div>
 			) : null}
@@ -253,11 +307,44 @@ export function DetailSheetSection({
 	);
 }
 
-/** Nothing here yet, said once, the same way everywhere. */
-export function DetailSheetEmpty({ children }: { children: ReactNode }) {
+/**
+ * Two columns of editable properties on a wide panel, one on a narrow one.
+ *
+ * Paired rather than a single list because a company has eight of these and a
+ * single column turns the first screen of the sheet into a ladder you scroll.
+ */
+export function DetailSheetProperties({ children }: { children: ReactNode }) {
+	return <div className="grid gap-x-8 sm:grid-cols-2">{children}</div>;
+}
+
+/**
+ * Nothing here yet, said once, the same way everywhere.
+ *
+ * A real empty state rather than a line of grey text: an empty panel is the
+ * most common thing a rep sees on a company they just added, so it is the one
+ * place the app has to say what this list is for and how to start it.
+ */
+export function DetailSheetEmpty({
+	icon,
+	title,
+	description,
+	action,
+}: {
+	icon: CarbonIcon;
+	title: string;
+	description: string;
+	action?: ReactNode;
+}) {
 	return (
-		<p className="px-5 py-10 text-center text-muted-foreground text-xs">
-			{children}
-		</p>
+		<Empty className="flex-1">
+			<EmptyHeader>
+				<EmptyMedia variant="icon">
+					<Icon icon={icon} />
+				</EmptyMedia>
+				<EmptyTitle>{title}</EmptyTitle>
+				<EmptyDescription>{description}</EmptyDescription>
+			</EmptyHeader>
+			{action ? <EmptyContent>{action}</EmptyContent> : null}
+		</Empty>
 	);
 }

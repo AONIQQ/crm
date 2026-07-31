@@ -484,8 +484,20 @@ async function seedDeals(
 			const closed = chance(0.35);
 			const stage = closed ? pick(CLOSED_STAGES) : pick(OPEN_STAGES);
 			const ownerId = pick(ownerIds);
-			const createdAt = daysFromNow(-integer(20, 200), 12);
-			const stageChangedAt = daysFromNow(-integer(1, 20), 12);
+			const createdDaysAgo = integer(20, 210);
+			const createdAt = daysFromNow(-createdDaysAgo, 12);
+			// A closed deal closes somewhere between a fortnight after it opened and
+			// today, so the overview's six-month trend and its rolling win rate have
+			// something in every bucket. Closing them all inside the last fortnight —
+			// which is what a flat `integer(1, 20)` did — made every chart a spike
+			// against five empty months.
+			const closedDaysAgo = closed
+				? integer(0, Math.max(createdDaysAgo - 14, 0))
+				: null;
+			const stageChangedAt = daysFromNow(
+				closedDaysAgo === null ? -integer(1, 20) : -closedDaysAgo,
+				12,
+			);
 
 			await db.deal.upsert({
 				where: { id },
@@ -501,8 +513,12 @@ async function seedDeals(
 					stageChangedAt,
 					amount: integer(6, 90) * 1000,
 					currency: "USD",
+					// A closed deal landed near the date it was forecast for; an open one
+					// is still forecast, and some are already late.
 					expectedCloseDate: daysFromNow(
-						closed ? -integer(1, 60) : integer(-10, 75),
+						closedDaysAgo === null
+							? integer(-10, 75)
+							: -closedDaysAgo + integer(-4, 9),
 					),
 					closedAt: closed ? stageChangedAt : null,
 					closedReason:

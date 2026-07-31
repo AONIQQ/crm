@@ -12,7 +12,6 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { DatabaseModule } from "./database/database.module";
 import { DealsModule } from "./deals/deals.module";
 import { HealthModule } from "./health/health.module";
-import { ImportModule } from "./import/import.module";
 import { LoggingModule } from "./logging/logging.module";
 import { logAuthRoute } from "./logging/request-logger.middleware";
 import { SearchModule } from "./search/search.module";
@@ -39,7 +38,6 @@ import { UsersModule } from "./users/users.module";
 		DealsModule,
 		ActivitiesModule,
 		DashboardModule,
-		ImportModule,
 		SearchModule,
 	],
 })

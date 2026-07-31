@@ -28,11 +28,12 @@ import {
 	SheetTrigger,
 } from "@crm/ui/components/sheet";
 import { Spinner } from "@crm/ui/components/spinner";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { parseAsBoolean, useQueryState } from "nuqs";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
+import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
 const UNASSIGNED = "unassigned";
@@ -47,7 +48,7 @@ const UNASSIGNED = "unassigned";
 export function CreateCompanySheet() {
 	const openRecord = useOpenRecord();
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+	const cache = useCrmCache();
 
 	// Open state lives in the URL, like every other view state here: "add a
 	// company" is then a link you can send someone, and Back closes the sheet
@@ -68,9 +69,7 @@ export function CreateCompanySheet() {
 	const create = useMutation(
 		trpc.companies.create.mutationOptions({
 			onSuccess: async (company) => {
-				await queryClient.invalidateQueries({
-					queryKey: trpc.companies.list.queryKey(),
-				});
+				await cache.company(company.id);
 				toast.success(`${company.name} added.`);
 				// `null` rather than `false` so the closed state leaves a clean URL.
 				await setOpen(null);

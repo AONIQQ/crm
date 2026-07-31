@@ -97,7 +97,7 @@ const COLUMNS: DataTableColumn<DealRow>[] = [
 		width: "w-[12%]",
 		hideBelow: "lg",
 		cell: (row) => (
-			<span className="text-muted-foreground">
+			<span className="text-muted-foreground" suppressHydrationWarning>
 				{relativeTimeFromIso(row.lastActivityAt)}
 			</span>
 		),

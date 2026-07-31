@@ -40,7 +40,7 @@ export default async function ContactsPage({
 	);
 
 	return (
-		<PageShell>
+		<PageShell className="min-h-0">
 			<PageShellHeader>
 				<PageShellHeading>
 					<PageShellTitle>Contacts</PageShellTitle>
@@ -51,7 +51,7 @@ export default async function ContactsPage({
 				</PageShellActions>
 			</PageShellHeader>
 
-			<PageShellContent>
+			<PageShellContent className="min-h-0">
 				<HydrateClient>
 					<ContactsTable />
 				</HydrateClient>
