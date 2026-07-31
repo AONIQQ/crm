@@ -48,7 +48,12 @@ export class DomainErrorMiddleware implements TRPCMiddleware {
 			return result;
 		}
 
-		const cause = (result.error as { cause?: unknown } | undefined)?.cause;
+		// Read `error` off a widened alias rather than the narrowed union. The
+		// `ok` discriminant narrows under this repo's tsconfig but not under the
+		// one Vercel's Node builder compiles with, where `result.error` is a
+		// deploy-breaking TS2339. The guard above already proved `ok` is false.
+		const failure = result as { error?: unknown };
+		const cause = (failure.error as { cause?: unknown } | undefined)?.cause;
 
 		if (cause instanceof HttpException) {
 			throw new TRPCError({
