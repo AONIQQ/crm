@@ -2,7 +2,6 @@
 	"$schema": "https://turborepo.dev/schema.json",
 	"extends": ["//"],
 	"tasks": {
-		"//": "`build` deliberately does not depend on `trpc:generate`. The generator ships a native binary that needs GLIBC 2.39, which Vercel's build image does not have, so running it there fails the deploy. `src/generated/server.ts` is committed for exactly this reason (see .gitignore) and is what a build consumes. Drift is caught by `check-types`, which still regenerates first, and by `bun run dev`, which keeps the generator in watch mode.",
 		"build": {
 			"dependsOn": ["$TURBO_EXTENDS$"],
 			"outputs": ["dist/**"]

@@ -75,6 +75,13 @@ Everything the app reads or writes goes through `nestjs-trpc` routers under
   the app imports as `type { AppRouter } from "api/app-router"`. `bun run dev`
   keeps it in watch mode. If the app cannot see a new procedure, the generator
   has not run.
+- **`src/generated/server.ts` is committed, and `build` must never regenerate
+  it.** The generator ships a native binary that needs GLIBC 2.39 — newer than
+  Vercel's build image — so a `build` task that depends on `trpc:generate` fails
+  every deploy. That is why `apps/api/.gitignore` ignores `src/generated/*` with
+  a `!src/generated/server.ts` exception, and why only `check-types` and `dev`
+  run the generator. Regenerate locally and commit the result with the router
+  change that caused it.
 
 ## Freshness: invalidate the query, don't disable the cache
 
