@@ -20,6 +20,7 @@
 		"db:studio": "prisma studio",
 		"dev": "prisma generate --watch",
 		"lint": "biome check .",
+		"postinstall": "prisma generate",
 		"clean": "rm -rf .turbo node_modules src/generated"
 	},
 	"dependencies": {
