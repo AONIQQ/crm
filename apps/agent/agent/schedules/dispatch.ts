@@ -31,22 +31,28 @@ export default defineSchedule({
 				// Rows that spent their attempts without a session ever reporting
 				// back. Retiring them before claiming keeps the sweep on the same
 				// clock as the work rather than needing a schedule of its own.
-				for (const abandoned of await retireExhausted()) {
-					await settle(
-						abandoned,
-						EnrichmentStatus.FAILED,
-						"Research was attempted several times and never completed.",
-					);
-				}
+				//
+				// Guarded, because a throw here returns before `claimDue` and the
+				// queue simply stops: a sweep that only tidies up must never be able
+				// to prevent the work it tidies up after.
+				try {
+					for (const abandoned of await retireExhausted()) {
+						await settle(
+							abandoned,
+							EnrichmentStatus.FAILED,
+							"Research was attempted several times and never completed.",
+						);
+					}
+				} catch {}
 
 				const tasks = await claimDue(BATCH);
 				if (tasks.length === 0) return;
 
 				await Promise.all(
 					tasks.map(async (task) => {
-						await markRunning(task);
-
 						try {
+							await markRunning(task);
+
 							const session = await receive(crm, {
 								message: brief(task),
 								// The channel keys its continuation token off this, so a
@@ -82,7 +88,14 @@ export default defineSchedule({
 							// downstream will ever close this row. Leave it open for the
 							// lease to re-offer, bounded by the attempt cap, and say on the
 							// record why nothing is happening yet.
-							await settle(task, EnrichmentStatus.FAILED, reason);
+							//
+							// Nothing rethrows: one bad row must not take the batch down
+							// with it. `waitUntil` receives the rejection with no handler
+							// attached, which is an unhandled rejection inside the cron
+							// task rather than a logged error.
+							await settle(task, EnrichmentStatus.FAILED, reason).catch(
+								() => {},
+							);
 						}
 					}),
 				);

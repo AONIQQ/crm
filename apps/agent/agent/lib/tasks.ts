@@ -132,9 +132,7 @@ export async function completeTask(
 }
 
 /** Who a row is about, without disturbing it. */
-export async function taskSubject(
-	taskId: string,
-): Promise<TaskSubject | null> {
+export async function taskSubject(taskId: string): Promise<TaskSubject | null> {
 	return db.agentTask.findUnique({
 		where: { id: taskId },
 		select: { id: true, contactId: true, companyId: true, kind: true },
