@@ -5,17 +5,21 @@ NestJS API for the CRM. Runs on Bun, backed by `@crm/db` and `@crm/auth`.
 ## Running it
 
 ```sh
-cp .env.example .env
-openssl rand -base64 32     # -> BETTER_AUTH_SECRET (same value in apps/app/.env)
+cp .env.example .env        # at the repo root — one file for the whole monorepo
+openssl rand -base64 32     # -> BETTER_AUTH_SECRET
 
 bun run dev                 # watch mode on http://localhost:3001
 bun run test
 bun run build && bun run start:prod
 ```
 
-Sign-in is Google-only, so `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are
-required and the process refuses to boot without them. Register
-`http://localhost:3001/api/auth/callback/google` as an authorised redirect URI.
+Five values are required and the process refuses to boot without them, naming
+the one it is missing: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ALLOWED_SIGN_IN`,
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Sign-in is Google-only, so
+register `http://localhost:3001/api/auth/callback/google` as an authorised
+redirect URI. `src/config/env.validation.ts` is the full list of what this
+process reads; [`docs/environment.md`](../../docs/environment.md) explains where
+the file is found.
 
 Bun is the runtime, not just the package manager: `@crm/db` and `@crm/auth`
 ship TypeScript sources, so `tsc`/`node` cannot run this app directly. `tsc` is
@@ -49,7 +53,8 @@ straight from Postgres via `@crm/auth` and calls the routes above with
 
 It also calls `enableCors({ origin: trustedOrigins, credentials: true })` for
 the whole app, which is what lets the browser at `localhost:3000` talk to it —
-`AUTH_TRUSTED_ORIGINS` is the single knob for that.
+`APP_URL` is the single knob for that, comma-separated if the app is served from
+more than one origin.
 
 `main.ts` creates the app with `bodyParser: false` — Better Auth needs the raw
 request body, and the library installs its own parsers around the auth routes.

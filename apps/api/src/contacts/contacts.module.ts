@@ -1,11 +1,12 @@
 import { Module } from "@nestjs/common";
-import { EnrichmentModule } from "../enrichment/enrichment.module";
+import { AgentModule } from "../agent/agent.module";
+import { CompaniesModule } from "../companies/companies.module";
 import { TrpcModule } from "../trpc/trpc.module";
 import { ContactsRouter } from "./contacts.router";
 import { ContactsService } from "./contacts.service";
 
 @Module({
-	imports: [TrpcModule, EnrichmentModule],
+	imports: [TrpcModule, AgentModule, CompaniesModule],
 	providers: [ContactsService, ContactsRouter],
 	exports: [ContactsService],
 })

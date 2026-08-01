@@ -3,23 +3,28 @@
 	"version": "0.0.1",
 	"private": true,
 	"type": "module",
-	"license": "UNLICENSED",
+	"license": "MIT",
 	"scripts": {
 		"dev": "eve dev",
 		"build": "eve build",
 		"start": "eve start",
 		"check-types": "tsc --noEmit",
+		"test": "bun test",
 		"lint": "biome check .",
 		"clean": "rm -rf .turbo .eve node_modules"
 	},
 	"dependencies": {
 		"@crm/db": "workspace:*",
+		"@crm/env": "workspace:*",
+		"@vercel/blob": "^2.6.1",
+		"context.dev": "^2.7.0",
 		"eve": "^0.29.4",
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@crm/typescript-config": "workspace:*",
 		"@types/node": "^24.0.0",
+		"microsandbox": "^0.6.8",
 		"typescript": "^5.9.2"
 	}
 }

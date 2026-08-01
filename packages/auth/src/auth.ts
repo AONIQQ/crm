@@ -4,7 +4,11 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
 import { env } from "./env";
 import { SYNC_SCOPES } from "./scopes";
-import { isWorkspaceEmail, PRIMARY_WORKSPACE_DOMAIN } from "./workspace";
+import {
+	hasSignInAllowList,
+	isWorkspaceEmail,
+	primaryWorkspaceDomain,
+} from "./workspace";
 
 const socialProviders: NonNullable<BetterAuthOptions["socialProviders"]> = {};
 
@@ -39,7 +43,11 @@ if (env.google) {
 		// convenience, not the control — `hd` is a hint the client sends and a
 		// determined caller can omit it, so the real check is the database hook
 		// below, which sees the verified email.
-		hd: PRIMARY_WORKSPACE_DOMAIN,
+		//
+		// Omitted when the allow-list names no domain (a one-person install on a
+		// consumer mailbox): `hd` has to be a real domain, and sending an empty
+		// one hides every account in the chooser.
+		...(primaryWorkspaceDomain() ? { hd: primaryWorkspaceDomain() } : {}),
 	};
 }
 
@@ -99,13 +107,28 @@ export const auth = betterAuth({
 				 * Runs against the profile Google verified, before a row exists, so
 				 * a personal account that gets past the `hd` hint never becomes a
 				 * user. This is a single-tenant internal tool: an account outside
-				 * the workspace has nothing legitimate to do here, and every record
-				 * is visible to every signed-in person.
+				 * the allow-list has nothing legitimate to do here, and every
+				 * record is visible to every signed-in person.
+				 *
+				 * An unset allow-list is refused rather than waved through. The
+				 * failure mode of the other choice is a CRM full of real customer
+				 * data that anyone with a Google account can read, and it would
+				 * look like it was working.
 				 */
 				before: async (user) => {
-					if (!isWorkspaceEmail(user.email)) {
+					if (!hasSignInAllowList()) {
 						throw new APIError("FORBIDDEN", {
-							message: `Comp AI CRM is internal. Sign in with your @${PRIMARY_WORKSPACE_DOMAIN} account.`,
+							message:
+								'No one can sign in yet: set ALLOWED_SIGN_IN in .env to your email domain (for example ALLOWED_SIGN_IN="acme.com") and restart.',
+						});
+					}
+
+					if (!isWorkspaceEmail(user.email)) {
+						const domain = primaryWorkspaceDomain();
+						throw new APIError("FORBIDDEN", {
+							message: domain
+								? `This CRM is private. Sign in with your @${domain} account.`
+								: "This CRM is private. That address is not on the allow-list.",
 						});
 					}
 

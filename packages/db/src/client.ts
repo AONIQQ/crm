@@ -1,3 +1,7 @@
+// First, and before anything reads `process.env`: every process that talks to
+// the database gets here, so this is where the repo-root `.env` is picked up.
+import "@crm/env/load";
+
 import { PrismaPg } from "@prisma/adapter-pg";
 import { type Prisma, PrismaClient } from "./generated/prisma/client";
 
@@ -5,7 +9,7 @@ const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
 	throw new Error(
-		"DATABASE_URL is not set. Copy packages/db/.env.example to packages/db/.env (or set it in the consuming app's environment).",
+		"DATABASE_URL is not set. Copy .env.example to .env at the root of the repo and fill it in, or set DATABASE_URL in the environment.",
 	);
 }
 

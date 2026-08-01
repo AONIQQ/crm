@@ -1,109 +1,220 @@
 # Environment
 
-## Per-app env files, not one root file
+## One `.env`, at the root of the repo
 
-There is no root `.env`. Every surface that runs as its own process owns its own file, copied from the `.env.example` sitting next to it:
+Copy [`.env.example`](../.env.example) to `.env` and fill in the five required
+values. That file is the documentation — every variable the repo reads is in it,
+with a note on what it does, and nothing that is not read is in it.
 
-| File | Loaded by | Used by |
-| --- | --- | --- |
-| `apps/api/.env` | Bun's automatic `.env` loading, plus `ConfigModule.forRoot()` | the NestJS API |
-| `apps/app/.env` | Next.js | the Next.js app; `NEXT_PUBLIC_*` are inlined at build time |
-| `packages/db/.env` | `import "dotenv/config"` in `packages/db/prisma.config.ts` | the Prisma CLI — `db:migrate`, `db:push`, `db:studio`, `db:seed` |
+```sh
+cp .env.example .env
+```
 
-`packages/auth/.env.example` documents what `@crm/auth` reads, but there is deliberately no `packages/auth/.env`. The package is a library: it never loads a file, it just reads whatever `process.env` its host process already has. If a var is missing there, fix the API's or the app's `.env` — adding one next to the package would do nothing.
+It is loaded by [`packages/env`](../packages/env), which walks up from the
+process's working directory to the workspace root and reads `.env`, then
+`.env.local` on top. Every process gets there:
 
-Because each loader reads from its own process's working directory, the API only sees `apps/api/.env` when started from `apps/api` — which is what `bun dev` / `turbo run dev` does. Running `bun src/main.ts` from the repo root silently gets you no env at all.
+| Process | How it picks the file up |
+| --- | --- |
+| The NestJS API | `@crm/db` and `@crm/auth` both `import "@crm/env/load"` before reading anything |
+| The Next.js app | `next.config.ts` calls `loadRootEnv()`, then republishes `API_URL` as `NEXT_PUBLIC_API_URL` |
+| The agent | `agent/agent.ts` and `@crm/db` |
+| The Prisma CLI | `packages/db/prisma.config.ts` |
 
-## Values that must match across files
+**Real environment variables always win.** The loader never overwrites a value
+already present in `process.env`, so a platform's own configuration — Vercel,
+Docker, systemd, CI — takes precedence and the file is purely a local
+convenience. With no `.env` at all the loader is a no-op and each consumer
+reports by name what it is missing.
 
-Three variables are duplicated, and nothing checks that the copies agree:
+There used to be four files (`apps/api/.env`, `apps/app/.env`,
+`packages/db/.env`, `apps/agent/.env`), three of which had to hold identical
+copies of `DATABASE_URL` and `BETTER_AUTH_SECRET`. Files that must agree are
+files that can disagree, and the failure was not an error: the API would mint a
+session cookie the app could not verify, so the browser bounced between
+`/sign-in` and `/` forever. If you still have those files from an older
+checkout, delete them.
 
-- **`DATABASE_URL`** — `apps/api/.env`, `apps/app/.env`, `packages/db/.env`. The app reads sessions straight from the database, and Prisma's CLI needs its own copy because it runs outside both apps.
-- **`BETTER_AUTH_SECRET`** — `apps/api/.env` and `apps/app/.env`.
-- **`BETTER_AUTH_URL`** — `apps/api/.env` and `apps/app/.env`.
+### Finding the root
 
-A mismatched `BETTER_AUTH_SECRET` is the one to watch: the API mints a session cookie the app cannot verify, so `requireSession()` rejects every request and you get an endless bounce back to `/sign-in` with no error anywhere. If sign-in "succeeds" but you land on the sign-in page again, compare the secrets before debugging anything else.
+The marker is a `package.json` that declares `workspaces` — the one thing only
+the root has. Neither obvious alternative works: every package has a
+`package.json`, and `apps/api` and `apps/agent` have their own `turbo.json`. A
+walk that stops at the first `turbo.json` resolves the API's root to
+`apps/api`, reads a file that is not there, and the symptom surfaces three
+frames away as a missing variable. `packages/env/test/root.spec.ts` pins this.
+
+## What is required
+
+Five values, and the API refuses to start without them.
+
+| Variable | Why it has no default |
+| --- | --- |
+| `DATABASE_URL` | `docker compose up -d` starts a Postgres that matches `.env.example` exactly |
+| `BETTER_AUTH_SECRET` | Signs session cookies. `openssl rand -base64 32` |
+| `ALLOWED_SIGN_IN` | The entire authorisation model — see below |
+| `GOOGLE_CLIENT_ID` | Google is the only sign-in method |
+| `GOOGLE_CLIENT_SECRET` | |
+
+Everything else has a working localhost default or is genuinely optional. That
+is the difference between a clone that runs and a clone that makes you read a
+table of variables first.
+
+### `ALLOWED_SIGN_IN`
+
+Who may sign in, comma-separated, each entry either a whole email domain or a
+single address:
+
+```sh
+ALLOWED_SIGN_IN="acme.com"                       # everyone at a workspace
+ALLOWED_SIGN_IN="acme.com,contractor@gmail.com"  # …plus one outsider
+ALLOWED_SIGN_IN="you@gmail.com"                  # a one-person install
+```
+
+Bare addresses exist for the third case: a solo self-hoster on a consumer
+mailbox has no domain to name, and `gmail.com` would be an open door.
+
+One list, read by two things that must never disagree — the sign-in guard and
+the sync's decision about which side of a conversation is external. If they
+drifted, a colleague's address would either be refused at the door or filed as
+a sales lead.
+
+**An empty list fails closed**: nobody signs in until it is set. The other
+choice would be a CRM full of real customer data that any Google account can
+read, and it would look like it was working. It is parsed on demand rather than
+at import, so the Better Auth CLI — which loads `auth.ts` in a process with no
+`.env` — and the tests can both set it themselves.
+
+Live in `packages/auth/src/workspace.ts`.
+
+## Where things are
+
+`API_URL` and `APP_URL` default to `http://localhost:3001` and
+`http://localhost:3000`. Set them for any real deployment.
+
+- **`API_URL`** is the origin that mints session cookies and serves
+  `/api/auth/*`. `next.config.ts` republishes it as `NEXT_PUBLIC_API_URL`, which
+  is what the browser's auth client and tRPC proxy use — so one variable
+  configures both sides. `BETTER_AUTH_URL` is still read as a fallback because
+  Better Auth's own tooling looks for it, but `API_URL` is the name to use.
+- **`APP_URL`** is where the browser is, and it is also the trusted-origin
+  allow-list: the set of origins allowed to call the API with credentials, and
+  the list Better Auth validates post-sign-in `callbackURL`s against.
+  Comma-separate if the app is genuinely served from more than one origin; the
+  first is canonical. This replaced a separate `AUTH_TRUSTED_ORIGINS`, which
+  could only ever disagree with it.
+- **`AUTH_COOKIE_DOMAIN`** only when the API and the app are on different
+  subdomains of one parent — then `.example.com`, so one cookie covers both. On
+  localhost the shared cookie already works, because cookies ignore ports.
+- **`AGENT_URL`** is the research agent, which is its own deployment. Only the
+  app reads it, and only server-side: the browser never learns the agent has an
+  origin of its own. See [the agent bridge](./agent.md#the-bridge).
 
 ## Typed, validated env
 
-Only the API validates. Everything else fails later and less clearly, so know which layer you are in:
+`apps/api/src/config/env.validation.ts` is a `class-validator` schema run by
+`ConfigModule.forRoot({ validate })`, so the API fails at boot with a named
+error rather than at three in the morning with `undefined`. It lists every
+variable the API reads and nothing else — a variable that exists but is never
+read is a question a self-hoster has to answer for no reason.
 
-- **`apps/api/src/config/env.validation.ts`** — the real one. A class-validator `EnvironmentVariables` class run through `ConfigModule.forRoot({ validate: validateEnv })`; it fails fast at boot with a message naming each bad variable. New API config belongs here.
-- **`packages/db/src/client.ts`** — throws if `DATABASE_URL` is unset, pointing at `packages/db/.env.example`.
-- **`packages/auth/src/env.ts`** — no schema. Plain `process.env` reads through an `optional()` helper, with one rule enforced: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` must be set together or it throws. Anything else missing just becomes `undefined`.
-- **`apps/app/lib/api.ts`** — `process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"`. A silent fallback, so a missing var in a deployed app looks like "the API is down" rather than a config error.
+Two sharp edges:
 
-### Two sharp edges
+- **Validation runs while `AppModule` is being evaluated.** A test that needs to
+  set a variable has to do it before importing that module — see the dynamic
+  `import()` in `apps/api/test/auth.e2e.spec.ts`.
+- **The schema is the API's, not the repo's.** `@crm/auth` and the agent read
+  their own values directly, because they run in processes Nest does not own.
 
-**`@crm/auth` reads env at import time.** `packages/auth/src/env.ts` builds its `env` object, and `auth.ts` builds `socialProviders`, while the module is being imported — not on first use. `app.module.ts` imports `@crm/auth` before `ConfigModule.forRoot()` runs, so the vars have to already be in `process.env` by then. Under Bun they are, because Bun loads `.env` before executing anything. Under plain Node or `nest start` they would not be: `@nestjs/config` loads the file *after* that import, so Google sign-in would vanish silently (`socialProviders: {}`) while `validateEnv` still passed, because it reads the same variables a moment later. If the API ever moves off Bun, load the env file explicitly before importing `AppModule`.
+## Optional: what the agent can do
 
-**`main.ts` bypasses the validated `PORT`.** It reads `process.env.PORT ?? 3001` directly, so the `@IsInt() @Min(1) @Max(65535)` constraint on `EnvironmentVariables.PORT` never applies to the value actually used. Read it off `ConfigService` instead.
+Every outside source the agent can reach is optional, and it is designed to run
+with none of them. A missing key removes a place to look; it is never an error.
 
-## Turbo and env
+| Variable | What it adds |
+| --- | --- |
+| `PERPLEXITY_API_KEY` | Open-web research with citations, and the search that finds a LinkedIn slug |
+| `RAPIDAPI_KEY` | LinkedIn profiles via LinkDAPI — name, title, employer, tenure |
+| `CONTEXT_DEV_API_KEY` | Company logo, industry, location and socials from a domain |
+| `GITHUB_TOKEN` | Raises the GitHub rate limit from 60/hour when matching profiles |
+| `BLOB_READ_WRITE_TOKEN` | Mirrors profile pictures into Vercel Blob rather than linking them |
+| `AI_GATEWAY_API_KEY` | The model. Not needed on Vercel, where OIDC handles it |
+| `AGENT_BRIDGE_SECRET` | Lets a rep talk to the agent from the contact sheet — [the bridge](./agent.md#the-bridge) |
 
-Turborepo 2 runs in strict env mode: a task sees only the variables it declares, so **adding a variable to a `.env` file is not enough — the task that needs it must list it too.**
-
-- Root `turbo.json` sets `globalEnv: ["NODE_ENV"]` and makes `.env*` a `build` input, so editing any env file correctly invalidates the build cache.
-- `apps/api/turbo.json` declares `passThroughEnv` for `dev` and `test` (auth, database, Google, cache, port).
-- `apps/app/turbo.json` declares `env` for the two `NEXT_PUBLIC_*` values — they are build inputs because Next inlines them — and `passThroughEnv` for the server-side ones.
-- `packages/db/turbo.json` and `packages/auth/turbo.json` pass `DATABASE_URL` through to every `db:*` / `auth:generate` task.
-
-The split matters: `env` participates in the cache key, `passThroughEnv` does not. Secrets belong in `passThroughEnv` so changing one doesn't churn the cache; anything baked into build output (the `NEXT_PUBLIC_*` pair) belongs in `env`, or Turbo will serve a stale build that inlined the old value.
-
-## Google OAuth
-
-Google is the only sign-in method, wired unconditionally in `packages/auth/src/auth.ts`. Credentials live in `apps/api/.env` only — the app never mounts the auth handler.
-
-Create a web OAuth client in Google Cloud → Credentials, and register the redirect URI:
-
-```
-http://localhost:3001/api/auth/callback/google
-```
-
-Add the deployed equivalent (`https://<api-host>/api/auth/callback/google`) for each environment. `AUTH_TRUSTED_ORIGINS` is the comma-separated allow-list of origins permitted to call the API with credentials, and doubles as the allow-list Better Auth validates post-sign-in `callbackURL`s against — the Next.js origin belongs there.
-
-The provider sets `accessType: "offline"`, which is what makes Google issue a refresh token. Without it nothing breaks at sign-in, but every Gmail/Calendar connection dies an hour after it is made with nothing to refresh from.
+`apps/agent/agent/lib/capabilities.ts` is the single place that knows which are
+set. It prints the list at startup, states it in the session instructions so the
+agent plans around what it actually has, and gives the tools a shared
+"not configured, and retrying will not help" result — checked *before* the
+research budget is charged, so an install without a key does not pay for the
+discovery on every contact.
 
 ## Gmail and Calendar sync
 
-Always on. Same OAuth client, same callback — the two read-only scopes are added to the existing Google provider rather than to a second one, so there is no extra redirect URI to register.
+Always on. Same OAuth client, same callback — the two read-only scopes are added
+to the existing Google provider rather than to a second one, so there is no
+extra redirect URI to register.
 
-The scopes are requested **at sign-in** and are a condition of using the CRM: `requireGoogleAccess()` gates the app shell on what Google actually granted, because granular consent lets a user untick a scope and still complete sign-in. Anyone missing either scope is sent to `/grant-access` to re-consent. There is deliberately no "disconnect" — see the plan §3.4.
+The scopes are requested **at sign-in** and are a condition of using the CRM:
+`requireGoogleAccess()` gates the app shell on what Google actually granted,
+because granular consent lets a user untick a scope and still complete sign-in.
+Anyone missing either scope is sent to `/grant-access` to re-consent.
 
-**Sync is forward-only.** Nothing from before a mailbox was first seen is imported: Gmail records the current `historyId` on its first pass and imports nothing, and Calendar reads from `now` onwards. A calendar event already in the diary for next week does show up, because it starts in the future — that is not back-dating.
+**Sync is forward-only.** Nothing from before a mailbox was first seen is
+imported: Gmail records the current `historyId` on its first pass and imports
+nothing, and Calendar reads from `now` onwards.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `CRON_SECRET` | yes, in deployed environments | Bearer guard on `POST /internal/sync/google`. Vercel sends it automatically as `Authorization: Bearer $CRON_SECRET`. Minimum 16 characters; the route **fails closed** if unset, so locally the cron simply never runs. |
+| `CRON_SECRET` | in deployed environments | Bearer guard on `POST /internal/sync/google`. Vercel sends it automatically as `Authorization: Bearer $CRON_SECRET`. Minimum 16 characters; the route **fails closed** if unset, so locally the cron simply never runs. |
 
-That is the whole list, and the absences are deliberate:
+The absences are deliberate:
 
-- **No `GOOGLE_SYNC_ENABLED`.** A feature flag only earns its keep when it gates something that can genuinely be absent — `CONTEXT_DEV_API_KEY` does, because without a key there is no API call to make. Sync has everything it needs the moment the app boots: the OAuth client is already mandatory because Google is the only sign-in, and mailbox scopes are a condition of having an account. A switch that can turn off a mandatory feature, defaulting to off, is a switch that is only ever wrong.
-- **No `GOOGLE_WORKSPACE_DOMAIN`.** Our own domains are derived from the `User` table, which already holds them. Sign-in is Google-only behind an Internal consent screen, so every user is on a company domain by construction — and a derived value cannot go stale the day the team adds a second domain.
+- **No `GOOGLE_SYNC_ENABLED`.** A feature flag earns its keep when it gates
+  something that can genuinely be absent — `PERPLEXITY_API_KEY` does, because
+  without a key there is no call to make. Sync has everything it needs the
+  moment the app boots. A switch that can turn off a mandatory feature,
+  defaulting to off, is a switch that is only ever wrong.
+- **No `GOOGLE_WORKSPACE_DOMAIN`.** `ALLOWED_SIGN_IN` already says who is
+  internal, and it is seeded into the sync's "us" set alongside the `User`
+  table. Two sources for one fact is how a colleague becomes a lead.
 - **No `GMAIL_BACKFILL_DAYS`.** There is no backfill.
 
 Two things to do in Google Cloud before this works:
 
 - **Enable the Gmail API and the Google Calendar API** on the project.
-- **Set the consent screen to User type: Internal.** `gmail.readonly` is a *restricted* scope; an External app using it needs OAuth verification plus an annual CASA security assessment. For an Internal app Google's documentation is explicit that restricted scopes need no further review. Going External later means the full review, so this is a decision, not a checkbox.
+- **Set the consent screen to User type: Internal** if you are on Google
+  Workspace. `gmail.readonly` is a *restricted* scope; an External app using it
+  needs OAuth verification plus an annual CASA security assessment, while an
+  Internal app needs no further review. Going External later means the full
+  review, so this is a decision, not a checkbox.
 
-The cron is declared in `apps/api/vercel.json` at `*/5 * * * *`. Minute-level schedules need a Pro plan; on Hobby it silently becomes daily.
+The cron is declared in `apps/api/vercel.json` at `*/5 * * * *`. Minute-level
+schedules need a Pro plan; on Hobby it silently becomes daily.
 
 ## Database
 
-Prisma is driven through turbo from the repo root: `db:generate`, `db:migrate`, `db:push`, `db:reset`, `db:seed`, `db:studio`, `db:deploy`. Config lives in `packages/db/prisma.config.ts`, which loads `packages/db/.env` itself, so the CLI works without any app running.
+Prisma is driven through turbo from the repo root: `db:generate`, `db:migrate`,
+`db:push`, `db:reset`, `db:seed`, `db:studio`, `db:deploy`. Config lives in
+`packages/db/prisma.config.ts`, which loads the root `.env` itself, so the CLI
+works without any app running.
 
 ## What is not an env var
 
-- **Cache TTL default** — `DEFAULT_TTL_MS` (60s) is a constant in `apps/api/src/cache/cache.module.ts`. `CACHE_TTL_MS` only overrides it.
-- **Redis** — optional. Without `REDIS_URL` the cache falls back to a per-instance in-memory store, which is fine for local work and wrong for any multi-instance deploy (see `docs/api.md`).
+- **Cache TTL default** — `DEFAULT_TTL_MS` (60s) is a constant in
+  `apps/api/src/cache/cache.module.ts`. `CACHE_TTL_MS` only overrides it.
+- **Redis** — optional. Without `REDIS_URL` the cache falls back to a
+  per-instance in-memory store, which is fine for local work and wrong for any
+  multi-instance deploy (see `docs/api.md`).
 - **Sign-in method** — Google-only, in code, not configurable.
 
 ## Secrets hygiene
 
-`.env` files are gitignored, but the patterns are name-exact and inconsistent between packages. Two things to know:
+The root `.gitignore` ignores `.env` and `.env.*` with a single negation for
+`.env.example`, so a backup like `.env.bak` or `.env.old` is ignored too rather
+than committed by a stray `git add -A`. `.env.example` is the only env file in
+the repository, and it ships no value that is a secret — the placeholders are
+empty strings, and `packages/env/test/root.spec.ts` asserts that they stay that
+way.
 
-- **Root and `apps/api/.gitignore` list specific names** (`.env`, `.env.local`, `.env.*.local`). A file like `.env.bak` or `.env.old` is **not** ignored and will be committed if you `git add -A`. Never leave a timestamped backup of a real `.env` in the tree.
-- **`apps/app/.gitignore` uses `.env*`**, which is broader — and catches the template too. `apps/app/.env.example` is currently untracked and ignored because of it, so a fresh clone gets no template for the web app while the other three packages ship theirs. Fix with a negation (`!.env.example`) in that file.
-
-`packages/auth/.env.example` ships a filled-in `BETTER_AUTH_SECRET` as an illustration. Treat it as a placeholder, not a value: generate your own with `openssl rand -base64 32`.
+Generate your own secret. Never reuse one from an example file, a tutorial, or
+another environment: `openssl rand -base64 32`.

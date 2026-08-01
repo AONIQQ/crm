@@ -103,6 +103,24 @@ export function nameMatchesLocalPart(
 	);
 }
 
+/**
+ * Whether a contact's name is still the placeholder the sync derived from
+ * their address, rather than something a person or a mail header supplied.
+ *
+ * The test is narrow on purpose: no surname, and the first name is the whole
+ * handle. "Abigham" from `abigham@hubspot.com` is a placeholder; "Abbie" from a
+ * mail header is not, even though both are single words.
+ */
+export function isDerivedName(
+	email: string | null,
+	firstName: string,
+	lastName: string | null,
+): boolean {
+	if (!email || lastName !== null) return false;
+	const local = email.split("@")[0] ?? "";
+	return nameMatchesLocalPart({ firstName, lastName: null }, local);
+}
+
 /** Splits a display name into first and last. */
 export function splitName(
 	fullName: string,
@@ -122,6 +140,40 @@ export function domainOf(email: string): string | null {
 	return at > 0 ? email.slice(at + 1).toLowerCase() : null;
 }
 
-function normalise(value: string): string {
+/**
+ * Whether two written names are the same person's.
+ *
+ * First and last have to agree; anything between them does not, so "Lewis
+ * Carhart" matches "Lewis J. Carhart" and does not match "Lewis Carter".
+ * Used where both sides are real names — a GitHub profile's `name` against the
+ * one on the CRM record — as opposed to `nameMatchesLocalPart`, which checks a
+ * name against a handle.
+ */
+export function namesMatch(a: string | null, b: string | null): boolean {
+	const left = words(a);
+	const right = words(b);
+
+	if (left.length === 0 || right.length === 0) return false;
+	if (left.join("") === right.join("")) return true;
+
+	// A single-word name is not enough to identify anybody: "Lewis" matches every
+	// Lewis there is.
+	if (left.length < 2 || right.length < 2) return false;
+
+	return left[0] === right[0] && left.at(-1) === right.at(-1);
+}
+
+function words(value: string | null): string[] {
+	return (
+		(value ?? "")
+			.split(/\s+/)
+			.map(normalise)
+			// Initials and honorifics carry no signal and would otherwise shift which
+			// word counts as the surname.
+			.filter((word) => word.length > 1)
+	);
+}
+
+export function normalise(value: string): string {
 	return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

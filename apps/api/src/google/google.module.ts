@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
-import { EnrichmentModule } from "../enrichment/enrichment.module";
+import { AgentModule } from "../agent/agent.module";
+import { CompaniesModule } from "../companies/companies.module";
 import { TrpcModule } from "../trpc/trpc.module";
 import { CalendarClient } from "./calendar.client";
 import { CalendarSyncService } from "./calendar-sync.service";
@@ -18,13 +19,13 @@ import { SyncStateService } from "./sync-state.service";
 /**
  * Gmail and Calendar.
  *
- * Depends on `EnrichmentModule` for one thing only: `companyForEmail`, which
- * already turns a work address into a found-or-created, enrichment-queued
- * company. Auto-creation reusing it is what makes an auto-created company
- * arrive with a logo rather than as a bare domain.
+ * Depends on `CompaniesModule` for `companyForEmail` — turning a work address
+ * into a found-or-created company — and on `AgentModule` to say that a contact
+ * arrived with nothing but an address. Neither of those is enrichment: this
+ * module reports what the sync saw and lets the agent decide what it means.
  */
 @Module({
-	imports: [TrpcModule, EnrichmentModule],
+	imports: [TrpcModule, AgentModule, CompaniesModule],
 	controllers: [SyncController],
 	providers: [
 		GoogleApiClient,

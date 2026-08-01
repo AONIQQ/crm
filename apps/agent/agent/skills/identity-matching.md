@@ -25,6 +25,10 @@ That is the shape of every match: guess where to look, never what you will find.
 
 ## The procedure
 
+0. **`read_crm_history` first.** It is free and it is often decisive. If they
+   have ever replied to us from that address, you already have the strongest
+   evidence available anywhere — `crm.thread-reply` — and a signature block may
+   hand you their title as well. Start every match here, not at a search engine.
 1. **`resolve_linkedin_profile`** with the email and company. It decomposes the
    local part and returns candidate slugs. These are leads, not answers.
 2. **`get_linkedin_profile`** on each candidate, passing the email, company name
@@ -33,21 +37,29 @@ That is the shape of every match: guess where to look, never what you will find.
    - `employerMatches` — a current position matches the company we have.
    - `nameMatches` — the real name is consistent with the email local part
      (`y` + `madar` → Yael Madar).
-4. **Only `isSamePerson: true` counts.** Both checks, or it is not them.
-5. If no candidate passes, **stop**. Report that you could not identify them.
-   Leaving "Abigham" in the CRM is the correct outcome when you do not know.
+4. **Both, or it is not them.** One of the two is not a weaker match, it is a
+   different person who happens to share something.
+5. If no candidate passes, **stop**. Leaving "Abigham" in the CRM is the correct
+   outcome when you do not know.
 
-## Confidence
+## Reporting the match
 
-| Verdict | What it means | What to do |
+Call `identify_contact` with what you actually saw:
+
+| What you have | Evidence to record | What happens |
 | --- | --- | --- |
-| `high` | Employer and name both match | `update_contact`. |
-| `medium` | One matches, not both | Do not write. Say what you found and why it fell short. |
-| `low` | Neither | Wrong person. Move to the next candidate. |
+| Both checks pass | `linkedin.employer-and-name` | Written to the record. |
+| They replied from that address | `crm.thread-reply` | Written to the record. |
+| One check passes | `employer-only`, or the profile as `search.cites-profile` | Offered to a rep as a suggestion. |
+| Sources disagree | add a `contradiction` entry | Held. Nobody is shown a guess. |
 
-Do not pass a confidence to `update_contact` other than the one the verdict gave
-you. The tool rejects anything below `high` anyway, and inflating it is the one
-thing that turns this from a research agent into a data-corruption agent.
+The middle row is the case this exists for. Four Bighams work at HubSpot; a
+human settles that in three seconds, and the old rule — throw away anything
+short of certain — meant we paid for that lookup every run and learned nothing
+from it. A suggestion is not a failed match. It is the match, handed to the one
+person who can finish it.
+
+Do not add evidence you did not observe to push a claim over a line.
 
 ## Things that look like evidence and are not
 

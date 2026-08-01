@@ -38,6 +38,33 @@ they follow `NODE_ENV`: JSON at `log` and above in production, colourised with
   `PrismaLogBridge`; outside the API (seeds, scripts, the Next.js app) they fall
   back to the console sink in `packages/db/src/client.ts`.
 
+## Intelligence never lives in the API
+
+This is an **agentic-first platform**. The API serves HTTP, auth, tRPC and the
+Google sync. It does not research, enrich, score, summarise, match identities or
+decide anything about a person or a company — not as a fallback, not "just the
+cheap bit", not behind a flag. That work belongs to the eve agent in
+`apps/agent`, which owns the vendor clients, the confidence model and the
+writes.
+
+Nest's half of the contract is to **report that something happened** — a thread
+was ingested, a company was created, an attendee is unknown — and let the agent
+decide what it means. A Nest service that calls an enrichment API is a bug, and
+the reason is in the tree: two identity matchers were copied across `apps/api`
+and `apps/agent`, and the copies silently drifted until one of them matched
+every employer on earth. See
+[`docs/plan/contact-intelligence-agent.md`](./plan/contact-intelligence-agent.md).
+
+`apps/api/src/enrichment/` is gone. What replaced it is
+`apps/api/src/agent/agent-trigger.service.ts` — one service with one verb, which
+writes an `AgentTask` row saying *this happened* and why it might matter. A row
+rather than an HTTP call: the agent leases work from that table already, so the
+row *is* the message, and it survives the agent being down, redeployed, or
+slower than the request that produced it.
+
+If you are about to add a vendor client to `apps/api`, you want
+`apps/agent/agent/lib` instead.
+
 ## There are no organizations
 
 This is an internal tool behind Google sign-in, and it is **single tenant**.

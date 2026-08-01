@@ -10,7 +10,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@crm/ui/components/select";
+import { SOURCED_VALUE, SourcedValue } from "@crm/ui/components/sourced-value";
 import { Spinner } from "@crm/ui/components/spinner";
+import { cn } from "@crm/ui/lib/utils";
 import { useId, useState } from "react";
 
 /** Label column, so every property in the sheet lines up on one edge. */
@@ -54,6 +56,8 @@ export function InlineField({
 	placeholder,
 	type = "text",
 	render,
+	provenance,
+	suggestion,
 }: {
 	label: string;
 	value: string | null;
@@ -63,6 +67,20 @@ export function InlineField({
 	type?: "text" | "url" | "email" | "tel";
 	/** How the saved value reads when not being edited — a link, usually. */
 	render?: (value: string) => React.ReactNode;
+	/**
+	 * Where this value came from, when a machine put it there.
+	 *
+	 * Left off, the field looks exactly as it always did — which is the right
+	 * default for the ones a person typed, and the only reason the underline
+	 * means anything on the ones they did not.
+	 */
+	provenance?: React.ReactNode;
+	/**
+	 * Something the agent believes but is not sure enough to write. Rendered
+	 * *under* the field, never inside it: a suggestion that looks like a value
+	 * is a lie with a nice font.
+	 */
+	suggestion?: React.ReactNode;
 }) {
 	const id = useId();
 	const [editing, setEditing] = useState(false);
@@ -79,12 +97,10 @@ export function InlineField({
 	// of a round trip — which looks like the edit was thrown away.
 	const shown = saving ? draft.trim() : (value ?? "");
 
-	return (
-		<div className={ROW}>
-			<label htmlFor={id} className={LABEL}>
-				{label}
-			</label>
+	const sourced = Boolean(provenance) && !editing && shown !== "";
 
+	const control = (
+		<>
 			{editing ? (
 				<Input
 					id={id}
@@ -119,7 +135,9 @@ export function InlineField({
 				>
 					{saving ? <Spinner /> : null}
 					{shown ? (
-						<span className="truncate">{render ? render(shown) : shown}</span>
+						<span className={cn("truncate", sourced && SOURCED_VALUE)}>
+							{render ? render(shown) : shown}
+						</span>
 					) : (
 						<span className="truncate text-muted-foreground">
 							{placeholder ?? <EmptyCellValue />}
@@ -127,6 +145,42 @@ export function InlineField({
 					)}
 				</Button>
 			)}
+		</>
+	);
+
+	// The tooltip goes on the control the row already has, rather than a new
+	// wrapper: pointing at a value explains it, tabbing to it does the same, and
+	// nothing extra becomes clickable.
+	const body =
+		sourced && provenance ? (
+			<SourcedValue source={provenance}>{control}</SourcedValue>
+		) : (
+			control
+		);
+
+	if (!suggestion) {
+		return (
+			<div className={ROW}>
+				<label htmlFor={id} className={LABEL}>
+					{label}
+				</label>
+				{body}
+			</div>
+		);
+	}
+
+	// A suggestion belongs to its field, so it sits under it in the value
+	// column rather than becoming a row of its own that a reader has to
+	// associate back to something.
+	return (
+		<div className={cn(ROW, "items-start")}>
+			<label htmlFor={id} className={cn(LABEL, "pt-2")}>
+				{label}
+			</label>
+			<div className="min-w-0">
+				{body}
+				{suggestion}
+			</div>
 		</div>
 	);
 }

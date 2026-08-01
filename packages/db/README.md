@@ -20,18 +20,16 @@ import { Prisma, type User } from "@crm/db";
 ## Setup
 
 ```bash
-cp packages/db/.env.example packages/db/.env   # then edit DATABASE_URL
-bun run db:generate                            # generate Prisma Client
-bun run db:deploy                              # apply the initial migration
+docker compose up -d       # Postgres matching the DATABASE_URL in .env.example
+cp .env.example .env       # at the repo root
+bun run db:generate        # generate Prisma Client
+bun run db:deploy          # apply the migrations
 ```
 
-`prisma/migrations/20260731150000_init` was generated offline with
-`prisma migrate diff` and has not been applied to any database yet. Delete it
-and run `bun run db:migrate` instead if you would rather let Prisma author the
-first migration against your own database.
-
-`DATABASE_URL` lives in `packages/db/.env` rather than at the repo root so that
-the dependency is explicit and cache invalidation stays scoped to this package.
+`DATABASE_URL` comes from the **repo-root `.env`**, loaded by `@crm/env` — see
+[`docs/environment.md`](../../docs/environment.md). `src/client.ts` imports
+`@crm/env/load` before reading it, and `prisma.config.ts` does the same so the
+CLI works without any app running.
 
 ## Scripts
 

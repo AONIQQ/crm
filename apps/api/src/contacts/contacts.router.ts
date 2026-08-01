@@ -1,12 +1,21 @@
 import { Inject } from "@nestjs/common";
-import { Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
+import {
+	Ctx,
+	Input,
+	Mutation,
+	Query,
+	Router,
+	UseMiddlewares,
+} from "nestjs-trpc";
 import type { z } from "zod";
+import type { AuthedTrpcContext } from "../trpc/context.types";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import {
 	contactCreateInput,
 	contactIdInput,
 	contactListInput,
 	contactUpdateArgs,
+	factDecisionInput,
 } from "./contacts.contracts";
 import { ContactsService } from "./contacts.service";
 
@@ -35,5 +44,14 @@ export class ContactsRouter {
 	@Mutation({ input: contactUpdateArgs })
 	async update(@Input() input: z.infer<typeof contactUpdateArgs>) {
 		return this.contacts.update(input.id, input.data);
+	}
+
+	/** A rep accepting or dismissing something the agent suggested. */
+	@Mutation({ input: factDecisionInput })
+	async decideFact(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof factDecisionInput>,
+	) {
+		return this.contacts.decideFact(input, ctx.user.id);
 	}
 }

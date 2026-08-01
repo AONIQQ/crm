@@ -12,10 +12,10 @@ import {
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
+import { AgentTriggerService } from "../agent/agent-trigger.service";
 import { blankToNull, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import { OPEN_DEAL_STAGES } from "../deals/deal-stage";
-import { EnrichmentService } from "../enrichment/enrichment.service";
 import {
 	countsByKey,
 	FACET_ALL,
@@ -96,7 +96,7 @@ export class CompaniesService {
 
 	constructor(
 		@InjectDatabase() private readonly db: Db,
-		private readonly enrichment: EnrichmentService,
+		private readonly agent: AgentTriggerService,
 	) {}
 
 	async list(input: CompanyListInput): Promise<ListResult<CompanyRow>> {
@@ -300,9 +300,11 @@ export class CompaniesService {
 			domain: company.domain,
 		});
 
-		// Fire-and-forget: a cold lookup is several seconds, and the create form
-		// should not wait on it. The detail page polls until it settles.
-		this.enrichment.enqueueCompany(company.id);
+		// Fire-and-forget: the create form should not wait on research, and the
+		// detail page polls until it settles. All this says is that a company now
+		// exists with nothing on it but a domain — what to do about that is the
+		// agent's call.
+		await this.agent.companyCreated(company.id);
 
 		return company;
 	}
@@ -361,7 +363,10 @@ export class CompaniesService {
 			});
 
 			if (data.enrichmentStatus === "PENDING") {
-				this.enrichment.enqueueCompany(id);
+				await this.agent.companyCreated(
+					id,
+					"Domain changed — anything we knew was about a different company",
+				);
 			}
 
 			return updated;
@@ -371,10 +376,13 @@ export class CompaniesService {
 	}
 
 	/**
-	 * The "Re-enrich" button.
+	 * The "Look this up again" button.
 	 *
-	 * `force` bypasses Context.dev's ~90-day cache, which is the whole reason
-	 * someone would press it.
+	 * Queues the work at the front and returns immediately. It no longer forces
+	 * a vendor cache bypass, because the API no longer knows there is a vendor:
+	 * a rep asking for a fresh look is an event, and how to honour it — which
+	 * sources, how deep, whether the cached answer is still good — belongs to
+	 * the agent.
 	 */
 	async enrich(id: string): Promise<{ id: string; queued: boolean }> {
 		const company = await this.db.company.findUnique({
@@ -386,16 +394,38 @@ export class CompaniesService {
 			throw new NotFoundException(`No company with id ${id}.`);
 		}
 
-		return { id, queued: this.enrichment.enqueueCompany(id, { force: true }) };
+		await this.db.company.update({
+			where: { id },
+			data: { enrichmentStatus: "PENDING", enrichmentError: null },
+		});
+		await this.agent.companyRequested(id, "A rep asked for a fresh look");
+
+		return { id, queued: true };
 	}
 
-	/** Reads the company's site and posts a brief to its timeline. */
+	/** Asks the agent for a written brief on the company's timeline. */
 	async research(id: string, actingUserId: string) {
-		const result = await this.enrichment.researchCompany(id, actingUserId);
-		if (!result.ok) {
-			throw new BadRequestException(result.reason);
+		const company = await this.db.company.findUnique({
+			where: { id },
+			select: { id: true, domain: true },
+		});
+
+		if (!company) {
+			throw new NotFoundException(`No company with id ${id}.`);
 		}
-		return result;
+
+		if (!company.domain) {
+			throw new BadRequestException(
+				"There is nothing to read without a domain — add one first.",
+			);
+		}
+
+		await this.agent.companyRequested(
+			id,
+			`Briefing requested by a rep (${actingUserId})`,
+		);
+
+		return { ok: true as const, queued: true as const };
 	}
 
 	/**

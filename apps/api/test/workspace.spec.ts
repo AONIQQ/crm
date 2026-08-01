@@ -1,14 +1,20 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { isWorkspaceEmail } from "@crm/auth/workspace";
 import { externalParticipants } from "../src/google/participants";
+
+// The allow-list is read from the environment on demand, so a test sets it the
+// same way a deployment does. Nothing here depends on whose CRM this is.
+beforeEach(() => {
+	process.env.ALLOWED_SIGN_IN = "acme.com";
+});
 
 describe("isWorkspaceEmail", () => {
 	it("admits our people", () => {
 		for (const email of [
-			"lewis@trycomp.ai",
-			"LEWIS@TryComp.ai",
-			"  lewis@trycomp.ai  ",
-			"someone@mail.trycomp.ai",
+			"lewis@acme.com",
+			"LEWIS@Acme.com",
+			"  lewis@acme.com  ",
+			"someone@mail.acme.com",
 		]) {
 			expect(isWorkspaceEmail(email)).toBe(true);
 		}
@@ -28,15 +34,40 @@ describe("isWorkspaceEmail", () => {
 
 	it("is not fooled by a lookalike domain", () => {
 		// The boundary is a dot, not a substring — otherwise anyone could
-		// register trycomp.ai.evil.com and walk into an internal CRM.
+		// register acme.com.evil.com and walk into a private CRM.
 		for (const email of [
-			"a@trycomp.ai.evil.com",
-			"a@nottrycomp.ai",
-			"a@trycomp.aid",
-			"a@evil.com?@trycomp.ai".replace("?", ""),
+			"a@acme.com.evil.com",
+			"a@notacme.com",
+			"a@acme.community",
+			"a@evil.com?@acme.com".replace("?", ""),
 		]) {
 			expect(isWorkspaceEmail(email)).toBe(false);
 		}
+	});
+
+	it("fails closed when nothing is allowed", () => {
+		// An unset list must admit nobody. The alternative — treating "no list"
+		// as "anyone" — is a CRM full of customer data behind a sign-in that
+		// accepts every Google account on earth.
+		process.env.ALLOWED_SIGN_IN = "";
+		expect(isWorkspaceEmail("lewis@acme.com")).toBe(false);
+	});
+
+	it("admits a single address, for a one-person install", () => {
+		// A solo self-hoster on a consumer mailbox has no domain to name, and
+		// listing `gmail.com` would be an open door.
+		process.env.ALLOWED_SIGN_IN = "lewis@gmail.com";
+
+		expect(isWorkspaceEmail("lewis@gmail.com")).toBe(true);
+		expect(isWorkspaceEmail("someone.else@gmail.com")).toBe(false);
+	});
+
+	it("mixes a domain with individual outsiders", () => {
+		process.env.ALLOWED_SIGN_IN = "acme.com, contractor@gmail.com";
+
+		expect(isWorkspaceEmail("lewis@acme.com")).toBe(true);
+		expect(isWorkspaceEmail("contractor@gmail.com")).toBe(true);
+		expect(isWorkspaceEmail("stranger@gmail.com")).toBe(false);
 	});
 });
 
@@ -44,7 +75,7 @@ describe("internal addresses never become leads", () => {
 	// Empty sets: proves the workspace domain is excluded on its own, not
 	// because a colleague happens to be a CRM user yet.
 	const options = {
-		ourDomains: new Set(["trycomp.ai"]),
+		ourDomains: new Set(["acme.com"]),
 		ourAddresses: new Set<string>(),
 		suppressedDomains: new Set<string>(),
 	};
@@ -52,14 +83,14 @@ describe("internal addresses never become leads", () => {
 	it("drops colleagues even when they are not users", () => {
 		const result = externalParticipants(
 			[
-				{ email: "lewis@trycomp.ai", name: "Lewis" },
-				{ email: "newstarter@trycomp.ai", name: "New Starter" },
-				{ email: "jane@acme.com", name: "Jane" },
+				{ email: "lewis@acme.com", name: "Lewis" },
+				{ email: "newstarter@acme.com", name: "New Starter" },
+				{ email: "jane@globex.com", name: "Jane" },
 			],
 			options,
 		);
 
-		expect(result.map((person) => person.email)).toEqual(["jane@acme.com"]);
+		expect(result.map((person) => person.email)).toEqual(["jane@globex.com"]);
 	});
 
 	it("stores nothing for a wholly internal thread", () => {
@@ -68,8 +99,8 @@ describe("internal addresses never become leads", () => {
 		expect(
 			externalParticipants(
 				[
-					{ email: "lewis@trycomp.ai", name: null },
-					{ email: "colleague@trycomp.ai", name: null },
+					{ email: "lewis@acme.com", name: null },
+					{ email: "colleague@acme.com", name: null },
 				],
 				options,
 			),

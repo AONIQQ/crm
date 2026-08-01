@@ -48,8 +48,10 @@ import { signIn, signOut, useSession } from "@crm/auth/client";
 await signIn.social({ provider: "google", callbackURL: "/" });
 ```
 
-`NEXT_PUBLIC_AUTH_URL` decides which origin the client talks to. It must point
-at whichever process mounts the handler; unset, the client uses the current
+`NEXT_PUBLIC_API_URL` decides which origin the client talks to. It must point at
+whichever process mounts the handler — the NestJS API. The Next.js app inlines
+it at build time from `API_URL`, in `next.config.ts`, so there is one variable
+rather than two spellings of one origin. Unset, the client uses the current
 origin.
 
 The client plugin list mirrors the server plugin list. Keep them in sync or the
@@ -58,16 +60,23 @@ inferred client API will drift from the routes the server exposes.
 ## Setup
 
 ```bash
-cp packages/auth/.env.example packages/auth/.env
+cp .env.example .env      # at the repo root — there is no per-package env file
 openssl rand -base64 32   # -> BETTER_AUTH_SECRET
 ```
 
+This package is a library and never loads an env file of its own; it reads
+whatever `process.env` its host process has, and `src/env.ts` imports
+`@crm/env/load` so the repo-root `.env` is picked up even when the Better Auth
+CLI loads `auth.ts` directly. See
+[`docs/environment.md`](../../docs/environment.md).
+
 Create an OAuth client in the Google Cloud console and add
-`<BETTER_AUTH_URL>/api/auth/callback/google` — `http://localhost:3001/api/auth/callback/google`
+`<API_URL>/api/auth/callback/google` — `http://localhost:3001/api/auth/callback/google`
 in development — as an authorised redirect URI.
 
-`BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are read from the environment by
-Better Auth itself and are deliberately not passed through config.
+`ALLOWED_SIGN_IN` decides who may sign in, and an empty value admits nobody. It
+is the whole authorisation model: there are no roles and no organizations, so
+`src/workspace.ts` is worth reading before you change anything here.
 
 ## Changing the schema
 

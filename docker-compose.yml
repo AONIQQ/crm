@@ -1,0 +1,36 @@
+# Postgres for local development.
+#
+#   docker compose up -d
+#
+# The credentials match the DATABASE_URL in .env.example, so a fresh clone
+# needs no decisions: start this, copy the env file, migrate, and go. Nothing
+# else in the stack is containerised — the API, the app and the agent all run
+# from `bun run dev` with hot reload, which is what you want while working on
+# them.
+#
+# This is a development database. It has a trivial password and it publishes a
+# port on localhost; do not point production at it.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: crm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - crm-postgres:/var/lib/postgresql/data
+    healthcheck:
+      # `bun run db:deploy` straight after `up -d` would otherwise race the
+      # server's first start, which looks like an unreachable database.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d crm"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  crm-postgres:

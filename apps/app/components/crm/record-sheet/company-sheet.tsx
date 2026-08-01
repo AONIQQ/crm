@@ -22,10 +22,6 @@ import {
 import { formatMoney } from "@crm/ui/lib/format";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-	CompanySocials,
-	hasCompanyLinks,
-} from "@/components/crm/company-socials";
 import { OPEN_STAGES } from "@/components/crm/deal-stage";
 import { EnrichmentActions } from "@/components/crm/enrichment-actions";
 import {
@@ -39,6 +35,7 @@ import {
 	savingField,
 } from "@/components/crm/inline-field";
 import { OwnerCell } from "@/components/crm/owner-cell";
+import { CompanySocials, hasCompanyLinks } from "@/components/crm/social-links";
 import { DealStageMenu } from "@/components/crm/stage-change";
 import { Timeline } from "@/components/crm/timeline/timeline";
 import {

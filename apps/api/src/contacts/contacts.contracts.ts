@@ -37,6 +37,10 @@ const contactUpdateInput = z.object({
 	phone: z.string().optional(),
 	title: z.string().optional(),
 	linkedinUrl: z.string().optional(),
+	twitterUrl: z.string().optional(),
+	githubUrl: z.string().optional(),
+	// `summary` is deliberately absent: the research agent owns it, and a field
+	// a rep can retype is a field that gets overwritten on the next run.
 	companyId: z.string().nullable().optional(),
 	ownerId: z.string().nullable().optional(),
 });
@@ -49,3 +53,19 @@ export const contactUpdateArgs = z.object({
 });
 
 export const contactIdInput = z.object({ id: z.string() });
+
+/**
+ * A rep settling a proposal the agent could not settle itself.
+ *
+ * This is the one place the API touches enrichment output, and it is not
+ * enrichment: no research, no scoring, no judgement about a person — a human
+ * pressed accept, and the record follows. The decision is also the label that
+ * calibrates the confidence model, which is why `decidedById` is stored rather
+ * than the row simply being deleted.
+ */
+export const factDecisionInput = z.object({
+	factId: z.string(),
+	decision: z.enum(["accept", "dismiss"]),
+});
+
+export type FactDecisionInput = z.infer<typeof factDecisionInput>;

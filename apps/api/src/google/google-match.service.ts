@@ -1,10 +1,10 @@
-import { WORKSPACE_DOMAINS } from "@crm/auth/workspace";
+import { workspaceDomains } from "@crm/auth/workspace";
 import { type Db, RecordSource } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
+import { AgentTriggerService } from "../agent/agent-trigger.service";
+import { CompanyDirectoryService } from "../companies/company-directory.service";
 import { EnrichmentLogService } from "../crm/enrichment-log.service";
 import { InjectDatabase } from "../database/database.constants";
-import { ContactEnrichmentService } from "../enrichment/contact-enrichment.service";
-import { EnrichmentService } from "../enrichment/enrichment.service";
 import {
 	dominantDomain,
 	externalParticipants,
@@ -74,8 +74,8 @@ export class GoogleMatchService {
 
 	constructor(
 		@InjectDatabase() private readonly db: Db,
-		private readonly enrichment: EnrichmentService,
-		private readonly contacts: ContactEnrichmentService,
+		private readonly companies: CompanyDirectoryService,
+		private readonly agent: AgentTriggerService,
 		private readonly log: EnrichmentLogService,
 	) {}
 
@@ -103,7 +103,7 @@ export class GoogleMatchService {
 		// User table happens to contain. Sign-in is restricted to these, so they
 		// are internal by definition — and this holds on an empty database, and
 		// for colleagues who have never signed in and so are not users yet.
-		const domains = new Set<string>(WORKSPACE_DOMAINS);
+		const domains = new Set<string>(workspaceDomains());
 
 		for (const user of users) {
 			const email = user.email.toLowerCase();
@@ -206,10 +206,10 @@ export class GoogleMatchService {
 	/**
 	 * Creates the company and the contact behind a domain we have never seen.
 	 *
-	 * The company comes from `EnrichmentService.companyForEmail`, which already
-	 * normalises the domain, upserts against the unique index and queues the
-	 * brand lookup — so an auto-created company arrives with a logo and an
-	 * industry a few seconds later, exactly like one typed by a rep.
+	 * The company comes from `CompanyDirectoryService.companyForEmail`, which
+	 * normalises the domain, upserts against the unique index and tells the
+	 * agent a bare company exists — so an auto-created company arrives with a
+	 * logo and an industry a few seconds later, exactly like one typed by a rep.
 	 */
 	private async create(
 		external: Participant[],
@@ -222,12 +222,12 @@ export class GoogleMatchService {
 
 		if (!lead) return { companyId: null, contactId: null, external };
 
-		const companyId = await this.enrichment.companyForEmail(lead.email, {
+		const companyId = await this.companies.companyForEmail(lead.email, {
 			ownerId: request.ownerId,
 		});
 		if (!companyId) {
-			// Enrichment declined — no API key, or the domain resolves to nothing.
-			// Not an error, and not a reason to invent a bare company row.
+			// Not a work domain, so there is nothing to file this against. Not an
+			// error, and not a reason to invent a company row.
 			return { companyId: null, contactId: null, external };
 		}
 
@@ -328,11 +328,14 @@ export class GoogleMatchService {
 			return contact.id;
 		}
 
-		// Still only known by their address. Queue a sourced lookup — it fills the
-		// name in behind a poll, exactly like company enrichment, and does nothing
-		// if the web cannot confirm who they are.
+		// Still only known by their address. Tell the agent; whether that is worth
+		// a lookup, and how deep a one, is its call — this side no longer knows
+		// what a sourced identity match costs or how it works.
 		if (isPlaceholder && !hasRealName) {
-			this.contacts.enqueue(contact.id);
+			await this.agent.contactCreated(
+				contact.id,
+				"Created by the sync from an address, with no name on it",
+			);
 		}
 
 		return contact.id;

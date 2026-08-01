@@ -9,7 +9,8 @@ export {
 	SYNC_SCOPES,
 } from "./scopes";
 export {
+	hasSignInAllowList,
 	isWorkspaceEmail,
-	PRIMARY_WORKSPACE_DOMAIN,
-	WORKSPACE_DOMAINS,
+	primaryWorkspaceDomain,
+	workspaceDomains,
 } from "./workspace";

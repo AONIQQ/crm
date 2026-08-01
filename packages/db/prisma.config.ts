@@ -1,4 +1,5 @@
-import "dotenv/config";
+// The Prisma CLI runs from this package, so it needs the repo-root `.env` too.
+import "@crm/env/load";
 
 import path from "node:path";
 import { defineConfig, env } from "prisma/config";

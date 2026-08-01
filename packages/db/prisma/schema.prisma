@@ -31,6 +31,7 @@ model User {
   ownedDeals     Deal[]        @relation("DealOwner")
   activities     Activity[]    @relation("ActivityAuthor")
   mailboxSyncs   MailboxSync[]
+  factDecisions  ContactFact[] @relation("FactDecider")
 
   @@unique([email])
   @@map("user")
@@ -248,11 +249,33 @@ model Contact {
   phone       String?
   title       String?
   linkedinUrl String?
+  twitterUrl  String?
+  githubUrl   String?
   /// The contact's photo, mirrored into Vercel Blob.
   ///
   /// Never LinkedIn's own CDN URL: those carry an `e=` expiry parameter and go
   /// dead within weeks, so a hotlinked avatar silently becomes a broken image.
   imageUrl    String?
+
+  /// When the agent last went looking for this person's X and GitHub accounts.
+  ///
+  /// Stamped whether or not it found any, which is the point: most people have
+  /// neither, and without it the hourly run would search the same fruitless
+  /// contacts forever. Null means never looked; a date with both URLs still
+  /// null means looked and found nothing it could stand behind.
+  socialsCheckedAt DateTime?
+
+  /// Mirrors `Company`, so the sheet reuses `isEnriching()` and the existing
+  /// poll rather than inventing a second freshness mechanism.
+  enrichmentStatus EnrichmentStatus @default(PENDING)
+  enrichedAt       DateTime?
+  enrichmentError  String?
+
+  /// Who this person is (§3 of the contact-intelligence plan) and every claim
+  /// behind the fields above.
+  brief ContactBrief?
+  facts ContactFact[]
+
   companyId   String?
   company     Company? @relation("CompanyContacts", fields: [companyId], references: [id], onDelete: SetNull)
   ownerId     String?
@@ -281,6 +304,150 @@ model Contact {
   @@index([ownerId])
   @@index([lastActivityAt])
   @@map("contact")
+}
+
+/// How much of a claim we believe, and what that licenses.
+///
+/// The bands are the behaviour, not a label: `VERIFIED` is written to the
+/// record, `PROBABLE` is offered to a human, `POSSIBLE` is kept but never shown
+/// as a value. The numeric `score` beside them exists so the thresholds can be
+/// re-calibrated against evals without re-running the research.
+enum FactBand {
+  VERIFIED
+  PROBABLE
+  POSSIBLE
+}
+
+enum FactStatus {
+  APPLIED
+  PROPOSED
+  DISMISSED
+  SUPERSEDED
+}
+
+/// One claim about one field of one contact, with everything behind it.
+///
+/// The point of a separate table: `Contact.title` can only hold the answer,
+/// and the answer is the least interesting part. This holds where it came
+/// from, how sure we are, what else was considered, and what it replaced —
+/// which is what makes an enriched field auditable rather than merely present.
+///
+/// It is deliberately *not* the read path. Current values stay denormalised on
+/// `Contact` so a list is one query; this is the reasoning behind them.
+model ContactFact {
+  id        String  @id @default(cuid())
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  /// The `Contact` column this is about — "title", "linkedinUrl", "employer".
+  field String
+  value String
+
+  score Float
+  band  FactBand
+
+  /// The full ledger: `[{ kind, weight, detail, sourceUrl }]`. Kept so the
+  /// score can be explained to a rep and recomputed after a re-calibration.
+  evidence Json
+
+  method    String
+  sourceUrl String?
+
+  /// The eve session that produced it, joining to `AgentEvent` for "show your
+  /// work".
+  sessionId String?
+
+  status      FactStatus @default(PROPOSED)
+  decidedById String?
+  decidedBy   User?      @relation("FactDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime?
+
+  observedAt   DateTime  @default(now())
+  supersededAt DateTime?
+
+  @@index([contactId, field, status])
+  @@index([status, observedAt])
+  @@map("contactFact")
+}
+
+/// The background panel on a contact: who they are, in prose and in fields.
+model ContactBrief {
+  contactId String  @id
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  /// Two or three sentences. Present tense, their name first.
+  narrative String
+  /// `{ currentRole, tenure, previousRoles[], seniority, function, location }`
+  /// — shaped by the agent, rendered by the sheet, so adding a line does not
+  /// need a migration.
+  sections Json
+
+  score     Float
+  sourceUrl String?
+  sessionId String?
+
+  refreshedAt DateTime @default(now())
+
+  @@map("contactBrief")
+}
+
+/// What the agent has decided to do, and why.
+///
+/// The work queue *and* the audit trail. A cron expression can only say "every
+/// hour for everybody"; a row here says "this person, in fourteen days,
+/// because a job change would move a live deal" — and the reason is shown to
+/// the rep rather than buried in a prompt.
+model AgentTask {
+  id        String  @id @default(cuid())
+  contactId String?
+  companyId String?
+
+  kind   String
+  reason String
+
+  priority Int @default(0)
+  /// Research units this task may spend. Depth is a decision, and this is
+  /// what the agent decides it against.
+  budget Int @default(4)
+
+  dueAt DateTime
+  /// Held by a dispatcher tick. An expired lease is free to reclaim, which is
+  /// what makes a crashed run recoverable rather than stuck.
+  leasedUntil DateTime?
+
+  sessionId  String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  outcome    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([dueAt, leasedUntil])
+  @@index([contactId])
+  @@map("agentTask")
+}
+
+/// Every runtime event the agent emits, written by a hook.
+///
+/// The id is eve's own `meta.id` (a ULID), so an `on conflict do nothing`
+/// insert is replay-safe: reconnecting to a stream, rewinding it, or restoring
+/// a saved log cannot duplicate a row. Leading with a timestamp also keeps the
+/// primary key roughly append-ordered.
+///
+/// This is what "show your work" reads. Without it the agent's reasoning lives
+/// only in a log nobody can query and nobody can show a rep.
+model AgentEvent {
+  id        String @id
+  sessionId String
+  contactId String?
+  type      String
+  data      Json
+
+  emittedAt DateTime
+
+  @@index([sessionId, emittedAt])
+  @@index([contactId, emittedAt])
+  @@map("agentEvent")
 }
 
 model Deal {

@@ -15,7 +15,7 @@ const t = initTRPC.create();
 const publicProcedure = t.procedure;
 import { timelineInput, timelineCountsInput, myTasksInput, activityCreateInput, completeInput } from "../activities/activities.contracts";
 import { companyListInput, companyIdInput, companyOptionsInput, companyCreateInput, companyUpdateArgs, setPrimaryContactInput } from "../companies/companies.contracts";
-import { contactListInput, contactIdInput, contactCreateInput, contactUpdateArgs } from "../contacts/contacts.contracts";
+import { contactListInput, contactIdInput, contactCreateInput, contactUpdateArgs, factDecisionInput } from "../contacts/contacts.contracts";
 import { dashboardSummaryInput } from "../dashboard/dashboard.contracts";
 import { dealListInput, dealIdInput, dealCreateInput, dealUpdateArgs, setStageInput } from "../deals/deals.contracts";
 import { setAutoCreateInput, suppressDomainInput, threadInput, calendarEventInput } from "../google/google.contracts";
@@ -84,7 +84,10 @@ const appRouter = t.router({
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["create"]>>),
     update: publicProcedure
       .input(contactUpdateArgs)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["update"]>>)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["update"]>>),
+    decideFact: publicProcedure
+      .input(factDecisionInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["decideFact"]>>)
     }),
   dashboard: t.router({
     summary: publicProcedure

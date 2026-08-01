@@ -1,5 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { enabled, unavailable } from "../lib/capabilities";
+import { spend } from "../lib/focus";
 import { searchTerms } from "../lib/names";
 import { findProfileUrls } from "../lib/perplexity";
 
@@ -17,6 +19,17 @@ export default defineTool({
 		companyName: z.string().describe("The company the CRM has them at."),
 	}),
 	async execute({ email, companyName }) {
+		// Finding the slug is Perplexity's job — see `lib/linkdapi.ts` for why
+		// LinkDAPI is never asked to search. Without it there is no way in to a
+		// profile, so this stops here rather than charging for a lookup that has
+		// nowhere to look.
+		if (!enabled("PERPLEXITY_API_KEY")) {
+			return { candidateSlugs: [], ...unavailable("PERPLEXITY_API_KEY") };
+		}
+
+		const charge = spend();
+		if (!charge.ok) return { candidateSlugs: [], note: charge.reason };
+
 		const local = email.split("@")[0] ?? "";
 		const terms = searchTerms(local);
 		const slugs = await findProfileUrls(terms, companyName);

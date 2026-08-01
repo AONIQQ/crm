@@ -15,7 +15,7 @@ export function GoogleSignIn() {
 
 		// The API owns /api/auth/*, so both URLs have to be absolute — a relative
 		// one would resolve against the API's origin, not this app's. Better Auth
-		// checks them against AUTH_TRUSTED_ORIGINS.
+		// checks them against the origins in APP_URL.
 		const origin = window.location.origin;
 
 		const { error } = await signIn.social({

@@ -6,6 +6,7 @@ import {
 	RecordSource,
 } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
+import { AgentTriggerService } from "../agent/agent-trigger.service";
 import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
 import {
@@ -53,6 +54,7 @@ export class CalendarSyncService {
 		private readonly match: GoogleMatchService,
 		private readonly state: SyncStateService,
 		private readonly stamp: ActivityStampService,
+		private readonly agent: AgentTriggerService,
 	) {}
 
 	async sync(row: MailboxSync): Promise<SyncOutcome> {
@@ -310,6 +312,7 @@ export class CalendarSyncService {
 		});
 
 		await this.syncAttendees(record.id, event);
+		await this.prepareForMeeting(record.id, start.at);
 		await this.project(record.id, row.userId, {
 			title: event.summary ?? "Meeting",
 			startsAt: start.at,
@@ -366,6 +369,42 @@ export class CalendarSyncService {
 					contactId: contactByEmail.get(email) ?? null,
 				},
 			});
+		}
+	}
+
+	/**
+	 * Tells the agent about people we are about to meet and do not know.
+	 *
+	 * The most useful thing the calendar knows is that a conversation is
+	 * *coming*, and nothing in the stack acted on it before. A contact with no
+	 * background, on a meeting tomorrow, is worth more research than the same
+	 * contact would be on any other day — and the deadline is real, so it goes
+	 * to the front of the queue rather than waiting its turn behind a backlog.
+	 *
+	 * Only for meetings actually ahead of us: back-filling a year of history
+	 * would queue research for every meeting that has already happened.
+	 */
+	private async prepareForMeeting(
+		eventId: string,
+		startsAt: Date,
+	): Promise<void> {
+		const soon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+		if (startsAt <= new Date() || startsAt > soon) return;
+
+		const attendees = await this.db.calendarAttendee.findMany({
+			where: {
+				eventId,
+				contactId: { not: null },
+				// Whoever is taking the meeting is not who needs researching.
+				contact: { brief: { is: null } },
+			},
+			select: { contactId: true },
+		});
+
+		for (const attendee of attendees) {
+			if (attendee.contactId) {
+				await this.agent.meetingSoon(attendee.contactId, startsAt);
+			}
 		}
 	}
 

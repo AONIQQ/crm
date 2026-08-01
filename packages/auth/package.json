@@ -17,6 +17,7 @@
 	},
 	"dependencies": {
 		"@crm/db": "workspace:*",
+		"@crm/env": "workspace:*",
 		"better-auth": "^1.6.25"
 	},
 	"peerDependencies": {

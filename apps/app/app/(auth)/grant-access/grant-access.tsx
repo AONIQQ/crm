@@ -16,7 +16,7 @@ export function GrantAccess() {
 
 		// Absolute, like the sign-in button: the API owns /api/auth/*, so a
 		// relative URL would resolve against the API's origin rather than this
-		// app's. Better Auth checks it against AUTH_TRUSTED_ORIGINS.
+		// app's. Better Auth checks it against the origins in APP_URL.
 		const origin = window.location.origin;
 
 		// `linkSocial` rather than `signIn.social`: there is already a session and

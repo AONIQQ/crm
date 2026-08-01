@@ -1,5 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { enabled, unavailable } from "../lib/capabilities";
+import { spend } from "../lib/focus";
 import { getExperience, getProfile } from "../lib/linkdapi";
 import { looksLikeSameCompany, nameMatchesLocalPart } from "../lib/names";
 
@@ -22,6 +24,15 @@ export default defineTool({
 			.describe("Also fetch full work history — costs an extra call."),
 	}),
 	async execute({ slug, email, companyName, companyDomain, includeHistory }) {
+		if (!enabled("RAPIDAPI_KEY")) {
+			return { found: false as const, ...unavailable("RAPIDAPI_KEY") };
+		}
+
+		// Charged before the call, not after: a budget that only counts successes
+		// is a budget an unlucky contact can blow through four times over.
+		const charge = spend(includeHistory ? 2 : 1);
+		if (!charge.ok) return { found: false as const, reason: charge.reason };
+
 		const result = await getProfile(slug);
 		if (!result.ok) {
 			return result.missing
