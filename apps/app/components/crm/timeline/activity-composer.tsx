@@ -1,12 +1,25 @@
 "use client";
 
-import { Button } from "@crm/ui/components/button";
-import { Input } from "@crm/ui/components/input";
+import Calendar from "@carbon/icons-react/es/Calendar";
+// The shadcn calendar, aliased so it does not collide with the Carbon glyph on
+// the button that opens it.
+import { Calendar as DayPicker } from "@crm/ui/components/calendar";
+import { Icon } from "@crm/ui/components/icon";
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupButton,
+	InputGroupTextarea,
+} from "@crm/ui/components/input-group";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@crm/ui/components/popover";
 import { Spinner } from "@crm/ui/components/spinner";
-import { Textarea } from "@crm/ui/components/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@crm/ui/components/toggle-group";
 import { useMutation } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
@@ -19,31 +32,47 @@ const TYPES = ["NOTE", "CALL", "EMAIL", "MEETING", "TASK"] as const;
 
 type ComposableType = (typeof TYPES)[number];
 
-const SUBJECT_PLACEHOLDER: Partial<Record<ComposableType, string>> = {
-	CALL: "Discovery call",
-	EMAIL: "Re: next steps",
-	MEETING: "Product demo",
+const dueFormat = new Intl.DateTimeFormat(undefined, {
+	month: "short",
+	day: "numeric",
+});
+
+const PLACEHOLDER: Record<ComposableType, string> = {
+	NOTE: "Log a note, call, email, meeting or task…",
+	CALL: "What came out of the call?",
+	EMAIL: "What was said?",
+	MEETING: "What came out of the meeting?",
+	TASK: "What needs doing?",
 };
 
 /**
- * Logging what just happened, in one field that is always there.
+ * Logging what just happened: one box, and a toolbar inside it.
  *
- * There used to be an `open` boolean: the panel showed a button pretending to
- * be an input, and clicking it swapped in a form four times the height. Two
- * problems, and the second is the one that mattered. Reading the timeline is
- * what people come here for, and the expanded form pushed the first entry off
- * the fold — so the state you were left in after logging one note was the state
- * that hid the history. The click was the tax; the mode was the bug.
+ * Two rewrites got here, and both of the things it replaced are worth naming.
  *
- * Now there is no mode. One line of textarea sits at the top, `field-sizing`
- * grows it as you type, and the things that only matter once you have started —
- * what kind of thing this is, its subject, when it is due — appear underneath
- * when there is something to attach them to. Empty, the whole composer is
- * shorter than the button that used to open it.
+ * It began as a button that swapped itself for a form — so reading the timeline
+ * cost a click, and the state you were left in *after* logging one note was the
+ * state that pushed the history off the fold. Then it lost the mode but kept
+ * the shape: a bordered textarea, a bordered row of five type buttons, and a
+ * bordered row of six filters underneath, three stacked bands of outlined boxes
+ * for a panel whose actual job is to be read.
  *
- * What is left in `useState` is the draft itself, which is the one thing that
- * genuinely belongs there: a half-written note about a customer has no business
- * in the URL, where `record-stack` keeps the rest of this panel's state.
+ * This is one bordered element. The type toggles live *inside* the box, under a
+ * rule, the way a formatting toolbar does — which is also what stops them
+ * reading as a second copy of the filter row directly below, since that one is
+ * borderless and outside. The submit button is always there and always in the
+ * same place; nothing appears or disappears as you type, so nothing jumps.
+ *
+ * **There is no subject field.** It was optional on three types, load-bearing
+ * on one, and the source of most of the branching in here — the old form asked
+ * a different question per type and then disagreed with itself about which
+ * answer made the button live. The box you type in is the entry: a task's title
+ * or everything else's body. A logged call with no title reads "Call" on the
+ * timeline, which is true, and the note under it is the part anyone reads.
+ *
+ * The draft stays in `useState`, which is the one piece of this panel that
+ * belongs there — `record-stack` keeps the rest in the URL, and a half-written
+ * note about a customer has no business in browser history.
  */
 export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 	const trpc = useTRPC();
@@ -51,26 +80,14 @@ export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 
 	const [type, setType] = useState<ComposableType>("NOTE");
 	const [draft, setDraft] = useState("");
-	const [subject, setSubject] = useState("");
-	const [dueAt, setDueAt] = useState("");
-
-	const subjectId = useId();
-	const dueId = useId();
+	const [dueAt, setDueAt] = useState<Date | undefined>(undefined);
 
 	const isTask = type === "TASK";
-
-	// One rule for every type: the box you typed in holds the point of the
-	// entry. For a task that is what needs doing, so it lands in `subject`;
-	// for everything else it is the body. The old form asked a different
-	// question per type and then disagreed with itself about which one made the
-	// submit button live.
 	const text = draft.trim();
-	const started = text !== "";
 
 	const reset = () => {
 		setDraft("");
-		setSubject("");
-		setDueAt("");
+		setDueAt(undefined);
 	};
 
 	const create = useMutation(
@@ -84,97 +101,112 @@ export function ActivityComposer({ anchor }: { anchor: TimelineAnchor }) {
 	);
 
 	const submit = () => {
-		if (!started || create.isPending) return;
+		if (text === "" || create.isPending) return;
 		create.mutate({
 			...anchor,
 			type,
-			subject: isTask ? text : subject || undefined,
+			subject: isTask ? text : undefined,
 			body: isTask ? undefined : text,
-			dueAt: isTask ? dueAt || null : undefined,
+			dueAt: isTask ? (dueAt?.toISOString() ?? null) : undefined,
 		});
 	};
 
 	return (
 		<form
-			className="flex flex-col gap-2"
 			onSubmit={(event) => {
 				event.preventDefault();
 				submit();
 			}}
 		>
-			<Textarea
-				size="sm"
-				value={draft}
-				onChange={(event) => setDraft(event.target.value)}
-				placeholder="Log a note, call, email, meeting or task…"
-				aria-label="What happened"
-				onKeyDown={(event) => {
-					// Submit without leaving the keyboard. Plain Enter has to stay a
-					// newline — this is the field a three-paragraph call note goes in.
-					if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-						event.preventDefault();
-						submit();
-					}
-					if (event.key === "Escape") reset();
-				}}
-			/>
+			<InputGroup>
+				<InputGroupTextarea
+					value={draft}
+					onChange={(event) => setDraft(event.target.value)}
+					placeholder={PLACEHOLDER[type]}
+					aria-label="What happened"
+					onKeyDown={(event) => {
+						// Plain Enter has to stay a newline — this is where a three
+						// paragraph call note goes.
+						if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+							event.preventDefault();
+							submit();
+						}
+						if (event.key === "Escape") reset();
+					}}
+				/>
 
-			{started ? (
-				<>
-					<div className="flex flex-wrap items-center justify-between gap-2">
-						<ToggleGroup
-							type="single"
-							value={type}
-							onValueChange={(next) => next && setType(next as ComposableType)}
-							variant="outline"
-							size="sm"
+				<InputGroupAddon align="block-end" className="gap-2 border-t">
+					{/*
+					 * Borderless and inside the box. The filter row below is the same
+					 * control with the same shape, and the only reason the two do not
+					 * read as one confused pair of duplicates is that this one sits
+					 * under a rule inside a bordered container and that one does not.
+					 */}
+					<ToggleGroup
+						type="single"
+						value={type}
+						onValueChange={(next) => next && setType(next as ComposableType)}
+						size="sm"
+						spacing={0}
+					>
+						{TYPES.map((option) => (
+							<ToggleGroupItem
+								key={option}
+								value={option}
+								aria-label={activityLabel(option)}
+							>
+								<ActivityIcon type={option} />
+								{activityLabel(option)}
+							</ToggleGroupItem>
+						))}
+					</ToggleGroup>
+
+					{/*
+					 * A task is the one thing here with a future, so it is the one
+					 * thing that gets a date — and it gets a real calendar rather than
+					 * `<input type="date">`, whose picker is drawn by the browser and
+					 * knows nothing about any of these tokens.
+					 */}
+					{isTask ? (
+						<Popover>
+							<PopoverTrigger asChild>
+								<InputGroupButton variant="ghost" size="xs">
+									<Icon icon={Calendar} data-icon="inline-start" />
+									{dueAt ? dueFormat.format(dueAt) : "Due date"}
+								</InputGroupButton>
+							</PopoverTrigger>
+							<PopoverContent size="fit" align="start">
+								<DayPicker
+									mode="single"
+									selected={dueAt}
+									onSelect={setDueAt}
+									autoFocus
+								/>
+							</PopoverContent>
+						</Popover>
+					) : null}
+
+					{/*
+					 * Only once there is something to submit. `--primary` in dark mode
+					 * is near-white, so a permanently-present disabled primary button
+					 * is a grey slab sitting in the corner of an empty box — it made
+					 * the whole composer read as switched off. It appears at the end of
+					 * a row that is already there, so nothing reflows around it.
+					 */}
+					{text === "" ? null : (
+						<InputGroupButton
+							type="submit"
+							variant="default"
+							size="xs"
+							className="ml-auto"
+							disabled={create.isPending}
 						>
-							{TYPES.map((option) => (
-								<ToggleGroupItem
-									key={option}
-									value={option}
-									aria-label={activityLabel(option)}
-								>
-									<ActivityIcon type={option} />
-									{activityLabel(option)}
-								</ToggleGroupItem>
-							))}
-						</ToggleGroup>
-
-						<Button type="submit" size="sm" disabled={create.isPending}>
 							{create.isPending ? <Spinner /> : null}
 							{isTask ? "Add task" : `Log ${activityLabel(type).toLowerCase()}`}
-						</Button>
-					</div>
-
-					{isTask ? (
-						<div className="flex flex-wrap items-center gap-2">
-							<label htmlFor={dueId} className="text-muted-foreground text-xs">
-								Due
-							</label>
-							{/* A width on the wrapper, not on the control: `Input` is
-							    `w-full` by design and a date is eight characters wide. */}
-							<div className="w-40">
-								<Input
-									id={dueId}
-									type="date"
-									value={dueAt}
-									onChange={(event) => setDueAt(event.target.value)}
-								/>
-							</div>
-						</div>
-					) : SUBJECT_PLACEHOLDER[type] ? (
-						<Input
-							id={subjectId}
-							value={subject}
-							onChange={(event) => setSubject(event.target.value)}
-							placeholder={SUBJECT_PLACEHOLDER[type]}
-							aria-label="Subject"
-							autoComplete="off"
-						/>
-					) : null}
-				</>
-			) : null}
+						</InputGroupButton>
+					)}
+				</InputGroupAddon>
+			</InputGroup>
 		</form>
 	);
 }

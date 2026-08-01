@@ -177,11 +177,48 @@ is stored twice.
   as the list changes would swap the open conversation out from under a live
   answer the moment the first save adds a row. `resolveThread` in
   `lib/agent-transcript.ts` holds the rule, and it is tested.
-- **The transcript refetches on every mount** (`refetchOnMount: "always"`).
-  Switching tabs unmounts the panel and tears the live stream down with it, so
-  coming back rebuilds from the stored events — and a cached rebuild is the
-  transcript as it stood *before* the last answer. That presented as "the newest
-  reply is missing until I reload".
+- **The panel is not unmounted when you switch tabs.** It holds a live stream,
+  and Radix drops an inactive tab by default — which aborts the stream
+  mid-answer, so the reply landed in the durable session with nothing attached
+  to receive it. That is the "I went to another tab and the answer never came
+  back" bug, and no amount of re-reading state on the way in could fix it,
+  because the events had been dropped. `keepMounted` on the tab descriptor
+  (`detail-sheet.tsx`) keeps it alive; it renders nothing until the tab is
+  opened once, so flicking through records costs nothing.
+- **A thread is loaded with `session.snapshot()`, not by hand.** One call
+  returns the complete event prefix, the cursor that continues from it, and a
+  continuation token *if and only if* eve will accept another turn — about 30ms
+  against a hundred-event thread. `lib/agent-session.ts` is the whole of it.
+
+  What it replaced is worth remembering, because every panel bug of the last
+  day came out of it: a raw `fetch` of `…/stream?startIndex=-1`, parsing the
+  last line into a state machine. The endpoint *follows*, so awaiting the body
+  never returned. The stream opens with a bare newline, so "the first line" was
+  empty — which failed closed to "busy" and locked **every** reopened
+  conversation with "still working on the last question", including ones parked
+  with a perfectly good token. And a read that failed reported the *session* as
+  working rather than reporting itself as broken, so it could never recover.
+  The framework had a documented answer to the exact question that code was
+  asking. Read the guide before hand-rolling the protocol.
+- **The token is the authority on whether a message can be sent**, not our
+  reading of the events. eve returns one only when the captured prefix ends
+  parked, which is precisely the condition under which the next send lands.
+- **A turn that has gone quiet for 90 seconds is over, not working.** A
+  restarted agent leaves sessions with no closing boundary; they never park, and
+  treating them as in-flight locks that thread forever.
+- **An unreachable agent is `offline`, not `working`.** One is a fact about us
+  and the other a claim about the session; stated as the latter it is both
+  untrue and unrecoverable, since the read fails identically next time. The
+  transcript then comes from our own `AgentEvent` archive — which is also what
+  makes a thread older than eve's 30-day retention still readable — and the
+  composer stays usable.
+- **An ended thread gets a button, not a locked box.** Ended and working both
+  disable the composer and mean completely different things: one is a wait of
+  seconds, the other is permanent. `composerState()` keeps them apart, and an
+  ended thread offers **Start a new conversation**, which moves the picker to a
+  new thread. The transcript stays on screen throughout, and the save hook
+  treats the fresh session as a new conversation by comparing session ids
+  rather than by whether the panel started empty.
 - **`autoScroll` and nothing else.** The scroller is a state machine
   (`following-bottom`, `free-scrolling`, `anchored-to-message`) and
   `scrollAnchor` selects the third, which *stops it following the bottom* — the
@@ -192,19 +229,9 @@ is stored twice.
   scroller measures; a row per tool call adds a boundary every few hundred
   milliseconds during an answer. Part ids prefer `toolCallId`, which is stable
   across a call's streaming states.
-- **The continuation token is recovered, not trusted.** eve accepts input only
-  on a *waiting* session, and a stored token goes stale the moment a turn ends
-  with the panel unmounted — which is every tab switch. `lib/agent-resume.ts`
-  reads the session's newest durable event and takes the token off
-  `session.waiting`, per eve's own recipe. Without it, sending into a resumed
-  thread did nothing and said nothing.
-- **That read takes the first line and hangs up.** The stream endpoint
-  *follows*; `includeTailIndex` is a header for the client to stop on, not an
-  instruction to the server to close. Awaiting the whole body never returns, so
-  every session read as busy and the composer stayed locked.
-- **A turn that has gone quiet for 90 seconds is finished, not busy.** A
-  restarted agent leaves sessions with no closing boundary; they never reach
-  `session.waiting`, and treating them as in-flight locks that thread forever.
+- **A thread nobody has spoken in is loaded from nothing.** The snapshot query
+  is disabled without a conversation; a brand-new thread mounts with no session
+  and no events, and its first message creates both.
 - **Scoped to the rep.** Two people asking about the same contact are having two
   conversations. `ConversationsService` filters on the caller, and a session id
   in a request body decides which row, never whose.

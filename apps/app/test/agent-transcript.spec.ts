@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { readdirSync } from "node:fs";
 import type { EveMessage } from "eve/react";
 import {
 	describe as describeStep,
@@ -7,6 +8,7 @@ import {
 	pendingQuestion,
 	resolveThread,
 	sourcesOf,
+	TOOL_VERBS,
 	toTranscript,
 } from "../lib/agent-transcript";
 
@@ -119,7 +121,10 @@ describe("describe", () => {
 	});
 
 	it("falls back to a readable form of an unknown tool", () => {
-		expect(describeStep(tool("some_new_tool") as never)).toBe("some new tool");
+		// Sentence case, not the raw slug: `load skill` sitting in lowercase
+		// among finished English sentences is what made the transcript look
+		// half-built.
+		expect(describeStep(tool("some_new_tool") as never)).toBe("Some new tool");
 	});
 });
 
@@ -312,5 +317,49 @@ describe("resolveThread", () => {
 
 		expect(openId).toBe("gone");
 		expect(current).toBeNull();
+	});
+});
+
+describe("every tool has a line of English", () => {
+	/**
+	 * The bug: `load_skill` appeared in the middle of a run, in lowercase, with
+	 * an underscore in it, between "Read a LinkedIn profile" and "Put a name to
+	 * the address". eve's built-ins arrive without anybody adding a file for
+	 * them, which is exactly why they are the ones that get missed.
+	 */
+	const BUILT_INS = [
+		"load_skill",
+		"web_search",
+		"web_fetch",
+		"todo",
+		"ask_question",
+		"agent",
+		"connection_search",
+		"bash",
+		"read_file",
+		"write_file",
+		"glob",
+		"grep",
+	];
+
+	const authored = readdirSync(
+		new URL("../../agent/agent/tools", import.meta.url),
+	)
+		.filter((file) => file.endsWith(".ts"))
+		.map((file) => file.replace(/\.ts$/, ""));
+
+	it("covers every tool the agent ships with", () => {
+		expect(authored.length).toBeGreaterThan(0);
+
+		for (const tool of [...authored, ...BUILT_INS]) {
+			expect(TOOL_VERBS[tool]).toBeString();
+		}
+	});
+
+	it("writes them as sentences, not as slugs", () => {
+		for (const [tool, verb] of Object.entries(TOOL_VERBS)) {
+			expect(verb, tool).not.toContain("_");
+			expect(verb[0], tool).toBe(verb[0]?.toUpperCase() ?? "");
+		}
 	});
 });

@@ -1,17 +1,48 @@
 import { cn } from "@crm/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 
-function Empty({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * How much horizontal room the copy inside is allowed.
+ *
+ * `default` is a narrow measure, which is right for an empty table in the
+ * middle of a page: prose past about sixty characters is harder to read, so a
+ * one-line explanation is worth wrapping. It is wrong in a panel that is itself
+ * wide and mostly empty — there the same limit sets a short sentence over two
+ * ragged lines and wraps a row of three buttons onto two, which reads as
+ * squashed rather than as considered.
+ *
+ * The variant lives on the container and reaches the parts through a group
+ * selector, so a caller says how wide the empty state is once instead of
+ * repeating a max-width on the header and again on the content.
+ */
+const emptyVariants = cva(
+	// Sits at its natural height (a comfortable block) rather than stretching to
+	// fill a flex-1 page shell. Opt into full-height centering per-usage with
+	// `flex-1` on the className when needed.
+	"group/empty flex w-full min-w-0 flex-col items-center justify-center gap-4 rounded-none border-dashed px-6 py-12 text-center text-balance",
+	{
+		variants: {
+			width: {
+				default: "",
+				wide: "",
+			},
+		},
+		defaultVariants: {
+			width: "default",
+		},
+	},
+);
+
+function Empty({
+	className,
+	width = "default",
+	...props
+}: React.ComponentProps<"div"> & VariantProps<typeof emptyVariants>) {
 	return (
 		<div
 			data-slot="empty"
-			className={cn(
-				// Sits at its natural height (a comfortable block) rather than
-				// stretching to fill a flex-1 page shell. Opt into full-height
-				// centering per-usage with `flex-1` on the className when needed.
-				"flex w-full min-w-0 flex-col items-center justify-center gap-4 rounded-none border-dashed px-6 py-12 text-center text-balance",
-				className,
-			)}
+			data-width={width}
+			className={cn(emptyVariants({ width, className }))}
 			{...props}
 		/>
 	);
@@ -21,7 +52,11 @@ function EmptyHeader({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
 			data-slot="empty-header"
-			className={cn("flex max-w-sm flex-col items-center gap-2", className)}
+			className={cn(
+				"flex max-w-sm flex-col items-center gap-2",
+				"group-data-[width=wide]/empty:max-w-xl",
+				className,
+			)}
 			{...props}
 		/>
 	);
@@ -80,14 +115,36 @@ function EmptyDescription({ className, ...props }: React.ComponentProps<"p">) {
 	);
 }
 
-function EmptyContent({ className, ...props }: React.ComponentProps<"div">) {
+const emptyContentVariants = cva(
+	"flex w-full max-w-sm min-w-0 items-center gap-2.5 text-xs text-balance group-data-[width=wide]/empty:max-w-2xl",
+	{
+		variants: {
+			/**
+			 * `stack` for one call to action under another; `row` for a set of
+			 * equals, which is what a handful of suggested questions is. The row
+			 * still wraps — it has to on a narrow sheet — but given the room it
+			 * keeps them on one line.
+			 */
+			layout: {
+				stack: "flex-col",
+				row: "flex-row flex-wrap justify-center",
+			},
+		},
+		defaultVariants: {
+			layout: "stack",
+		},
+	},
+);
+
+function EmptyContent({
+	className,
+	layout,
+	...props
+}: React.ComponentProps<"div"> & VariantProps<typeof emptyContentVariants>) {
 	return (
 		<div
 			data-slot="empty-content"
-			className={cn(
-				"flex w-full max-w-sm min-w-0 flex-col items-center gap-2.5 text-xs text-balance",
-				className,
-			)}
+			className={cn(emptyContentVariants({ layout, className }))}
 			{...props}
 		/>
 	);

@@ -157,9 +157,16 @@ export class ActivitiesService {
 				type: input.type,
 				subject: blankToNull(input.subject ?? ""),
 				body: blankToNull(input.body ?? ""),
-				// A task is scheduled, not logged; everything else already happened
-				// unless the composer says otherwise.
-				occurredAt: isTask ? null : (parseDate(input.occurredAt) ?? new Date()),
+				// Every entry is stamped with where it belongs on the timeline,
+				// tasks included.
+				//
+				// A task is scheduled rather than logged, so this used to be null for
+				// them — and `orderBy` sorts nulls last, so every task sank beneath
+				// the whole history and stayed there. The one you added a second ago
+				// appeared at the bottom of today, under things from this morning.
+				// `dueAt` is when it is *for*; this is when it was written down, which
+				// is what a reverse-chronological list is ordered by.
+				occurredAt: parseDate(input.occurredAt) ?? new Date(),
 				dueAt: isTask ? parseDate(input.dueAt) : null,
 				companyId,
 				contactId: input.contactId ?? null,

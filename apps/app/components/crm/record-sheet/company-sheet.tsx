@@ -221,6 +221,9 @@ export function CompanySheet({ companyId }: { companyId: string }) {
 					// scroll container, and nesting two gives the sheet two
 					// scrollbars.
 					content: <AgentPanel record={{ kind: "company", id: company.id }} />,
+					// Stays mounted behind the other tabs: this one holds a live
+					// stream, and tearing it down mid-answer loses the answer.
+					keepMounted: true,
 				},
 			]
 		: [];

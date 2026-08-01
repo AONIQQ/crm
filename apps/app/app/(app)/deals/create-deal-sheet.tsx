@@ -2,6 +2,7 @@
 
 import Add from "@carbon/icons-react/es/Add";
 import { Button } from "@crm/ui/components/button";
+import { DatePicker } from "@crm/ui/components/date-picker";
 import {
 	Field,
 	FieldDescription,
@@ -204,11 +205,11 @@ export function CreateDealSheet({
 
 						<Field>
 							<FieldLabel htmlFor={closeDateId}>Expected close date</FieldLabel>
-							<Input
+							<DatePicker
 								id={closeDateId}
-								type="date"
 								value={closeDate}
-								onChange={(event) => setCloseDate(event.target.value)}
+								onChange={setCloseDate}
+								placeholder="No date yet"
 							/>
 						</Field>
 					</FieldGroup>

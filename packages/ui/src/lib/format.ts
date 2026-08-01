@@ -62,6 +62,48 @@ export function formatPercent(rate: number): string {
 	}).format(rate);
 }
 
+const dayFormat = new Intl.DateTimeFormat(undefined, {
+	month: "short",
+	day: "numeric",
+	year: "numeric",
+});
+
+function pad(value: number): string {
+	return String(value).padStart(2, "0");
+}
+
+/**
+ * `2026-07-31` — a day on a calendar, which is not an instant.
+ *
+ * These three go through the date's *parts* rather than `toISOString()` or
+ * `new Date(value)`, and that is the whole point of them. `new Date(
+ * "2026-07-16")` is midnight **UTC**, which is the 15th anywhere west of it —
+ * so a deal's close date rendered a day early in San Francisco, and the field
+ * that had been fixed to split the parts then disagreed with the stats strip
+ * two inches above it that had not. One definition, so they cannot drift.
+ */
+export function toDay(date: Date): string {
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * The inverse: local midnight on that day, or nothing if it is not a day.
+ * Takes a full ISO timestamp too, reading the day the server stored.
+ */
+export function fromDay(value: string | null | undefined): Date | undefined {
+	if (!value) return undefined;
+	const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+	if (!year || !month || !day) return undefined;
+	const date = new Date(year, month - 1, day);
+	return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+/** How a stored day reads: `"Jul 16, 2026"`. */
+export function formatDay(value: string | null | undefined): string {
+	const date = fromDay(value);
+	return date ? dayFormat.format(date) : (value ?? "—");
+}
+
 export function relativeTimeFromIso(iso: string | null | undefined): string {
 	if (!iso) return "—";
 	const then = new Date(iso).getTime();

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@crm/ui/components/button";
+import { DatePicker } from "@crm/ui/components/date-picker";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import { Input } from "@crm/ui/components/input";
 import {
@@ -187,6 +188,49 @@ export function InlineField({
 			<div className="min-w-0">
 				{body}
 				{suggestion}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The same row, for a day chosen from a calendar.
+ *
+ * A date is the one property here that was never really text: typed, it wanted
+ * `2026-12-31` and silently kept the old value for anything else, so the
+ * placeholder had to teach the format. The picker is the same ghost control as
+ * the select below it, and `""` means the rep cleared it.
+ */
+export function InlineDateField({
+	label,
+	value,
+	onSave,
+	saving = false,
+	placeholder = "—",
+}: {
+	label: string;
+	/** An ISO timestamp or a day string; only the day is read. */
+	value: string | null;
+	onSave: (next: string) => void;
+	saving?: boolean;
+	placeholder?: string;
+}) {
+	const id = useId();
+
+	return (
+		<div className={ROW}>
+			<label htmlFor={id} className={LABEL}>
+				{label}
+			</label>
+			<div className="flex min-w-0 items-center gap-1.5">
+				<DatePicker
+					id={id}
+					variant="ghost"
+					value={value?.slice(0, 10) ?? null}
+					placeholder={placeholder}
+					onChange={onSave}
+				/>
+				{saving ? <Spinner /> : null}
 			</div>
 		</div>
 	);

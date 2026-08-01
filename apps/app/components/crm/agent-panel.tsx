@@ -58,7 +58,12 @@ import {
 	recordFilter,
 	recordHeader,
 } from "@/lib/agent-record";
-import { type ResumeState, readResumeState } from "@/lib/agent-resume";
+import {
+	composerState,
+	eventsOf,
+	loadThread,
+	type Thread as ThreadState,
+} from "@/lib/agent-session";
 import {
 	NEW_THREAD,
 	pendingQuestion,
@@ -150,6 +155,7 @@ export function AgentPanel({ record }: { record: AgentRecord }) {
 				key={openId ?? NEW_THREAD}
 				record={record}
 				conversation={current}
+				onNewThread={() => setThread(NEW_THREAD)}
 			/>
 		</div>
 	);
@@ -163,76 +169,71 @@ export function AgentPanel({ record }: { record: AgentRecord }) {
  * conversation and rendered it empty, which read as "my history is gone" while
  * the picker above it showed the thread's own title.
  *
- * The events come from our own `AgentEvent` rows rather than eve's stream:
- * they outlive the 30-day session retention, and reading a month-old thread
- * should not wake the research runtime.
+ * Both come from one `session.snapshot()`: the events, the cursor to carry on
+ * from, and — only if the session is genuinely parked — the token that lets the
+ * next message land. Our own `AgentEvent` rows are the fallback for a thread
+ * older than eve's 30-day retention, and for an agent that is not answering.
  */
+/** How often to re-ask a working session whether it has settled. */
+const WORKING_POLL_MS = 3000;
+
 function ThreadWithHistory({
 	record,
 	conversation,
+	onNewThread,
 }: {
 	record: AgentRecord;
 	conversation: Conversation | null;
+	onNewThread: () => void;
 }) {
 	const trpc = useTRPC();
 
-	/**
-	 * Where the session actually got to, asked of the agent rather than the
-	 * database.
-	 *
-	 * A stored continuation token goes stale as soon as a turn finishes with
-	 * this panel unmounted, and eve rejects a stale one — so sending did
-	 * nothing, silently. This reads the live tail instead.
-	 */
-	const resume = useQuery({
-		queryKey: ["agent-resume", conversation?.sessionId],
+	// The archive, for the two cases eve cannot answer: an expired session and
+	// an agent that is down. Cheap — one indexed read — and it is also what
+	// makes a month-old conversation still readable.
+	const archive = useQuery({
+		...trpc.conversations.events.queryOptions({ id: conversation?.id ?? "" }),
 		enabled: conversation !== null,
+		staleTime: Number.POSITIVE_INFINITY,
+	});
+
+	const thread = useQuery<ThreadState>({
+		queryKey: ["agent-thread", conversation?.sessionId],
+		enabled: conversation !== null && !archive.isPending,
 		staleTime: 0,
 		refetchOnMount: "always",
 		refetchOnWindowFocus: false,
+		// Only while a turn we are not attached to is running — after a reload
+		// mid-answer, essentially. It stops on any other answer, and `loadThread`
+		// retires a silent turn after ninety seconds, so it cannot spin forever.
+		refetchInterval: (query) =>
+			query.state.data?.status === "working" ? WORKING_POLL_MS : false,
 		queryFn: ({ signal }) =>
-			readResumeState(
+			loadThread(
 				conversation?.sessionId ?? "",
 				recordHeader(record),
+				(archive.data ?? []) as never,
 				signal,
 			),
 	});
 
-	const history = useQuery({
-		...trpc.conversations.events.queryOptions({ id: conversation?.id ?? "" }),
-		enabled: conversation !== null,
-		// **Always refetch on mount.**
-		//
-		// Switching tabs unmounts this panel and tears the live stream down with
-		// it; coming back rebuilds the transcript from here. Cached, that rebuild
-		// is the transcript as it stood *before* the last answer — which looked
-		// like "the newest reply is missing until I reload the page", because a
-		// reload was the only thing clearing the cache.
-		//
-		// The events keep arriving in the database while the panel is away, so
-		// what is on screen after a tab switch is only ever as fresh as this
-		// fetch. It is one indexed read of a few hundred rows.
-		staleTime: 0,
-		refetchOnMount: "always",
-		// Not on focus, though: clicking back into the window mid-answer would
-		// refetch a transcript the live stream is already ahead of.
-		refetchOnWindowFocus: false,
-	});
-
-	// Same rule as the list: mounting before the events arrive would build the
-	// projection from nothing and then be unable to add them.
-	// Only the transcript gates the mount. Whether the session will accept a
-	// message is a question about the composer, and holding the whole panel on
-	// a network read of a *streaming* endpoint is how a spinner becomes
-	// permanent.
-	if (conversation && history.isPending) return <Loading />;
+	// Mounting before the transcript arrives would build the projection from
+	// nothing, and `initialEvents` is read once when the store is created — so
+	// the history could never be added afterwards.
+	if (conversation && (archive.isPending || thread.isPending))
+		return <Loading />;
 
 	return (
 		<Thread
+			// A turn that settles while we are watching from outside brings the
+			// rest of the transcript with it, and that only reaches the store
+			// through a remount. Nothing is streaming into the UI in that state,
+			// so this is invisible other than the answer appearing.
+			key={thread.data?.status === "working" ? "working" : "settled"}
 			record={record}
 			conversation={conversation}
-			initialEvents={history.data}
-			resume={resume.isPending ? { status: "checking" } : resume.data}
+			thread={thread.data}
+			onNewThread={onNewThread}
 		/>
 	);
 }
@@ -248,13 +249,13 @@ function Loading() {
 function Thread({
 	record,
 	conversation,
-	initialEvents,
-	resume,
+	thread,
+	onNewThread,
 }: {
 	record: AgentRecord;
 	conversation: Conversation | null;
-	initialEvents: unknown[] | undefined;
-	resume: ResumeState | undefined;
+	thread: ThreadState | undefined;
+	onNewThread: () => void;
 }) {
 	const copy = recordCopy(record.kind);
 	// The record travels in a header, which the proxy turns into a token claim
@@ -263,33 +264,17 @@ function Thread({
 	// "About contact cmsai6u77… (…): Hey!".
 	const agent = useEveAgent({
 		headers: recordHeader(record),
-		// Resumes the durable session rather than starting another one. eve keeps
-		// sessions for 30 days, so last week's thread is still live.
+		// Resumed from what `snapshot()` returned, not from what we had stored.
+		// Its cursor points exactly after the events beside it, so the transcript
+		// and the live stream meet with no gap and no overlap, and its token is
+		// present only when the session will actually accept the next turn.
 		//
-		// `streamIndex: 0` deliberately, not the saved cursor: reopening a thread
-		// should show what was said in it, and the cursor is where the *last
-		// reader* stopped. Replaying from the start is what fills the transcript;
-		// the saved index is only useful to a client that never unmounted.
-		...(conversation
-			? {
-					initialSession: {
-						sessionId: conversation.sessionId,
-						// The recovered token wins over the stored one, which is only
-						// as fresh as the last turn this panel watched finish.
-						continuationToken:
-							resume?.status === "waiting"
-								? resume.continuationToken
-								: (conversation.continuationToken ?? undefined),
-						// Where the stream should carry on from. The transcript itself
-						// comes from `initialEvents`, so this is the tail we have
-						// already seen rather than a request to replay.
-						streamIndex: initialEvents?.length ?? 0,
-					},
-					initialEvents: (initialEvents ?? []) as NonNullable<
-						Parameters<typeof useEveAgent>[0]
-					>["initialEvents"],
-				}
-			: {}),
+		// An `offline` thread has events but no session: the transcript is still
+		// readable, and the next message opens a fresh conversation rather than
+		// being posted at a session we could not reach.
+		...(thread && "session" in thread
+			? { initialSession: thread.session, initialEvents: eventsOf(thread) }
+			: { initialEvents: eventsOf(thread) }),
 	});
 	const [draft, setDraft] = useState("");
 
@@ -308,10 +293,10 @@ function Thread({
 	const messages = toTranscript(agent.data.messages);
 	const question = pendingQuestion(agent.data.messages);
 
-	// A session that is mid-turn cannot take input, so the composer says so
-	// rather than swallowing it.
-	const locked =
-		busy || resume?.status === "busy" || resume?.status === "checking";
+	// Mid-turn is a wait; ended is permanent and needs a way out. Both used to
+	// look identical from the outside: a composer that took a message and did
+	// nothing at all with it.
+	const { locked, ended } = composerState(thread, busy);
 
 	const ask = (message: string) => {
 		if (!message.trim() || locked) return;
@@ -380,11 +365,30 @@ function Thread({
 			 * into one mid-turn used to do nothing at all, with no error — the
 			 * message went nowhere and the panel sat there. Saying so is the fix.
 			 */}
-			{resume?.status === "busy" && !busy ? (
+			{thread?.status === "working" && !busy ? (
 				<p className="border-t px-5 py-2 text-muted-foreground text-xs">
 					Still working on the last question. Your next one can go in when it
 					finishes.
 				</p>
+			) : null}
+
+			{/*
+			 * An ended thread gets a way out rather than a locked box.
+			 *
+			 * This is where the panel stranded people: the agent had answered, the
+			 * answer was on screen, and the composer sat disabled under it with no
+			 * hint that the way on was to open a new thread. The transcript stays
+			 * exactly where it is; the button just moves the picker.
+			 */}
+			{ended ? (
+				<div className="flex items-center justify-between gap-3 border-t px-5 py-2">
+					<p className="text-muted-foreground text-xs">
+						This conversation has ended.
+					</p>
+					<Button variant="outline" size="sm" onClick={onNewThread}>
+						Start a new conversation
+					</Button>
+				</div>
 			) : null}
 
 			<form
@@ -438,7 +442,10 @@ function Idle({
 	// tabs beside it rather than like a second product. Only the mark differs —
 	// this one is ours, not a Carbon glyph.
 	return (
-		<Empty>
+		// `wide`, because this one sits in a record sheet rather than in a table
+		// cell: at the narrow default measure the blurb broke over two lines and
+		// the three questions wrapped onto two rows in a panel with room to spare.
+		<Empty width="wide">
 			<EmptyHeader>
 				<EmptyMedia>
 					<span className="flex size-8 items-center justify-center bg-foreground text-background">
@@ -449,7 +456,7 @@ function Idle({
 				<EmptyDescription>{copy.blurb}</EmptyDescription>
 			</EmptyHeader>
 
-			<EmptyContent className="flex-row flex-wrap justify-center">
+			<EmptyContent layout="row">
 				{copy.suggestions.map((suggestion) => (
 					<Button
 						key={suggestion}
@@ -670,7 +677,7 @@ function useSavedConversation({
 	session,
 	messages,
 }: {
-	record: { contactId?: string; companyId?: string };
+	record: { contactId?: string; companyId?: string; dealId?: string };
 	conversation: Conversation | null;
 	opening: React.RefObject<string | null>;
 	/** `useEveAgent`'s own cursor. */
@@ -688,8 +695,16 @@ function useSavedConversation({
 	const sessionId = session?.sessionId ?? null;
 	const token = session?.continuationToken ?? null;
 	const streamIndex = session?.streamIndex ?? 0;
-	const { contactId, companyId } = record;
-	const isNew = conversation === null;
+	const { contactId, companyId, dealId } = record;
+
+	// **Not just "there was no conversation when we mounted".**
+	//
+	// A thread that has ended cannot be continued, so the next message opens a
+	// fresh eve session inside the same mounted panel — a different session id
+	// under the same row. That is a new conversation by every meaning that
+	// matters here: it needs its own title, and the picker has to learn it
+	// exists. Comparing the ids is what catches both cases with one rule.
+	const isNew = conversation === null || conversation.sessionId !== sessionId;
 
 	// Everything the effect needs but must not re-run for. `save` and `record`
 	// are new objects on every render, and this hook renders on every streamed
@@ -719,6 +734,7 @@ function useSavedConversation({
 			{
 				...(contactId ? { contactId } : {}),
 				...(companyId ? { companyId } : {}),
+				...(dealId ? { dealId } : {}),
 				sessionId,
 				continuationToken: token,
 				streamIndex,
@@ -738,5 +754,14 @@ function useSavedConversation({
 				},
 			},
 		);
-	}, [sessionId, token, streamIndex, messages, contactId, companyId, isNew]);
+	}, [
+		sessionId,
+		token,
+		streamIndex,
+		messages,
+		contactId,
+		companyId,
+		dealId,
+		isNew,
+	]);
 }

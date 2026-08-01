@@ -135,6 +135,9 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 					// them gives the sheet two scrollbars and an agent transcript that
 					// cannot reach its own bottom.
 					content: <AgentPanel record={{ kind: "contact", id: contact.id }} />,
+					// Stays mounted behind the other tabs: this one holds a live
+					// stream, and tearing it down mid-answer loses the answer.
+					keepMounted: true,
 				},
 			]
 		: [];

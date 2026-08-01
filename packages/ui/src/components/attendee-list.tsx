@@ -41,11 +41,16 @@ const RESPONSE_LABEL: Record<string, string> = {
 };
 
 /**
- * The people on a meeting.
+ * The people on a meeting, up to `max`, then a count. The full list is in the
+ * tooltip because a nine-person kickoff should not push the timeline entry to
+ * three lines.
  *
- * Stacked avatars up to `max`, then a count. The full list is in the tooltip
- * because a nine-person kickoff should not push the timeline entry to three
- * lines.
+ * Side by side rather than the usual overlapping stack, and that is a fix, not
+ * a preference. A stack needs a ring the colour of whatever is behind it to cut
+ * each disc from the next — so the component had to name a surface, it named
+ * `background`, and it is only ever rendered on `popover`, which drew a dark
+ * halo round every face. The overlap also ate the second initial: two letters
+ * in a 24px disc, eight of those pixels underneath the next avatar.
  */
 function AttendeeList({
 	attendees,
@@ -67,11 +72,11 @@ function AttendeeList({
 			className={cn("flex items-center gap-2", className)}
 			{...props}
 		>
-			<div className="flex items-center -space-x-2">
+			<div className="flex items-center gap-1">
 				{shown.map((attendee) => (
 					<Tooltip key={attendee.id}>
 						<TooltipTrigger asChild>
-							<Avatar size="sm" className="ring-2 ring-background">
+							<Avatar size="sm">
 								<AvatarFallback>{initialsOf(attendee)}</AvatarFallback>
 							</Avatar>
 						</TooltipTrigger>

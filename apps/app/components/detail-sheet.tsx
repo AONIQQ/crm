@@ -27,7 +27,7 @@ import {
 	TooltipTrigger,
 } from "@crm/ui/components/tooltip";
 import { cn } from "@crm/ui/lib/utils";
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
 	Sheet,
 	SheetContent,
@@ -233,6 +233,25 @@ export type DetailSheetTab = {
 	/** Shown next to the label — omit rather than render a zero. */
 	count?: number | null;
 	content: ReactNode;
+	/**
+	 * Keep this tab rendered while another one is showing.
+	 *
+	 * Off by default, and it should stay off for anything that is a view of
+	 * data: a table nobody is looking at should not hold a subscription open.
+	 *
+	 * It is on for the Agent tab because that panel holds a *live connection*.
+	 * Unmounting it aborts the stream mid-answer, and the reply then lands in
+	 * the durable session with nothing attached to receive it — so coming back
+	 * to the tab showed a question with no answer under it, and no amount of
+	 * re-reading state on the way back in could conjure the events that were
+	 * dropped while it was gone. A conversation you can walk away from is the
+	 * whole point of the panel.
+	 *
+	 * It is *keep* mounted, not *always* mounted: nothing renders until the tab
+	 * has been opened once. A rep flicking through twenty records should not
+	 * load twenty transcripts from an agent they never asked anything.
+	 */
+	keepMounted?: boolean;
 };
 
 /**
@@ -252,6 +271,11 @@ export function DetailSheetTabs({
 	value: string;
 	onValueChange: (value: string) => void;
 }) {
+	// Which tabs have been looked at. A `keepMounted` tab costs nothing until
+	// it is opened, and from then until the sheet closes it stays alive.
+	const [opened] = useState(() => new Set<string>());
+	opened.add(value);
+
 	return (
 		<Tabs
 			value={value}
@@ -289,7 +313,14 @@ export function DetailSheetTabs({
 				<TabsContent
 					key={tab.value}
 					value={tab.value}
-					className="flex min-h-0 flex-1 flex-col overflow-hidden outline-none"
+					forceMount={
+						tab.keepMounted && opened.has(tab.value) ? true : undefined
+					}
+					// `data-[state=inactive]:hidden` is load-bearing under
+					// `forceMount`: Radix marks the panel hidden, and `display:flex`
+					// on the same element wins over the `hidden` attribute, so
+					// without it a kept-alive tab renders on top of the visible one.
+					className="flex min-h-0 flex-1 flex-col overflow-hidden outline-none data-[state=inactive]:hidden"
 				>
 					{tab.content}
 				</TabsContent>

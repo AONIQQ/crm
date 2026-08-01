@@ -8,11 +8,16 @@ import {
 } from "@crm/ui/components/entity-logo";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { TableCell } from "@crm/ui/components/table";
-import { formatMoney, relativeTimeFromIso } from "@crm/ui/lib/format";
+import {
+	formatDay,
+	formatMoney,
+	relativeTimeFromIso,
+} from "@crm/ui/lib/format";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AgentPanel } from "@/components/crm/agent-panel";
 import {
+	InlineDateField,
 	InlineField,
 	InlineSelectField,
 	savingField,
@@ -46,30 +51,13 @@ const CONTACT_COLUMNS = [
 	{ header: "Email", width: "w-[25%]" },
 ];
 
+// For `closedAt`, which is a real instant: the moment somebody marked the deal
+// won or lost. A close *date* is a day, and goes through `formatDay`.
 const dateFormat = new Intl.DateTimeFormat(undefined, {
 	month: "short",
 	day: "numeric",
 	year: "numeric",
 });
-
-/** `2026-07-31` — what `<input type="date">` speaks. */
-function toDateInput(iso: string | null): string | null {
-	return iso ? (iso.slice(0, 10) ?? null) : null;
-}
-
-/**
- * A close date is a day on a calendar, not an instant.
- *
- * `new Date("2026-07-16")` is midnight UTC, which is the 15th anywhere west of
- * it — so the field read "Jul 15" while the stats strip two inches above it,
- * formatting the full timestamp, read "Jul 16". Split the parts and build a
- * local date so both agree.
- */
-function formatDay(value: string): string {
-	const [year, month, day] = value.split("-").map(Number);
-	if (!year || !month || !day) return value;
-	return dateFormat.format(new Date(year, month - 1, day));
-}
 
 export function DealSheet({ dealId }: { dealId: string }) {
 	const trpc = useTRPC();
@@ -103,6 +91,9 @@ export function DealSheet({ dealId }: { dealId: string }) {
 					// Bare, not inside `DetailSheetBody`: the panel brings its own
 					// scroll container.
 					content: <AgentPanel record={{ kind: "deal", id: deal.id }} />,
+					// Stays mounted behind the other tabs: this one holds a live
+					// stream, and tearing it down mid-answer loses the answer.
+					keepMounted: true,
 				},
 			]
 		: [];
@@ -163,7 +154,10 @@ export function DealSheet({ dealId }: { dealId: string }) {
 						</DetailSheetStat>
 						<DetailSheetStat label="Expected close">
 							{deal.expectedCloseDate ? (
-								dateFormat.format(new Date(deal.expectedCloseDate))
+								// The stored day, not the local rendering of a midnight-UTC
+								// timestamp — that read a day early west of Greenwich and
+								// disagreed with the close-date row further down the sheet.
+								formatDay(deal.expectedCloseDate)
 							) : (
 								<EmptyCellValue />
 							)}
@@ -279,16 +273,11 @@ function DealOverview({ deal }: { deal: Deal }) {
 							save({ currency: currency.toUpperCase() });
 						}}
 					/>
-					<InlineField
+					<InlineDateField
 						label="Close date"
-						// Edited as `2026-12-31`, which is what a date input speaks, and
-						// read as "Jul 16, 2026", which is what the stats strip two
-						// inches above it says.
-						value={toDateInput(deal.expectedCloseDate)}
-						placeholder="2026-12-31"
+						value={deal.expectedCloseDate}
 						saving={isSaving("expectedCloseDate")}
 						onSave={(next) => save({ expectedCloseDate: next || null })}
-						render={formatDay}
 					/>
 					<InlineSelectField
 						label="Company"

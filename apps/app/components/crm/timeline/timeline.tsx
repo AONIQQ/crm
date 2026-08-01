@@ -163,9 +163,11 @@ function byDay(entries: TimelineEntryData[]) {
 function TimelineDay({
 	label,
 	entries,
+	anchor,
 }: {
 	label: string;
 	entries: TimelineEntryData[];
+	anchor: TimelineAnchor;
 }) {
 	return (
 		<section>
@@ -174,7 +176,7 @@ function TimelineDay({
 			</h3>
 			<ul className="divide-y">
 				{entries.map((entry) => (
-					<TimelineEntry key={entry.id} entry={entry} />
+					<TimelineEntry key={entry.id} entry={entry} anchor={anchor} />
 				))}
 			</ul>
 		</section>
@@ -224,9 +226,15 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 		<div className="flex min-h-0 flex-1 flex-col">
 			{/* One band of controls, then history. Two stacked bordered bands push
 			    the first entry off the fold on a laptop. */}
-			<div className="flex shrink-0 flex-col gap-3 border-b px-5 py-3">
+			<div className="flex shrink-0 flex-col gap-2 border-b px-5 py-3">
 				<ActivityComposer anchor={anchor} />
 
+				{/*
+				 * Borderless, and outside the composer's box. This is a view control,
+				 * not something you fill in — six outlined boxes gave it the same
+				 * weight as the five outlined boxes above it, and the pair read as one
+				 * confused row of eleven buttons.
+				 */}
 				<ToggleGroup
 					type="single"
 					value={tab}
@@ -235,8 +243,8 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 						// a timeline with no filter at all is not a state it has.
 						if (next) void setTab(next as TimelineTab);
 					}}
-					variant="outline"
 					size="sm"
+					spacing={0}
 				>
 					{TIMELINE_TABS.map((option) => (
 						<ToggleGroupItem key={option} value={option}>
@@ -268,7 +276,11 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 			) : (
 				<div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4">
 					{pinnedEntries.length > 0 ? (
-						<TimelineDay label="Outstanding" entries={pinnedEntries} />
+						<TimelineDay
+							label="Outstanding"
+							entries={pinnedEntries}
+							anchor={anchor}
+						/>
 					) : null}
 
 					{byDay(entries).map((group) => (
@@ -276,6 +288,7 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 							key={group.day}
 							label={group.label}
 							entries={group.entries}
+							anchor={anchor}
 						/>
 					))}
 

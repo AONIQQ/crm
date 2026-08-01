@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@crm/ui/components/button";
+import { DatePicker } from "@crm/ui/components/date-picker";
 import { Field, FieldLabel } from "@crm/ui/components/field";
 import { Input } from "@crm/ui/components/input";
 import { Spinner } from "@crm/ui/components/spinner";
@@ -253,11 +254,11 @@ export function QuickAddDeal({
 			</Field>
 			<Field>
 				<FieldLabel htmlFor={closeId}>Expected close</FieldLabel>
-				<Input
+				<DatePicker
 					id={closeId}
-					type="date"
 					value={closeDate}
-					onChange={(event) => setCloseDate(event.target.value)}
+					onChange={setCloseDate}
+					placeholder="No date yet"
 				/>
 			</Field>
 		</QuickAddForm>

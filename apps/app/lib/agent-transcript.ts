@@ -30,7 +30,18 @@ export type Source = {
 	network: "linkedin" | "github" | "web";
 };
 
-/** Tool slugs are for the model; these lines are for a person. */
+/**
+ * Tool slugs are for the model; these lines are for a person.
+ *
+ * Every tool the agent can call belongs here, **including eve's own built-ins**
+ * — those are the ones that get forgotten, because they arrive without anybody
+ * adding a file for them, and `load_skill` sat in the middle of a transcript
+ * reading exactly like that: a lowercase slug among finished English sentences.
+ * `test/agent-transcript.spec.ts` walks `apps/agent/agent/tools` and this list
+ * so a new tool cannot ship without a line.
+ *
+ * Past tense throughout, because a transcript is a record of what happened.
+ */
 const VERBS: Record<string, string> = {
 	read_crm_history: "Read our emails and meetings with them",
 	resolve_linkedin_profile: "Searched for their LinkedIn profile",
@@ -47,7 +58,35 @@ const VERBS: Record<string, string> = {
 	schedule_recheck: "Decided when to look again",
 	record_job_change: "Raised a job change",
 	list_outstanding_work: "Looked for outstanding work",
+
+	// eve's default harness. Named here for the same reason as the rest: a rep
+	// reading a run should not have to know which of these we wrote.
+	load_skill: "Read its instructions for this",
+	web_search: "Searched the web",
+	web_fetch: "Read a web page",
+	todo: "Updated its plan",
+	ask_question: "Asked a question",
+	agent: "Handed part of the job to a helper",
+	connection_search: "Looked for a tool it could use",
+	bash: "Ran a command",
+	read_file: "Read a file",
+	write_file: "Wrote a file",
+	glob: "Looked for files",
+	grep: "Searched inside the files",
 };
+
+/**
+ * The last resort, for a tool nobody has written a line for yet.
+ *
+ * Sentence case rather than the raw slug: `set_contact_socials` reads as "Set
+ * contact socials", which is plain but is at least English. The test makes
+ * this unreachable for tools that exist today; it is here for the one somebody
+ * adds on a Friday.
+ */
+function humanise(tool: string): string {
+	const words = tool.replace(/_/g, " ");
+	return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 /** One message and everything it produced, in order. */
 export type TranscriptMessage = {
@@ -127,9 +166,12 @@ export function toolName(part: EveMessagePart): string {
 	return part.type.replace(/^tool-/, "");
 }
 
+/** Exported for the test that pins every tool to a line of English. */
+export const TOOL_VERBS = VERBS;
+
 export function describe(part: EveMessagePart): string {
 	const tool = toolName(part);
-	const verb = VERBS[tool] ?? tool.replace(/_/g, " ");
+	const verb = VERBS[tool] ?? humanise(tool);
 	const reason = output(part)?.reason;
 
 	// The reason a write did not happen is the interesting half.

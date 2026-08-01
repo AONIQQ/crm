@@ -21,15 +21,24 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 	);
 }
 
+/**
+ * `cursor-text` and click-to-focus belong to the inline aligns only.
+ *
+ * An inline addon is the padding either side of a field — a currency symbol, a
+ * search glyph — so clicking it should behave as if you clicked the field. A
+ * block addon is a toolbar under a rule, and giving a row of toggle buttons an
+ * I-beam cursor that focuses something else when you miss one is a small lie
+ * about what the row is.
+ */
 const inputGroupAddonVariants = cva(
-	"flex h-auto cursor-text items-center justify-center gap-2 py-1.5 text-xs font-medium text-muted-foreground select-none group-data-[disabled=true]/input-group:opacity-50 [&>kbd]:rounded-none [&>svg:not([class*='size-'])]:size-4",
+	"flex h-auto items-center justify-center gap-2 py-1.5 text-xs font-medium text-muted-foreground select-none group-data-[disabled=true]/input-group:opacity-50 [&>kbd]:rounded-none [&>svg:not([class*='size-'])]:size-4",
 	{
 		variants: {
 			align: {
 				"inline-start":
-					"order-first pl-2 has-[>button]:ml-[-0.3rem] has-[>kbd]:ml-[-0.15rem]",
+					"order-first cursor-text pl-2 has-[>button]:ml-[-0.3rem] has-[>kbd]:ml-[-0.15rem]",
 				"inline-end":
-					"order-last pr-2 has-[>button]:mr-[-0.3rem] has-[>kbd]:mr-[-0.15rem]",
+					"order-last cursor-text pr-2 has-[>button]:mr-[-0.3rem] has-[>kbd]:mr-[-0.15rem]",
 				"block-start":
 					"order-first w-full justify-start px-2.5 pt-2 group-has-[>input]/input-group:pt-2 [.border-b]:pb-2",
 				"block-end":
@@ -54,6 +63,7 @@ function InputGroupAddon({
 			data-align={align}
 			className={cn(inputGroupAddonVariants({ align }), className)}
 			onClick={(e) => {
+				if (align === "block-start" || align === "block-end") return;
 				if ((e.target as HTMLElement).closest("button")) {
 					return;
 				}
@@ -130,11 +140,16 @@ function InputGroupInput({
 
 function InputGroupTextarea({
 	className,
+	// One line until there is more than one line in it. A group exists to put
+	// controls around a field, and a field that opens four rows tall pushes its
+	// own toolbar off the bottom of whatever it sits in.
+	size = "sm",
 	...props
-}: React.ComponentProps<"textarea">) {
+}: React.ComponentProps<typeof Textarea>) {
 	return (
 		<Textarea
 			data-slot="input-group-control"
+			size={size}
 			className={cn(
 				"flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none ring-0 focus-visible:ring-0 disabled:bg-transparent aria-invalid:ring-0 dark:bg-transparent dark:disabled:bg-transparent",
 				className,
