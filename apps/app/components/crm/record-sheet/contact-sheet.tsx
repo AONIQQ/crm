@@ -5,7 +5,10 @@ import Partnership from "@carbon/icons-react/es/Partnership";
 import Star from "@carbon/icons-react/es/Star";
 import { Button } from "@crm/ui/components/button";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
-import { EntityLogo } from "@crm/ui/components/entity-logo";
+import {
+	EntityLogo,
+	type EntityLogoTone,
+} from "@crm/ui/components/entity-logo";
 import { Icon } from "@crm/ui/components/icon";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
@@ -207,7 +210,13 @@ function CompanyStat({
 			onClick={() => openRecord({ kind: "company", id: company.id })}
 			className="flex min-w-0 items-center gap-2 underline-offset-2 hover:underline"
 		>
-			<EntityLogo src={company.iconUrl} name={company.name} size="xs" />
+			<EntityLogo
+				src={company.iconUrl}
+				darkSrc={company.iconDarkUrl}
+				tone={company.iconTone as EntityLogoTone | null | undefined}
+				name={company.name}
+				size="xs"
+			/>
 			<span className="truncate">{company.name}</span>
 		</button>
 	);

@@ -5,6 +5,9 @@ import { createListSearchParams } from "@/components/data-table/list-search-para
  * client table, so the two cannot ask for different things.
  */
 export const companiesSearchParams = createListSearchParams({
-	defaultSort: "name",
+	// Newest first: a CRM list is read to see what has changed, not to look
+	// something up alphabetically — that is what ⌘K is for.
+	defaultSort: "createdAt",
+	defaultDir: "desc",
 	facetIds: ["owner", "industry", "enrichment"] as const,
 });

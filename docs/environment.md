@@ -62,6 +62,33 @@ http://localhost:3001/api/auth/callback/google
 
 Add the deployed equivalent (`https://<api-host>/api/auth/callback/google`) for each environment. `AUTH_TRUSTED_ORIGINS` is the comma-separated allow-list of origins permitted to call the API with credentials, and doubles as the allow-list Better Auth validates post-sign-in `callbackURL`s against — the Next.js origin belongs there.
 
+The provider sets `accessType: "offline"`, which is what makes Google issue a refresh token. Without it nothing breaks at sign-in, but every Gmail/Calendar connection dies an hour after it is made with nothing to refresh from.
+
+## Gmail and Calendar sync
+
+Always on. Same OAuth client, same callback — the two read-only scopes are added to the existing Google provider rather than to a second one, so there is no extra redirect URI to register.
+
+The scopes are requested **at sign-in** and are a condition of using the CRM: `requireGoogleAccess()` gates the app shell on what Google actually granted, because granular consent lets a user untick a scope and still complete sign-in. Anyone missing either scope is sent to `/grant-access` to re-consent. There is deliberately no "disconnect" — see the plan §3.4.
+
+**Sync is forward-only.** Nothing from before a mailbox was first seen is imported: Gmail records the current `historyId` on its first pass and imports nothing, and Calendar reads from `now` onwards. A calendar event already in the diary for next week does show up, because it starts in the future — that is not back-dating.
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `CRON_SECRET` | yes, in deployed environments | Bearer guard on `POST /internal/sync/google`. Vercel sends it automatically as `Authorization: Bearer $CRON_SECRET`. Minimum 16 characters; the route **fails closed** if unset, so locally the cron simply never runs. |
+
+That is the whole list, and the absences are deliberate:
+
+- **No `GOOGLE_SYNC_ENABLED`.** A feature flag only earns its keep when it gates something that can genuinely be absent — `CONTEXT_DEV_API_KEY` does, because without a key there is no API call to make. Sync has everything it needs the moment the app boots: the OAuth client is already mandatory because Google is the only sign-in, and mailbox scopes are a condition of having an account. A switch that can turn off a mandatory feature, defaulting to off, is a switch that is only ever wrong.
+- **No `GOOGLE_WORKSPACE_DOMAIN`.** Our own domains are derived from the `User` table, which already holds them. Sign-in is Google-only behind an Internal consent screen, so every user is on a company domain by construction — and a derived value cannot go stale the day the team adds a second domain.
+- **No `GMAIL_BACKFILL_DAYS`.** There is no backfill.
+
+Two things to do in Google Cloud before this works:
+
+- **Enable the Gmail API and the Google Calendar API** on the project.
+- **Set the consent screen to User type: Internal.** `gmail.readonly` is a *restricted* scope; an External app using it needs OAuth verification plus an annual CASA security assessment. For an Internal app Google's documentation is explicit that restricted scopes need no further review. Going External later means the full review, so this is a decision, not a checkbox.
+
+The cron is declared in `apps/api/vercel.json` at `*/5 * * * *`. Minute-level schedules need a Pro plan; on Hobby it silently becomes daily.
+
 ## Database
 
 Prisma is driven through turbo from the repo root: `db:generate`, `db:migrate`, `db:push`, `db:reset`, `db:seed`, `db:studio`, `db:deploy`. Config lives in `packages/db/prisma.config.ts`, which loads `packages/db/.env` itself, so the CLI works without any app running.

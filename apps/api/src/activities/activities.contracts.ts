@@ -26,6 +26,10 @@ const TIMELINE_FILTERS = [
 	"notes",
 	"upcoming",
 	"done",
+	/** Synced Gmail threads and logged emails. */
+	"email",
+	/** Synced calendar events and logged meetings. */
+	"meetings",
 ] as const;
 
 export type TimelineFilter = (typeof TIMELINE_FILTERS)[number];

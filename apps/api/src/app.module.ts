@@ -8,9 +8,11 @@ import { AppCacheModule } from "./cache/cache.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { validateEnv } from "./config/env.validation";
 import { ContactsModule } from "./contacts/contacts.module";
+import { CrmModule } from "./crm/crm.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { DatabaseModule } from "./database/database.module";
 import { DealsModule } from "./deals/deals.module";
+import { GoogleModule } from "./google/google.module";
 import { HealthModule } from "./health/health.module";
 import { LoggingModule } from "./logging/logging.module";
 import { logAuthRoute } from "./logging/request-logger.middleware";
@@ -28,6 +30,7 @@ import { UsersModule } from "./users/users.module";
 		}),
 		AppCacheModule,
 		DatabaseModule,
+		CrmModule,
 		BetterAuthModule.forRoot({ auth, middleware: logAuthRoute }),
 		AuthModule,
 		HealthModule,
@@ -39,6 +42,7 @@ import { UsersModule } from "./users/users.module";
 		ActivitiesModule,
 		DashboardModule,
 		SearchModule,
+		GoogleModule,
 	],
 })
 export class AppModule {}

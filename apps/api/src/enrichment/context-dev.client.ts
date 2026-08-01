@@ -16,8 +16,11 @@ export type Brand = {
 	logos?:
 		| {
 				url?: string | null;
+				/** "light" | "dark" | "has_opaque_background". */
 				mode?: string | null;
 				type?: string | null;
+				/** The artwork's own dominant colours — how a dark mark is detected. */
+				colors?: { hex?: string | null; name?: string | null }[] | null;
 		  }[]
 		| null;
 	socials?: { type?: string | null; url?: string | null }[] | null;
@@ -47,6 +50,14 @@ export type LookupResult =
 	| { outcome: "found"; brand: Brand; raw: unknown }
 	| { outcome: "skipped"; reason: string }
 	| { outcome: "failed"; reason: string; retryable: boolean };
+
+/** One web search result, narrowed to the parts a person lookup reads. */
+export type SearchResult = {
+	url: string | null;
+	title: string | null;
+	description: string | null;
+	markdown: string | null;
+};
 
 /** Cold lookups are p50 ≈ 7s, p90 ≈ 18s — so this is generous on purpose. */
 const TIMEOUT_MS = 60_000;
@@ -155,6 +166,56 @@ export class ContextDevClient {
 				timeoutMS: TIMEOUT_MS,
 			});
 			return { outcome: "found", data: response.data };
+		} catch (error) {
+			return { outcome: "failed", reason: describe(error) };
+		}
+	}
+
+	/**
+	 * `POST /web/search`.
+	 *
+	 * Accepts Google-style operators, which is what makes a person lookup
+	 * *sourced* rather than guessed: we search for evidence and read a name off a
+	 * page, instead of asking a model what "abigham" probably stands for.
+	 */
+	async search(
+		query: string,
+		options: { limit?: number; excludeDomains?: string[] } = {},
+	): Promise<
+		| { outcome: "found"; results: SearchResult[] }
+		| { outcome: "failed"; reason: string }
+	> {
+		if (!this.client) {
+			return { outcome: "failed", reason: "Enrichment is not configured." };
+		}
+
+		try {
+			const response = await this.client.web.search({
+				query,
+				// The API rejects anything under 10 — a smaller ask fails validation
+				// rather than returning fewer results.
+				numResults: Math.max(options.limit ?? 10, 10),
+				// Without this the results are titles and snippets only, and a name
+				// is usually in the page rather than the snippet.
+				markdownOptions: { enabled: true },
+				...(options.excludeDomains
+					? { excludeDomains: options.excludeDomains }
+					: {}),
+			});
+
+			const results = (response.results ?? []).map((result) => ({
+				url: result.url ?? null,
+				title: result.title ?? null,
+				description: result.description ?? null,
+				// `code` is the per-result scrape outcome; anything but SUCCESS means
+				// `markdown` is null and the snippet is all we have.
+				markdown:
+					result.markdown?.code === "SUCCESS"
+						? (result.markdown.markdown ?? null)
+						: null,
+			}));
+
+			return { outcome: "found", results };
 		} catch (error) {
 			return { outcome: "failed", reason: describe(error) };
 		}

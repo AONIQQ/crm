@@ -1,4 +1,9 @@
-import { type Db, type Prisma, Prisma as PrismaNamespace } from "@crm/db";
+import {
+	type Db,
+	type Prisma,
+	Prisma as PrismaNamespace,
+	type RecordSource,
+} from "@crm/db";
 import {
 	ConflictException,
 	Injectable,
@@ -35,6 +40,8 @@ const COMPANY_SELECT = {
 	name: true,
 	domain: true,
 	iconUrl: true,
+	iconDarkUrl: true,
+	iconTone: true,
 	logoUrl: true,
 } as const;
 
@@ -52,6 +59,8 @@ export type ContactRow = {
 		name: string;
 		domain: string | null;
 		iconUrl: string | null;
+		iconDarkUrl: string | null;
+		iconTone: string | null;
 		logoUrl: string | null;
 	} | null;
 	owner: {
@@ -61,6 +70,7 @@ export type ContactRow = {
 		image: string | null;
 	} | null;
 	lastActivityAt: string | null;
+	createdAt: string;
 };
 
 /**
@@ -79,6 +89,8 @@ const SORTABLE: Record<
 	title: (dir) => [{ title: dir }, { lastName: "asc" }],
 	company: (dir) => [{ company: { name: dir } }, { lastName: "asc" }],
 	createdAt: (dir) => [{ createdAt: dir }],
+	owner: (dir) => [{ owner: { name: dir } }, { lastName: "asc" }],
+	lastActivity: (dir) => [{ lastActivityAt: { sort: dir, nulls: "last" } }],
 };
 
 @Injectable()
@@ -99,23 +111,18 @@ export class ContactsService {
 				where,
 				skip,
 				take,
-				orderBy: resolveOrderBy(input, SORTABLE, [
-					{ lastName: "asc" },
-					{ firstName: "asc" },
-				]),
+				orderBy: resolveOrderBy(input, SORTABLE, [{ createdAt: "desc" }]),
 				select: {
 					id: true,
 					firstName: true,
 					lastName: true,
 					email: true,
 					title: true,
+					source: true,
 					company: { select: COMPANY_SELECT },
 					owner: { select: OWNER_SELECT },
-					activities: {
-						take: 1,
-						orderBy: { createdAt: "desc" },
-						select: { createdAt: true },
-					},
+					lastActivityAt: true,
+					createdAt: true,
 				},
 			}),
 			this.db.contact.count({ where }),
@@ -123,9 +130,10 @@ export class ContactsService {
 		]);
 
 		return {
-			rows: rows.map(({ activities, ...row }) => ({
+			rows: rows.map((row) => ({
 				...row,
-				lastActivityAt: activities[0]?.createdAt.toISOString() ?? null,
+				lastActivityAt: row.lastActivityAt?.toISOString() ?? null,
+				createdAt: row.createdAt.toISOString(),
 			})),
 			total,
 			facetCounts,
@@ -209,7 +217,13 @@ export class ContactsService {
 		// the right company, not attach itself a few seconds later.
 		const companyId =
 			input.companyId ??
-			(email ? await this.enrichment.companyForEmail(email) : null);
+			(email
+				? await this.enrichment.companyForEmail(email, {
+						// Same rule as the sync: a company conjured out of somebody's
+						// action belongs to them, not to nobody.
+						ownerId: input.ownerId,
+					})
+				: null);
 
 		const contact = await this.db.contact.create({
 			data: {
@@ -288,6 +302,10 @@ export class ContactsService {
 			where.companyId = input.company === NO_COMPANY ? null : input.company;
 		}
 
+		if (input.source !== FACET_ALL) {
+			where.source = input.source as RecordSource;
+		}
+
 		return where;
 	}
 
@@ -295,7 +313,7 @@ export class ContactsService {
 	private async facetCounts(input: ContactListInput) {
 		const where = this.searchFilter(input.q);
 
-		const [owners, companies] = await Promise.all([
+		const [owners, companies, sources] = await Promise.all([
 			this.db.contact.groupBy({
 				by: ["ownerId"],
 				where,
@@ -306,11 +324,17 @@ export class ContactsService {
 				where,
 				_count: { _all: true },
 			}),
+			this.db.contact.groupBy({
+				by: ["source"],
+				where,
+				_count: { _all: true },
+			}),
 		]);
 
 		return {
 			owner: countsByKey(owners, "ownerId", FACET_UNASSIGNED),
 			company: countsByKey(companies, "companyId", NO_COMPANY),
+			source: countsByKey(sources, "source"),
 		};
 	}
 

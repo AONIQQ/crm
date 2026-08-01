@@ -1,6 +1,7 @@
 import { ActivityType, type Db, EnrichmentStatus } from "@crm/db";
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { domainFromEmail, normalizeDomain } from "../companies/domain";
+import { ActivityStampService } from "../crm/activity-stamp.service";
 import { InjectDatabase } from "../database/database.constants";
 import { brandToUpdate, filledFields } from "./brand-mapping";
 import { ContextDevClient } from "./context-dev.client";
@@ -49,6 +50,7 @@ export class EnrichmentService {
 		@InjectDatabase() private readonly db: Db,
 		private readonly context: ContextDevClient,
 		private readonly queue: EnrichmentQueue,
+		private readonly stamp: ActivityStampService,
 	) {}
 
 	/**
@@ -90,6 +92,8 @@ export class EnrichmentService {
 				logoUrl: true,
 				logoDarkUrl: true,
 				iconUrl: true,
+				iconDarkUrl: true,
+				iconTone: true,
 				brandColor: true,
 				industry: true,
 				subIndustry: true,
@@ -194,7 +198,10 @@ export class EnrichmentService {
 	 * the company id when one was found or made, `null` when the address says
 	 * nothing useful (a personal or throwaway domain).
 	 */
-	async companyForEmail(email: string): Promise<string | null> {
+	async companyForEmail(
+		email: string,
+		options: { ownerId?: string | null } = {},
+	): Promise<string | null> {
 		const domain = domainFromEmail(email);
 		if (!domain) return null;
 
@@ -227,6 +234,9 @@ export class EnrichmentService {
 				domain,
 				website: `https://${domain}`,
 				enrichmentStatus: EnrichmentStatus.PENDING,
+				// An unowned company is nobody's job. Whoever's action produced it
+				// owns it until someone reassigns.
+				ownerId: options.ownerId ?? null,
 			},
 			update: {},
 			select: { id: true },
@@ -295,6 +305,8 @@ export class EnrichmentService {
 			},
 			select: { id: true },
 		});
+
+		await this.stamp.touch({ companyId: company.id }, new Date());
 
 		this.logger.log({
 			message: "Research brief written",

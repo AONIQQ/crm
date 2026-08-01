@@ -115,7 +115,23 @@ export function MetaLine({
 	lead?: ReactNode;
 	parts: (string | null | undefined)[];
 }) {
-	const rest = parts.filter((part): part is string => Boolean(part));
+	// Deduplicated, case-insensitively. The parts come from different fields that
+	// can legitimately hold the same string — a contact at a company called
+	// Architect whose title is "Architect" would otherwise read
+	// "Architect · Architect", and render two children under the same key.
+	const seen = new Set<string>();
+	const rest: string[] = [];
+
+	for (const part of parts) {
+		const value = part?.trim();
+		if (!value) continue;
+
+		const key = value.toLowerCase();
+		if (seen.has(key)) continue;
+
+		seen.add(key);
+		rest.push(value);
+	}
 
 	return (
 		<>

@@ -29,6 +29,7 @@ used for type checking only (`bun run check-types`).
 | `/auth/me`       | required   | Cached profile of the signed-in user          |
 | `/auth/session`  | optional   | Whether the caller is signed in               |
 | `/health`        | anonymous  | 200 with a database round-trip, 503 otherwise |
+| `/internal/sync/google` | `CRON_SECRET` bearer | Vercel Cron entrypoint for Gmail/Calendar sync. Fails closed when the secret is unset. |
 
 ## How auth is wired
 

@@ -11,6 +11,8 @@ import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { ActivityIcon, activityLabel } from "./activity-icon";
+import { EmailThreadEntry, threadSummary } from "./email-thread-entry";
+import { MeetingEntry } from "./meeting-entry";
 
 export type TimelineEntryData =
 	RouterOutputs["activities"]["timeline"]["entries"][number];
@@ -56,6 +58,15 @@ export function TimelineEntry({
 	const change = entry.type === "STAGE_CHANGE" ? stageChange(entry.meta) : null;
 	const when = entry.occurredAt ?? entry.createdAt;
 
+	// A synced entry was not written by the person whose mailbox it came from,
+	// so it is attributed to the source rather than to them.
+	const synced = entry.meta?.synced === true;
+	const author = synced
+		? entry.emailThread
+			? "via Gmail"
+			: "via Calendar"
+		: entry.createdBy.name;
+
 	return (
 		<li className="flex gap-3 py-3">
 			<span className="mt-0.5 text-muted-foreground">
@@ -96,14 +107,41 @@ export function TimelineEntry({
 					) : null}
 
 					<span className="text-muted-foreground text-xs">
-						{entry.createdBy.name} · {timeFormat.format(new Date(when))}
+						{author} · {timeFormat.format(new Date(when))}
 					</span>
+
+					{entry.emailThread ? (
+						<span className="text-muted-foreground text-xs">
+							{threadSummary(
+								entry.emailThread.messageCount,
+								entry.emailThread.lastMessageAt,
+							)}
+						</span>
+					) : null}
 				</div>
 
 				{entry.body ? (
 					<p className="whitespace-pre-wrap text-pretty text-muted-foreground text-sm/6">
 						{entry.body}
 					</p>
+				) : null}
+
+				{entry.calendarEvent ? (
+					<MeetingEntry
+						eventId={entry.calendarEvent.id}
+						startsAt={entry.calendarEvent.startsAt}
+						endsAt={entry.calendarEvent.endsAt}
+						isAllDay={entry.calendarEvent.isAllDay}
+						attendeeCount={entry.calendarEvent.attendeeCount}
+						conferenceUrl={entry.calendarEvent.conferenceUrl}
+					/>
+				) : null}
+
+				{entry.emailThread ? (
+					<EmailThreadEntry
+						threadId={entry.emailThread.id}
+						messageCount={entry.emailThread.messageCount}
+					/>
 				) : null}
 
 				{showContext && (entry.deal || entry.contact) ? (

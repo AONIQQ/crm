@@ -3,7 +3,10 @@
 import UserMultiple from "@carbon/icons-react/es/UserMultiple";
 import { Alert, AlertDescription, AlertTitle } from "@crm/ui/components/alert";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
-import { EntityLogo } from "@crm/ui/components/entity-logo";
+import {
+	EntityLogo,
+	type EntityLogoTone,
+} from "@crm/ui/components/entity-logo";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { TableCell } from "@crm/ui/components/table";
 import { formatMoney, relativeTimeFromIso } from "@crm/ui/lib/format";
@@ -118,6 +121,8 @@ export function DealSheet({ dealId }: { dealId: string }) {
 				deal ? (
 					<EntityLogo
 						src={deal.company.iconUrl}
+						darkSrc={deal.company.iconDarkUrl}
+						tone={deal.company.iconTone as EntityLogoTone | null | undefined}
 						name={deal.company.name}
 						size="lg"
 					/>

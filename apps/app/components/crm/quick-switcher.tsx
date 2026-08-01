@@ -9,7 +9,10 @@ import {
 	CommandItem,
 	CommandList,
 } from "@crm/ui/components/command";
-import { EntityLogo } from "@crm/ui/components/entity-logo";
+import {
+	EntityLogo,
+	type EntityLogoTone,
+} from "@crm/ui/components/entity-logo";
 import { useMountEffect } from "@crm/ui/hooks/use-mount-effect";
 import { useQuery } from "@tanstack/react-query";
 import { parseAsBoolean, useQueryState } from "nuqs";
@@ -106,7 +109,13 @@ export function QuickSwitcher() {
 										value={`${hit.kind}:${hit.id}`}
 										onSelect={() => go(kind, hit.id)}
 									>
-										<EntityLogo src={hit.iconUrl} name={hit.label} size="sm" />
+										<EntityLogo
+											src={hit.iconUrl}
+											darkSrc={hit.iconDarkUrl}
+											tone={hit.iconTone as EntityLogoTone | null | undefined}
+											name={hit.label}
+											size="sm"
+										/>
 										<span className="flex min-w-0 flex-col">
 											<span className="truncate">{hit.label}</span>
 											{hit.detail ? (

@@ -7,7 +7,10 @@ import StarFilled from "@carbon/icons-react/es/StarFilled";
 import UserMultiple from "@carbon/icons-react/es/UserMultiple";
 import { Button } from "@crm/ui/components/button";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
-import { EntityLogo } from "@crm/ui/components/entity-logo";
+import {
+	EntityLogo,
+	type EntityLogoTone,
+} from "@crm/ui/components/entity-logo";
 import { Icon } from "@crm/ui/components/icon";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { TableCell } from "@crm/ui/components/table";
@@ -245,6 +248,8 @@ export function CompanySheet({ companyId }: { companyId: string }) {
 			media={
 				<EntityLogo
 					src={company?.iconUrl ?? company?.logoUrl}
+					darkSrc={company?.iconDarkUrl}
+					tone={company?.iconTone as EntityLogoTone | null | undefined}
 					name={company?.name ?? "?"}
 					size="lg"
 				/>

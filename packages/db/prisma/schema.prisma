@@ -26,10 +26,11 @@ model User {
   // CRM ownership. Better Auth owns every field above and `bun run
   // auth:generate` rewrites them; these back-relations are ours and have to be
   // put back if that ever wipes them.
-  ownedCompanies Company[]  @relation("CompanyOwner")
-  ownedContacts  Contact[]  @relation("ContactOwner")
-  ownedDeals     Deal[]     @relation("DealOwner")
-  activities     Activity[] @relation("ActivityAuthor")
+  ownedCompanies Company[]     @relation("CompanyOwner")
+  ownedContacts  Contact[]     @relation("ContactOwner")
+  ownedDeals     Deal[]        @relation("DealOwner")
+  activities     Activity[]    @relation("ActivityAuthor")
+  mailboxSyncs   MailboxSync[]
 
   @@unique([email])
   @@map("user")
@@ -133,6 +134,16 @@ enum EnrichmentStatus {
   SKIPPED
 }
 
+/// Where a record came from. Auto-created rows are tagged so a bad matching
+/// rule is visible and reversible in bulk, rather than silently indistinguishable
+/// from something a rep typed.
+enum RecordSource {
+  MANUAL
+  IMPORT
+  EMAIL
+  CALENDAR
+}
+
 model Company {
   id          String  @id @default(cuid())
   name        String
@@ -147,6 +158,18 @@ model Company {
   logoDarkUrl String?
   /// Square mark, used in table rows.
   iconUrl     String?
+  /// The dark-mode square mark, when the brand publishes one. Rare — most
+  /// brands ship a light-mode logo only, which is what `iconTone` is for.
+  iconDarkUrl String?
+  /// How `iconUrl` behaves against a background, from Context.dev's `mode` plus
+  /// the artwork's own dominant colour:
+  ///
+  /// - `opaque`  — the icon is composed on its own background; never put a
+  ///               surface behind it.
+  /// - `dark`    — dark artwork on transparency; invisible in dark mode without
+  ///               a light surface behind it.
+  /// - `light`   — light artwork on transparency; the same problem in reverse.
+  iconTone    String?
   /// Hex. An accent only — brand colours would fight the design tokens.
   brandColor  String?
 
@@ -177,14 +200,29 @@ model Company {
   enrichmentError  String?
   enrichment       CompanyEnrichment?
 
-  contacts   Contact[]  @relation("CompanyContacts")
-  deals      Deal[]
-  activities Activity[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  /// MANUAL unless a sync created it. Filterable, so a bad auto-create rule can
+  /// be undone in bulk.
+  source RecordSource @default(MANUAL)
+
+  /// Denormalised max(activity.createdAt), written with the activity.
+  ///
+  /// A real column because it is a sortable column on every list, and ordering
+  /// by an aggregate over a relation is something Prisma cannot express — the
+  /// alternative is a correlated subquery per row, which would be the slowest
+  /// thing on the page. Maintained through `ActivityStampService`.
+  lastActivityAt DateTime?
+
+  contacts       Contact[]       @relation("CompanyContacts")
+  deals          Deal[]
+  activities     Activity[]
+  emailThreads   EmailThread[]
+  calendarEvents CalendarEvent[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([ownerId])
   @@index([name])
+  @@index([lastActivityAt])
   @@map("company")
 }
 
@@ -216,13 +254,27 @@ model Contact {
   owner       User?    @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   primaryOf   Company? @relation("PrimaryContact")
 
-  deals      DealContact[]
-  activities Activity[]
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  source RecordSource @default(MANUAL)
+
+  /// Denormalised max(activity.createdAt), written with the activity.
+  ///
+  /// A real column because it is a sortable column on every list, and ordering
+  /// by an aggregate over a relation is something Prisma cannot express — the
+  /// alternative is a correlated subquery per row, which would be the slowest
+  /// thing on the page. Maintained through `ActivityStampService`.
+  lastActivityAt DateTime?
+
+  deals           DealContact[]
+  activities      Activity[]
+  emailThreads    EmailThread[]
+  calendarEvents  CalendarEvent[]
+  eventAttendance CalendarAttendee[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([companyId])
   @@index([ownerId])
+  @@index([lastActivityAt])
   @@map("contact")
 }
 
@@ -243,6 +295,14 @@ model Deal {
   closedAt          DateTime?
   closedReason      String?
 
+  /// Denormalised max(activity.createdAt), written with the activity.
+  ///
+  /// A real column because it is a sortable column on every list, and ordering
+  /// by an aggregate over a relation is something Prisma cannot express — the
+  /// alternative is a correlated subquery per row, which would be the slowest
+  /// thing on the page. Maintained through `ActivityStampService`.
+  lastActivityAt DateTime?
+
   contacts   DealContact[]
   activities Activity[]
   createdAt  DateTime      @default(now())
@@ -252,6 +312,7 @@ model Deal {
   @@index([ownerId])
   @@index([stage])
   @@index([expectedCloseDate])
+  @@index([lastActivityAt])
   @@map("deal")
 }
 
@@ -291,8 +352,17 @@ model Activity {
 
   createdById String
   createdBy   User   @relation("ActivityAuthor", fields: [createdById], references: [id])
-  /// { from, to } for STAGE_CHANGE; the credit cost for ENRICHMENT.
+  /// { from, to } for STAGE_CHANGE; the credit cost for ENRICHMENT; `{ synced:
+  /// true }` for anything a Google sync projected.
   meta        Json?
+
+  /// The projection links. Unique because a thread and an event each get exactly
+  /// one timeline entry, updated in place as the thread grows or the event moves
+  /// — the timeline stays one indexed range scan instead of a three-table union.
+  emailThreadId   String?        @unique
+  emailThread     EmailThread?   @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
+  calendarEventId String?        @unique
+  calendarEvent   CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -303,4 +373,184 @@ model Activity {
   @@index([dueAt])
   @@index([createdById])
   @@map("activity")
+}
+
+// ---------------------------------------------------------------------------
+// Google sync
+//
+// Gmail threads and Calendar events get real tables; the timeline gets one
+// projected Activity per thread and per event. Identity is deliberately global
+// rather than Google's per-mailbox ids — see docs/plan/gmail-calendar-plan.md §4.2.
+// ---------------------------------------------------------------------------
+
+enum GoogleSyncStatus {
+  IDLE
+  RUNNING
+  /// The refresh token is gone. Stop trying; the rep has to reconnect.
+  NEEDS_RECONNECT
+  FAILED
+}
+
+enum EmailDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// Per-user, per-source cursor.
+///
+/// In Postgres because the API is a serverless function with no memory between
+/// invocations, and because the in-process EnrichmentQueue deliberately drops
+/// queued work on shutdown — fine for enrichment, fatal for a resumable sync.
+model MailboxSync {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "gmail" | "calendar".
+  source String
+
+  status GoogleSyncStatus @default(IDLE)
+  /// Gmail: the last processed historyId. Calendar: nextSyncToken.
+  ///
+  /// Stamped with "now" the first time a mailbox is seen, which is what makes
+  /// this forward-only: there is no backfill, so the cursor starts at the
+  /// moment of connection and nothing before it is ever read.
+  cursor String?
+  lastSyncedAt DateTime?
+  lastError    String?
+  /// Set by the 429/403 handler; the cron skips this row until it passes.
+  retryAfter   DateTime?
+  /// Auto-creation is opt-in per source — on for calendar, off for Gmail.
+  autoCreate   Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, source])
+  @@index([status])
+  @@map("mailboxSync")
+}
+
+/// One conversation, whoever's mailbox it came from.
+model EmailThread {
+  id String @id @default(cuid())
+  /// The RFC 822 Message-ID of the thread root — global, unlike Gmail's
+  /// mailbox-scoped threadId. This is what stops two reps on one thread
+  /// producing two CRM threads.
+  rootMessageId String  @unique
+  subject       String?
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  firstMessageAt DateTime
+  lastMessageAt  DateTime
+  messageCount   Int      @default(0)
+
+  messages EmailMessage[]
+  activity Activity?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, lastMessageAt])
+  @@index([contactId, lastMessageAt])
+  @@map("emailThread")
+}
+
+model EmailMessage {
+  id       String      @id @default(cuid())
+  threadId String
+  thread   EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  /// Global message identity. Unique, so account B's sync skips what account A
+  /// already ingested.
+  rfcMessageId String @unique
+  /// Whose mailbox produced this copy, and its id there — for deep links.
+  syncedByUserId String?
+  gmailMessageId String?
+
+  direction EmailDirection
+  fromEmail String
+  fromName  String?
+  /// [{ email, name, kind: "to" | "cc" }]. Not a table: nothing queries it.
+  recipients Json
+  subject    String?
+  snippet    String?
+  /// Plain text, quoted history stripped. Never logged; never in list payloads.
+  body   String?
+  sentAt DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([threadId, sentAt])
+  @@map("emailMessage")
+}
+
+model CalendarEvent {
+  id String @id @default(cuid())
+  /// Shared by every attendee's copy of the event, and by every instance of a
+  /// recurrence — which is why the start time is part of the key.
+  iCalUid           String
+  originalStartTime DateTime
+  /// Set on an instance of a recurring series.
+  recurringEventId String?
+
+  title          String?
+  description    String?
+  location       String?
+  conferenceUrl  String?
+  startsAt       DateTime
+  endsAt         DateTime
+  isAllDay       Boolean  @default(false)
+  status         String
+  organizerEmail String?
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  syncedByUserId String?
+  googleEventId  String?
+
+  attendees CalendarAttendee[]
+  activity  Activity?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([iCalUid, originalStartTime])
+  @@index([companyId, startsAt])
+  @@index([contactId, startsAt])
+  @@map("calendarEvent")
+}
+
+model CalendarAttendee {
+  id      String        @id @default(cuid())
+  eventId String
+  event   CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  email String
+  name  String?
+  /// needsAction | declined | tentative | accepted
+  responseStatus String?
+  isOrganizer    Boolean  @default(false)
+  contactId      String?
+  contact        Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([eventId, email])
+  @@index([contactId])
+  @@map("calendarAttendee")
+}
+
+/// Domains we never match on and never create from — vendors, ATSs, newsletters.
+/// Grows by hand and by a "not a customer" action in the UI.
+model SuppressedDomain {
+  domain    String   @id
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@map("suppressedDomain")
 }

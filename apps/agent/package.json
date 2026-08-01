@@ -1,0 +1,25 @@
+{
+	"name": "agent",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"license": "UNLICENSED",
+	"scripts": {
+		"dev": "eve dev",
+		"build": "eve build",
+		"start": "eve start",
+		"check-types": "tsc --noEmit",
+		"lint": "biome check .",
+		"clean": "rm -rf .turbo .eve node_modules"
+	},
+	"dependencies": {
+		"@crm/db": "workspace:*",
+		"eve": "^0.29.4",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@crm/typescript-config": "workspace:*",
+		"@types/node": "^24.0.0",
+		"typescript": "^5.9.2"
+	}
+}

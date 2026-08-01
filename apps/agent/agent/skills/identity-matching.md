@@ -1,0 +1,70 @@
+---
+name: identity-matching
+description: How to decide that a LinkedIn profile is the person behind a CRM email address, and when to refuse.
+---
+
+# Identity matching
+
+You are given an email address and a company. You need the person. Getting this
+wrong writes a stranger's career onto a customer's record, so the procedure is
+built to fail closed.
+
+## Why the obvious approach does not work
+
+`abigham@hubspot.com` is not a name. Searching for it directly returns nothing.
+Asking a model what it stands for produces "Abbie Bigham" — which happens to be
+right, and would have been just as confident had it been wrong. You cannot tell
+the difference afterwards, which is why guessing is banned outright.
+
+What works is decomposition: `abigham` contains the surname `bigham`, and
+searching *that* alongside the company returns `linkedin.com/in/abigailbigham`
+as the first result. The guess went into the **query**, and the answer came from
+the profile.
+
+That is the shape of every match: guess where to look, never what you will find.
+
+## The procedure
+
+1. **`resolve_linkedin_profile`** with the email and company. It decomposes the
+   local part and returns candidate slugs. These are leads, not answers.
+2. **`get_linkedin_profile`** on each candidate, passing the email, company name
+   and domain. It returns the profile *and a verdict*.
+3. **Read the verdict, not the profile.** It checks two things:
+   - `employerMatches` — a current position matches the company we have.
+   - `nameMatches` — the real name is consistent with the email local part
+     (`y` + `madar` → Yael Madar).
+4. **Only `isSamePerson: true` counts.** Both checks, or it is not them.
+5. If no candidate passes, **stop**. Report that you could not identify them.
+   Leaving "Abigham" in the CRM is the correct outcome when you do not know.
+
+## Confidence
+
+| Verdict | What it means | What to do |
+| --- | --- | --- |
+| `high` | Employer and name both match | `update_contact`. |
+| `medium` | One matches, not both | Do not write. Say what you found and why it fell short. |
+| `low` | Neither | Wrong person. Move to the next candidate. |
+
+Do not pass a confidence to `update_contact` other than the one the verdict gave
+you. The tool rejects anything below `high` anyway, and inflating it is the one
+thing that turns this from a research agent into a data-corruption agent.
+
+## Things that look like evidence and are not
+
+- **A search result.** Search says where to look. A query for "Abbie Bigham"
+  once returned Lavazza's CEO, an HR lead at Reply, and a data engineer in
+  Seattle — all with total confidence.
+- **A matching first name.** Half the Chrises at a company are not your Chris.
+  The surname or the employer has to carry it.
+- **Perplexity's view of somebody's job title.** It aggregates stale sources; it
+  said "Account Executive L3" for a profile that reads "Growth Specialist at
+  HubSpot". For identity, the person's own profile wins.
+- **A very plausible expansion.** `jsmith` is probably J. Smith. Probably is not
+  a source.
+
+## When the person genuinely is not findable
+
+Some people have no profile, or a profile with no employer, or a name that
+cannot be reconciled with their address. Say so plainly and move on. A contact
+that keeps its placeholder name is a contact a human can fix in five seconds; a
+contact with the wrong person's job history is one nobody knows to fix.

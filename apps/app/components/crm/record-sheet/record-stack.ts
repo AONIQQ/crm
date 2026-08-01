@@ -7,6 +7,10 @@ import {
 	useQueryStates,
 } from "nuqs";
 import { useCallback, useMemo } from "react";
+import {
+	TIMELINE_PARAM,
+	timelineTabParser,
+} from "@/components/crm/timeline/timeline-search-params";
 
 const RECORD_KINDS = ["company", "contact", "deal"] as const;
 
@@ -27,25 +31,29 @@ const FORM_TAB: Record<RecordForm, string> = {
 
 /**
  * Everything about what the sheet is showing: which records are open
- * (innermost last), which tab of the innermost one, and which quick-add form
- * inside that.
+ * (innermost last), which tab of the innermost one, which quick-add form inside
+ * that, and how the Activity panel is filtered.
  *
  * A stack rather than a single id because the interesting move is sideways:
  * from a company to one of its deals to somebody on that deal. Closing the
  * deal should put you back on the company you came from, not on the table.
  *
- * All three ride in one hook so a write to any of them can clear the others.
- * Moving to another record has to reset the tab and drop a half-typed form —
- * otherwise they reappear, out of context, on whatever you opened next.
+ * All four ride in one hook so a write to any of them can clear the others.
+ * Moving to another record has to reset the tab, drop a half-typed form and
+ * forget the timeline filter — otherwise they reappear, out of context, on
+ * whatever you opened next.
  *
- * `tab` and `add` replace rather than push: flicking through tabs is reading,
- * not navigating, and a Back button that walks you through four panels before
- * it closes the sheet is a Back button nobody presses twice.
+ * They replace rather than push: flicking through tabs is reading, not
+ * navigating, and a Back button that walks you through four panels before it
+ * closes the sheet is a Back button nobody presses twice.
  */
 const params = {
 	record: parseAsArrayOf(parseAsString, ",").withDefault([]),
 	tab: parseAsString,
 	add: parseAsStringLiteral(RECORD_FORMS),
+	// Owned by the timeline, cleared from here. `useQueryState` over there and
+	// this entry are the same key, so the two stay in step.
+	[TIMELINE_PARAM]: timelineTabParser,
 };
 
 export function recordKey(ref: RecordRef): string {
@@ -77,6 +85,7 @@ export function useRecordStack() {
 					record: next.length === 0 ? null : next.map(recordKey),
 					tab: null,
 					add: null,
+					[TIMELINE_PARAM]: null,
 				},
 				{ history },
 			);
@@ -148,9 +157,16 @@ export function useRecordSheetView(fallbackTab: string) {
 
 	const setTab = useCallback(
 		(next: string) => {
-			// Leaving the panel abandons the form that lived in it, and the
-			// default tab is the absence of the param rather than a value.
-			void setParams({ tab: next === fallbackTab ? null : next, add: null });
+			// Leaving the panel abandons the form that lived in it and the filter
+			// that was on it — the tabs unmount their contents, so a timeline
+			// returned to has always started at All; the param going too is what
+			// keeps that true now the filter outlives the component. The default
+			// tab is the absence of the param rather than a value.
+			void setParams({
+				tab: next === fallbackTab ? null : next,
+				add: null,
+				[TIMELINE_PARAM]: null,
+			});
 		},
 		[setParams, fallbackTab],
 	);

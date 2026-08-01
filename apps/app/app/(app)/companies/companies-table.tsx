@@ -6,7 +6,10 @@ import {
 	type DataTableFacet,
 } from "@crm/ui/components/data-table";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
-import { EntityLogo } from "@crm/ui/components/entity-logo";
+import {
+	EntityLogo,
+	type EntityLogoTone,
+} from "@crm/ui/components/entity-logo";
 import { relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -35,6 +38,8 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 			<span className="flex min-w-0 items-center gap-2.5">
 				<EntityLogo
 					src={row.iconUrl ?? row.logoUrl}
+					darkSrc={row.iconDarkUrl}
+					tone={row.iconTone as EntityLogoTone | null | undefined}
 					name={row.name}
 					size="sm"
 				/>
@@ -71,6 +76,7 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 	{
 		id: "owner",
 		header: "Owner",
+		sortable: true,
 		width: "w-[16%]",
 		hideBelow: "md",
 		cell: (row) => <OwnerCell owner={row.owner} />,
@@ -93,11 +99,26 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 		cell: (row) => <span className="tabular-nums">{row.openDealCount}</span>,
 	},
 	{
-		// Not sortable: "most recent activity" is an aggregate over a relation,
-		// which Prisma cannot order by, and sorting the page in the browser would
-		// only reorder the 25 rows already on screen.
+		// Hidden by default, but present: it is the table's default sort, and a
+		// default you cannot see or return to after sorting by something else is
+		// just an unexplained row order.
+		id: "createdAt",
+		header: "Created",
+		label: "Created date",
+		sortable: true,
+		align: "right",
+		width: "w-[10%]",
+		defaultHidden: true,
+		cell: (row) => (
+			<span className="text-muted-foreground" suppressHydrationWarning>
+				{relativeTimeFromIso(row.createdAt)}
+			</span>
+		),
+	},
+	{
 		id: "lastActivity",
 		header: "Last activity",
+		sortable: true,
 		align: "right",
 		width: "w-[12%]",
 		hideBelow: "sm",

@@ -82,6 +82,29 @@ export class EnvironmentVariables {
 	@IsInt()
 	@Min(0)
 	CACHE_TTL_MS?: number;
+
+	/**
+	 * Bearer guard on `POST /internal/sync/google`.
+	 *
+	 * Not a feature flag — Gmail and Calendar sync is simply on, because mailbox
+	 * access is a condition of signing in and the OAuth client is already
+	 * required. This is the one thing the cron route genuinely needs, and the
+	 * route fails closed without it.
+	 */
+	@IsOptional()
+	@IsString()
+	@MinLength(16, {
+		message: "CRON_SECRET must be at least 16 characters.",
+	})
+	CRON_SECRET?: string;
+
+	/**
+	 * RapidAPI, for LinkedIn profile enrichment via LinkDAPI. Optional: without
+	 * it contacts keep the name derived from their address, logged once at boot.
+	 */
+	@IsOptional()
+	@IsString()
+	RAPIDAPI_KEY?: string;
 }
 
 export function validateEnv(

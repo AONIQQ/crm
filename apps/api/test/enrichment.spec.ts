@@ -18,6 +18,8 @@ function emptyCompany(
 		logoUrl: null,
 		logoDarkUrl: null,
 		iconUrl: null,
+		iconDarkUrl: null,
+		iconTone: null,
 		brandColor: null,
 		industry: null,
 		subIndustry: null,
@@ -279,5 +281,70 @@ describe("EnrichmentQueue", () => {
 		// The two already in flight finish; the rest are dropped and stay PENDING.
 		expect(ran).toBe(2);
 		expect(queue.enqueue("after-shutdown", slow)).toBe(false);
+	});
+});
+
+/**
+ * How a logo is made visible in both themes.
+ *
+ * The rule is deliberately narrow because the fix downstream is a CSS invert,
+ * and inverting anything that is not near-greyscale changes the brand's colour
+ * rather than its visibility.
+ */
+describe("brandToUpdate — icon tone", () => {
+	const withIcon = (mode: string, hex?: string): Brand => ({
+		logos: [
+			{
+				url: "https://cdn/icon.png",
+				mode,
+				type: "icon",
+				...(hex ? { colors: [{ hex, name: "x" }] } : {}),
+			},
+		],
+	});
+
+	it("marks a near-black icon dark, so it can be lifted in dark mode", () => {
+		// Architect: the case that started this — #040404 on transparency, which
+		// is simply not there on a dark row.
+		expect(
+			brandToUpdate(withIcon("light", "#040404"), emptyCompany()).iconTone,
+		).toBe("dark");
+	});
+
+	it("marks a near-white icon light", () => {
+		expect(
+			brandToUpdate(withIcon("light", "#fbfbfb"), emptyCompany()).iconTone,
+		).toBe("light");
+	});
+
+	it("leaves an icon with its own background alone", () => {
+		expect(
+			brandToUpdate(
+				withIcon("has_opaque_background", "#ff5c35"),
+				emptyCompany(),
+			).iconTone,
+		).toBe("opaque");
+	});
+
+	it("never tones a coloured logo, however dark or light it reads", () => {
+		// Inverting Monzo's coral makes it teal — a wrong-coloured logo is worse
+		// than a dim one, so saturation vetoes the whole mechanism.
+		for (const hex of ["#ff4f40", "#635bff", "#00d47e", "#ffcc00"]) {
+			expect(
+				brandToUpdate(withIcon("light", hex), emptyCompany()).iconTone,
+			).toBe(undefined);
+		}
+	});
+
+	it("leaves mid-grey alone — it is legible against either theme", () => {
+		expect(
+			brandToUpdate(withIcon("light", "#808080"), emptyCompany()).iconTone,
+		).toBe(undefined);
+	});
+
+	it("does nothing without colour data", () => {
+		expect(brandToUpdate(withIcon("light"), emptyCompany()).iconTone).toBe(
+			undefined,
+		);
 	});
 });

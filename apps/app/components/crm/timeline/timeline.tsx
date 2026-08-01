@@ -4,14 +4,16 @@ import { Button } from "@crm/ui/components/button";
 import { Spinner } from "@crm/ui/components/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@crm/ui/components/toggle-group";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useQueryState } from "nuqs";
 import { useTRPC } from "@/lib/trpc/client";
 import { ActivityComposer } from "./activity-composer";
 import { TimelineEntry, type TimelineEntryData } from "./timeline-entry";
 import {
 	historyFilter,
+	TIMELINE_PARAM,
 	TIMELINE_TABS,
 	type TimelineTab,
+	timelineTabParser,
 } from "./timeline-search-params";
 
 /** Exactly one of these — a timeline is always about one record. */
@@ -23,6 +25,8 @@ export type TimelineAnchor =
 const TAB_LABELS: Record<TimelineTab, string> = {
 	all: "All",
 	notes: "Notes",
+	email: "Email",
+	meetings: "Meetings",
 	upcoming: "Upcoming",
 	done: "Done",
 };
@@ -34,23 +38,35 @@ const dayFormat = new Intl.DateTimeFormat(undefined, {
 	year: "numeric",
 });
 
-/** Groups entries by calendar day, preserving the order they arrived in. */
+/**
+ * Entries under one heading per day, in the order they arrive.
+ *
+ * Keyed by a map rather than by comparing against the previous entry: run-length
+ * grouping silently depends on the list being sorted by the very field it groups
+ * on, and the moment that stops being true it emits the same day twice — which
+ * React sees as duplicate keys. The API does order by `occurredAt`, so runs
+ * *are* contiguous; this just refuses to be the thing that breaks if that ever
+ * changes.
+ */
 function byDay(entries: TimelineEntryData[]) {
-	const groups: { day: string; label: string; entries: TimelineEntryData[] }[] =
-		[];
+	const groups = new Map<
+		string,
+		{ day: string; label: string; entries: TimelineEntryData[] }
+	>();
 
 	for (const entry of entries) {
 		const at = new Date(entry.occurredAt ?? entry.createdAt);
 		const day = at.toDateString();
-		const last = groups[groups.length - 1];
-		if (last?.day === day) {
-			last.entries.push(entry);
+
+		const group = groups.get(day);
+		if (group) {
+			group.entries.push(entry);
 		} else {
-			groups.push({ day, label: dayFormat.format(at), entries: [entry] });
+			groups.set(day, { day, label: dayFormat.format(at), entries: [entry] });
 		}
 	}
 
-	return groups;
+	return [...groups.values()];
 }
 
 /**
@@ -67,7 +83,7 @@ function byDay(entries: TimelineEntryData[]) {
 export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 	const trpc = useTRPC();
 
-	const [tab, setTab] = useState<TimelineTab>("all");
+	const [tab, setTab] = useQueryState(TIMELINE_PARAM, timelineTabParser);
 
 	const counts = useQuery(trpc.activities.timelineCounts.queryOptions(anchor));
 
@@ -102,7 +118,11 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 				<ToggleGroup
 					type="single"
 					value={tab}
-					onValueChange={(next) => next && setTab(next as TimelineTab)}
+					onValueChange={(next) => {
+						// The group clears its value when you click the active item;
+						// a timeline with no filter at all is not a state it has.
+						if (next) void setTab(next as TimelineTab);
+					}}
 					variant="outline"
 					size="sm"
 				>

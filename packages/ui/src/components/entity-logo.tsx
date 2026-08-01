@@ -7,6 +7,33 @@ import { useState } from "react";
 export type EntityLogoSize = "xs" | "sm" | "default" | "lg" | "xl";
 
 /**
+ * How the artwork behaves against a background, as resolved at enrichment time.
+ *
+ * - `opaque` — composed on its own tile; needs nothing from us.
+ * - `dark`   — dark mark on transparency; vanishes in dark mode.
+ * - `light`  — light mark on transparency; vanishes in light mode.
+ */
+export type EntityLogoTone = "opaque" | "dark" | "light";
+
+/**
+ * A surface, only for the theme where the artwork would otherwise disappear.
+ *
+ * Most brands publish one logo drawn for a white page, so on a dark row a black
+ * wordmark is simply not there. The alternative — a tile behind every logo —
+ * is what the note above rules out, and it would put a white square behind the
+ * icons that already arrive on their own background.
+ *
+ * `invert` rather than a coloured tile for the monochrome cases: it keeps the
+ * mark borderless, which is the whole point of this component, and a mark whose
+ * dominant colour is near-black or near-white is monochrome by definition.
+ */
+const TONE_CLASS: Record<EntityLogoTone, string> = {
+	opaque: "",
+	dark: "dark:invert",
+	light: "invert dark:invert-0",
+};
+
+/**
  * A square logo tile with an initials fallback.
  *
  * Square rather than an `Avatar`: a round crop is right for a face and wrong
@@ -23,11 +50,16 @@ export type EntityLogoSize = "xs" | "sm" | "default" | "lg" | "xl";
  */
 export function EntityLogo({
 	src,
+	darkSrc,
+	tone,
 	name,
 	size = "default",
 	className,
 }: {
 	src?: string | null;
+	/** The brand's own dark-mode artwork, when it publishes one. */
+	darkSrc?: string | null;
+	tone?: EntityLogoTone | null;
 	name: string;
 	size?: EntityLogoSize;
 	className?: string;
@@ -38,7 +70,12 @@ export function EntityLogo({
 	const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
 	const url = src?.trim() ? src : null;
+	const dark = darkSrc?.trim() ? darkSrc : null;
 	const showImage = url !== null && failedSrc !== url;
+
+	// A real dark-mode logo always beats a synthetic one, so the tone fix is
+	// skipped entirely when the brand published artwork for both.
+	const toneClass = dark ? "" : tone ? TONE_CLASS[tone] : "";
 
 	return (
 		<span
@@ -55,21 +92,41 @@ export function EntityLogo({
 			)}
 		>
 			{showImage ? (
-				<img
-					src={url}
-					alt=""
-					loading="lazy"
-					decoding="async"
-					// Several logo CDNs refuse a request that carries our origin.
-					referrerPolicy="no-referrer"
-					// A dead logo URL is common — brands move them — and the alt text of
-					// a broken image is worse than the initials we would have shown.
-					onError={() => setFailedSrc(url)}
-					// `contain`, always: cropping a logo is never the right answer, and
-					// with no border to letterbox against, a wide wordmark can use the
-					// full width instead of being inset to escape the frame.
-					className="size-full object-contain"
-				/>
+				<>
+					<img
+						src={url}
+						alt=""
+						loading="lazy"
+						decoding="async"
+						// Several logo CDNs refuse a request that carries our origin.
+						referrerPolicy="no-referrer"
+						// A dead logo URL is common — brands move them — and the alt text
+						// of a broken image is worse than the initials we would have shown.
+						onError={() => setFailedSrc(url)}
+						// `contain`, always: cropping a logo is never the right answer, and
+						// with no border to letterbox against, a wide wordmark can use the
+						// full width instead of being inset to escape the frame.
+						//
+						// Swapped by CSS rather than by reading the theme in JS: a hook
+						// would render the wrong logo on the server and flip it on hydrate.
+						className={cn(
+							"size-full object-contain",
+							dark && "dark:hidden",
+							toneClass,
+						)}
+					/>
+
+					{dark ? (
+						<img
+							src={dark}
+							alt=""
+							loading="lazy"
+							decoding="async"
+							referrerPolicy="no-referrer"
+							className="hidden size-full object-contain dark:block"
+						/>
+					) : null}
+				</>
 			) : (
 				initialsFromName(name)
 			)}

@@ -5,6 +5,7 @@ import {
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
+import { ActivityStampService } from "../crm/activity-stamp.service";
 import { blankToNull } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import type {
@@ -35,6 +36,27 @@ const ENTRY_SELECT = {
 	company: { select: { id: true, name: true } },
 	contact: { select: { id: true, firstName: true, lastName: true } },
 	deal: { select: { id: true, name: true } },
+
+	// Summaries only. An email body never rides on a list payload — the row
+	// carries a snippet, and the accordion fetches `google.thread` on expand.
+	emailThread: {
+		select: {
+			id: true,
+			messageCount: true,
+			lastMessageAt: true,
+		},
+	},
+	calendarEvent: {
+		select: {
+			id: true,
+			startsAt: true,
+			endsAt: true,
+			isAllDay: true,
+			location: true,
+			conferenceUrl: true,
+			_count: { select: { attendees: true } },
+		},
+	},
 } as const;
 
 /** Entries a `NOTE`-ish filter should keep — what someone wrote down. */
@@ -49,7 +71,10 @@ const NOTE_TYPES = [
 export class ActivitiesService {
 	private readonly logger = new Logger(ActivitiesService.name);
 
-	constructor(@InjectDatabase() private readonly db: Db) {}
+	constructor(
+		@InjectDatabase() private readonly db: Db,
+		private readonly stamp: ActivityStampService,
+	) {}
 
 	/**
 	 * A record's timeline, newest first, paged by cursor.
@@ -68,7 +93,16 @@ export class ActivitiesService {
 			// without a second count query.
 			take: input.limit + 1,
 			...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-			orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+			// By when it *happened*, not when the row was written. Those were the
+			// same thing while a human logged everything by hand, and stopped being
+			// the same thing the moment a sync started writing: a first sync stamps
+			// every thread and meeting with roughly one `createdAt`, so ordering by
+			// it would jumble a year of history into one arbitrary block. `id` breaks
+			// ties so the cursor stays deterministic.
+			orderBy: [
+				{ occurredAt: { sort: "desc", nulls: "last" } },
+				{ id: "desc" },
+			],
 			select: ENTRY_SELECT,
 		});
 
@@ -91,7 +125,7 @@ export class ActivitiesService {
 	) {
 		const anchor = this.anchor(input);
 
-		const [all, notes, upcoming, done] = await Promise.all([
+		const [all, notes, upcoming, done, email, meetings] = await Promise.all([
 			this.db.activity.count({ where: anchor }),
 			this.db.activity.count({
 				where: { ...anchor, ...filterClause("notes") },
@@ -100,9 +134,15 @@ export class ActivitiesService {
 				where: { ...anchor, ...filterClause("upcoming") },
 			}),
 			this.db.activity.count({ where: { ...anchor, ...filterClause("done") } }),
+			this.db.activity.count({
+				where: { ...anchor, ...filterClause("email") },
+			}),
+			this.db.activity.count({
+				where: { ...anchor, ...filterClause("meetings") },
+			}),
 		]);
 
-		return { all, notes, upcoming, done };
+		return { all, notes, upcoming, done, email, meetings };
 	}
 
 	async create(input: ActivityCreateInput, actingUserId: string) {
@@ -128,6 +168,11 @@ export class ActivitiesService {
 			},
 			select: ENTRY_SELECT,
 		});
+
+		await this.stamp.touch(
+			{ companyId, contactId: input.contactId, dealId: input.dealId },
+			activity.createdAt,
+		);
 
 		this.logger.log({
 			message: "Activity logged",
@@ -252,6 +297,13 @@ function filterClause(filter: TimelineFilter): Prisma.ActivityWhereInput {
 			return { type: ActivityType.TASK, completedAt: { not: null } };
 		case "history":
 			return { NOT: { type: ActivityType.TASK, completedAt: null } };
+		// Both cover what a rep logged by hand *and* what the Google sync
+		// projected — from the timeline's point of view they are the same event,
+		// and splitting them would make "did we email them?" two questions.
+		case "email":
+			return { type: ActivityType.EMAIL };
+		case "meetings":
+			return { type: ActivityType.MEETING };
 		case "all":
 			return {};
 	}
@@ -268,6 +320,26 @@ function serializeEntry(entry: Entry) {
 		completedAt: entry.completedAt?.toISOString() ?? null,
 		createdAt: entry.createdAt.toISOString(),
 		meta: entry.meta as Record<string, unknown> | null,
+
+		emailThread: entry.emailThread
+			? {
+					id: entry.emailThread.id,
+					messageCount: entry.emailThread.messageCount,
+					lastMessageAt: entry.emailThread.lastMessageAt.toISOString(),
+				}
+			: null,
+
+		calendarEvent: entry.calendarEvent
+			? {
+					id: entry.calendarEvent.id,
+					startsAt: entry.calendarEvent.startsAt.toISOString(),
+					endsAt: entry.calendarEvent.endsAt.toISOString(),
+					isAllDay: entry.calendarEvent.isAllDay,
+					location: entry.calendarEvent.location,
+					conferenceUrl: entry.calendarEvent.conferenceUrl,
+					attendeeCount: entry.calendarEvent._count.attendees,
+				}
+			: null,
 	};
 }
 

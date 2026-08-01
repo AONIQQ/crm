@@ -10,6 +10,8 @@ export type SearchHit = {
 	/** The line under the label — domain, company, whatever identifies it. */
 	detail: string | null;
 	iconUrl: string | null;
+	iconDarkUrl: string | null;
+	iconTone: string | null;
 };
 
 /** Per kind. Enough to be useful, few enough that the list stays scannable. */
@@ -40,7 +42,14 @@ export class SearchService {
 				},
 				take: PER_KIND,
 				orderBy: { name: "asc" },
-				select: { id: true, name: true, domain: true, iconUrl: true },
+				select: {
+					id: true,
+					name: true,
+					domain: true,
+					iconUrl: true,
+					iconDarkUrl: true,
+					iconTone: true,
+				},
 			}),
 			this.db.contact.findMany({
 				where: {
@@ -67,7 +76,14 @@ export class SearchService {
 				select: {
 					id: true,
 					name: true,
-					company: { select: { name: true, iconUrl: true } },
+					company: {
+						select: {
+							name: true,
+							iconUrl: true,
+							iconDarkUrl: true,
+							iconTone: true,
+						},
+					},
 				},
 			}),
 		]);
@@ -81,6 +97,8 @@ export class SearchService {
 						label: company.name,
 						detail: company.domain,
 						iconUrl: company.iconUrl,
+						iconDarkUrl: company.iconDarkUrl,
+						iconTone: company.iconTone,
 					}),
 				),
 				...contacts.map(
@@ -92,6 +110,8 @@ export class SearchService {
 							(contact.email ?? "Unnamed"),
 						detail: contact.company?.name ?? contact.email,
 						iconUrl: null,
+						iconDarkUrl: null,
+						iconTone: null,
 					}),
 				),
 				...deals.map(
@@ -101,6 +121,8 @@ export class SearchService {
 						label: deal.name,
 						detail: deal.company.name,
 						iconUrl: deal.company.iconUrl,
+						iconDarkUrl: deal.company.iconDarkUrl,
+						iconTone: deal.company.iconTone,
 					}),
 				),
 			],

@@ -76,7 +76,11 @@ execSync(
 	// bundle as a literal. Built without this, it folds to `false`, Better Auth
 	// drops the `__Secure-` cookie prefix, the app's proxy looks for the
 	// prefixed name over HTTPS and bounces every signed-in user to /sign-in.
-	{ cwd: apiDir, stdio: "inherit", env: { ...process.env, NODE_ENV: "production" } },
+	{
+		cwd: apiDir,
+		stdio: "inherit",
+		env: { ...process.env, NODE_ENV: "production" },
+	},
 );
 
 /**
@@ -183,7 +187,10 @@ for (const root of VENDOR_ROOTS) {
 }
 console.log(`  vendored ${vendorCount} packages`);
 
-writeFileSync(join(funcDir, "package.json"), JSON.stringify({ type: "module" }));
+writeFileSync(
+	join(funcDir, "package.json"),
+	JSON.stringify({ type: "module" }),
+);
 writeFileSync(
 	join(funcDir, ".vc-config.json"),
 	JSON.stringify({

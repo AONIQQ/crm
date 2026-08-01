@@ -66,13 +66,32 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 	{
 		id: "owner",
 		header: "Owner",
+		sortable: true,
 		width: "w-[16%]",
 		hideBelow: "md",
 		cell: (row) => <OwnerCell owner={row.owner} />,
 	},
 	{
+		// Hidden by default, but present: it is the table's default sort, and a
+		// default you cannot see or return to after sorting by something else is
+		// just an unexplained row order.
+		id: "createdAt",
+		header: "Created",
+		label: "Created date",
+		sortable: true,
+		align: "right",
+		width: "w-[10%]",
+		defaultHidden: true,
+		cell: (row) => (
+			<span className="text-muted-foreground" suppressHydrationWarning>
+				{relativeTimeFromIso(row.createdAt)}
+			</span>
+		),
+	},
+	{
 		id: "lastActivity",
 		header: "Last activity",
+		sortable: true,
 		align: "right",
 		width: "w-[12%]",
 		hideBelow: "sm",

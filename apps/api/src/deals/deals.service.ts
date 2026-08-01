@@ -11,6 +11,7 @@ import {
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
+import { ActivityStampService } from "../crm/activity-stamp.service";
 import { fromCents, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import {
@@ -48,6 +49,8 @@ const COMPANY_SELECT = {
 	name: true,
 	domain: true,
 	iconUrl: true,
+	iconDarkUrl: true,
+	iconTone: true,
 } as const;
 
 const LOSING = new Set<DealStage>(LOSING_DEAL_STAGES);
@@ -64,13 +67,18 @@ const SORTABLE: Record<
 	amount: (dir) => [{ amount: dir }],
 	expectedCloseDate: (dir) => [{ expectedCloseDate: dir }],
 	createdAt: (dir) => [{ createdAt: dir }],
+	owner: (dir) => [{ owner: { name: dir } }, { name: "asc" }],
+	lastActivity: (dir) => [{ lastActivityAt: { sort: dir, nulls: "last" } }],
 };
 
 @Injectable()
 export class DealsService {
 	private readonly logger = new Logger(DealsService.name);
 
-	constructor(@InjectDatabase() private readonly db: Db) {}
+	constructor(
+		@InjectDatabase() private readonly db: Db,
+		private readonly stamp: ActivityStampService,
+	) {}
 
 	async list(input: DealListInput) {
 		const where = this.buildWhere(input);
@@ -81,10 +89,7 @@ export class DealsService {
 				where,
 				skip,
 				take,
-				orderBy: resolveOrderBy(input, SORTABLE, [
-					{ stage: "asc" },
-					{ expectedCloseDate: "asc" },
-				]),
+				orderBy: resolveOrderBy(input, SORTABLE, [{ createdAt: "desc" }]),
 				select: {
 					id: true,
 					name: true,
@@ -95,11 +100,8 @@ export class DealsService {
 					closedAt: true,
 					company: { select: COMPANY_SELECT },
 					owner: { select: OWNER_SELECT },
-					activities: {
-						take: 1,
-						orderBy: { createdAt: "desc" },
-						select: { createdAt: true },
-					},
+					lastActivityAt: true,
+					createdAt: true,
 				},
 			}),
 			this.db.deal.count({ where }),
@@ -115,12 +117,20 @@ export class DealsService {
 
 		return {
 			rows: rows.map(
-				({ activities, amount, expectedCloseDate, closedAt, ...row }) => ({
+				({
+					amount,
+					expectedCloseDate,
+					closedAt,
+					lastActivityAt,
+					createdAt,
+					...row
+				}) => ({
 					...row,
 					amountCents: toCents(amount),
 					expectedCloseDate: expectedCloseDate?.toISOString() ?? null,
 					closedAt: closedAt?.toISOString() ?? null,
-					lastActivityAt: activities[0]?.createdAt.toISOString() ?? null,
+					lastActivityAt: lastActivityAt?.toISOString() ?? null,
+					createdAt: createdAt.toISOString(),
 				}),
 			),
 			total,
@@ -295,6 +305,11 @@ export class DealsService {
 				},
 			}),
 		]);
+
+		await this.stamp.touch(
+			{ companyId: deal.companyId, dealId: deal.id },
+			new Date(),
+		);
 
 		this.logger.log({
 			message: "Deal stage changed",

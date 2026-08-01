@@ -3,6 +3,7 @@ import {
 	type EnrichmentStatus,
 	type Prisma,
 	Prisma as PrismaNamespace,
+	type RecordSource,
 } from "@crm/db";
 import {
 	BadRequestException,
@@ -44,10 +45,13 @@ export type CompanyRow = {
 	name: string;
 	domain: string | null;
 	iconUrl: string | null;
+	iconDarkUrl: string | null;
+	iconTone: string | null;
 	logoUrl: string | null;
 	brandColor: string | null;
 	industry: string | null;
 	enrichmentStatus: EnrichmentStatus;
+	source: RecordSource;
 	owner: {
 		id: string;
 		name: string;
@@ -58,6 +62,7 @@ export type CompanyRow = {
 	openDealCount: number;
 	/** ISO-8601, or null when nothing has happened yet. */
 	lastActivityAt: string | null;
+	createdAt: string;
 };
 
 /**
@@ -66,10 +71,6 @@ export type CompanyRow = {
  * Spelled out rather than derived from the column id so `?sort=` can never
  * reach Prisma as an arbitrary field name — and because ordering by a relation
  * count is not a flat `{ [id]: dir }`.
- *
- * Contacts and open deals sort by relation count, which Prisma can do. Last
- * activity cannot: ordering by `max(activity.createdAt)` is an aggregate over a
- * relation, which has no Prisma ordering, so that column is display-only.
  */
 const SORTABLE: Record<
 	string,
@@ -81,6 +82,12 @@ const SORTABLE: Record<
 	createdAt: (dir) => ({ createdAt: dir }),
 	contacts: (dir) => ({ contacts: { _count: dir } }),
 	deals: (dir) => ({ deals: { _count: dir } }),
+	// By the owner's name, not their id — nobody scans a list of cuids.
+	// Unassigned rows sort last either way: they are the least interesting.
+	owner: (dir) => ({ owner: { name: dir } }),
+	// A real column, so this is an index scan. Never-touched rows sort last in
+	// both directions, because "no activity" is not "the oldest activity".
+	lastActivity: (dir) => ({ lastActivityAt: { sort: dir, nulls: "last" } }),
 };
 
 @Injectable()
@@ -101,16 +108,21 @@ export class CompaniesService {
 				where,
 				skip,
 				take,
-				orderBy: resolveOrderBy(input, SORTABLE, { name: "asc" }),
+				orderBy: resolveOrderBy(input, SORTABLE, {
+					createdAt: "desc",
+				}),
 				select: {
 					id: true,
 					name: true,
 					domain: true,
 					iconUrl: true,
+					iconDarkUrl: true,
+					iconTone: true,
 					logoUrl: true,
 					brandColor: true,
 					industry: true,
 					enrichmentStatus: true,
+					source: true,
 					owner: { select: OWNER_SELECT },
 					_count: {
 						select: {
@@ -118,14 +130,8 @@ export class CompaniesService {
 							deals: { where: { stage: { in: [...OPEN_DEAL_STAGES] } } },
 						},
 					},
-					// One row per company via a lateral join — cheap at a page of 25,
-					// and the only way to get "last activity" without an aggregate
-					// Prisma cannot express.
-					activities: {
-						take: 1,
-						orderBy: { createdAt: "desc" },
-						select: { createdAt: true },
-					},
+					lastActivityAt: true,
+					createdAt: true,
 				},
 			}),
 			this.db.company.count({ where }),
@@ -138,14 +144,18 @@ export class CompaniesService {
 				name: row.name,
 				domain: row.domain,
 				iconUrl: row.iconUrl,
+				iconDarkUrl: row.iconDarkUrl,
+				iconTone: row.iconTone,
 				logoUrl: row.logoUrl,
 				brandColor: row.brandColor,
 				industry: row.industry,
 				enrichmentStatus: row.enrichmentStatus,
+				source: row.source,
 				owner: row.owner,
 				contactCount: row._count.contacts,
 				openDealCount: row._count.deals,
-				lastActivityAt: row.activities[0]?.createdAt.toISOString() ?? null,
+				lastActivityAt: row.lastActivityAt?.toISOString() ?? null,
+				createdAt: row.createdAt.toISOString(),
 			})),
 			total,
 			facetCounts,
@@ -164,6 +174,8 @@ export class CompaniesService {
 				logoUrl: true,
 				logoDarkUrl: true,
 				iconUrl: true,
+				iconDarkUrl: true,
+				iconTone: true,
 				brandColor: true,
 				industry: true,
 				subIndustry: true,
@@ -181,6 +193,7 @@ export class CompaniesService {
 				enrichmentStatus: true,
 				enrichedAt: true,
 				enrichmentError: true,
+				source: true,
 				createdAt: true,
 				owner: { select: OWNER_SELECT },
 				primaryContact: {
@@ -445,6 +458,10 @@ export class CompaniesService {
 			where.enrichmentStatus = input.enrichment as EnrichmentStatus;
 		}
 
+		if (input.source !== FACET_ALL) {
+			where.source = input.source as RecordSource;
+		}
+
 		return where;
 	}
 
@@ -458,7 +475,7 @@ export class CompaniesService {
 	private async facetCounts(input: CompanyListInput) {
 		const where = this.searchFilter(input.q);
 
-		const [owners, industries, enrichment] = await Promise.all([
+		const [owners, industries, enrichment, sources] = await Promise.all([
 			this.db.company.groupBy({
 				by: ["ownerId"],
 				where,
@@ -474,12 +491,18 @@ export class CompaniesService {
 				where,
 				_count: { _all: true },
 			}),
+			this.db.company.groupBy({
+				by: ["source"],
+				where,
+				_count: { _all: true },
+			}),
 		]);
 
 		return {
 			owner: countsByKey(owners, "ownerId", FACET_UNASSIGNED),
 			industry: countsByKey(industries, "industry"),
 			enrichment: countsByKey(enrichment, "enrichmentStatus"),
+			source: countsByKey(sources, "source"),
 		};
 	}
 

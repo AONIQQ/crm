@@ -46,6 +46,14 @@ export type CrmCache = {
 	deal(id?: string, options?: Options): Promise<void>;
 	/** A note, a task, or a task being ticked off. */
 	activity(options?: Options): Promise<void>;
+	/**
+	 * Connecting, disconnecting, a manual sync, or suppressing a domain.
+	 *
+	 * A *scheduled* sync is not this: nothing the browser did caused it, so it is
+	 * polled rather than invalidated (see `sync-status`). This is only for the
+	 * writes a rep triggers from the settings page.
+	 */
+	google(options?: Options): Promise<void>;
 	/** An import writes across every table, so nothing is assumed to survive. */
 	everything(): Promise<void>;
 };
@@ -158,6 +166,23 @@ export function useCrmCache(): CrmCache {
 					trpc.companies.byId.queryKey(),
 					trpc.contacts.byId.queryKey(),
 					trpc.deals.byId.queryKey(),
+					trpc.dashboard.summary.queryKey(),
+				],
+				options,
+			),
+
+		google: (options) =>
+			run(
+				[trpc.google.status.queryKey()],
+				[
+					// A sync writes threads and meetings onto timelines, and
+					// auto-creation writes whole companies and contacts — so a
+					// disconnect-and-purge has to reach the lists too, not just the
+					// settings page it was pressed on.
+					...activityKeys(),
+					...listKeys(),
+					trpc.companies.byId.queryKey(),
+					trpc.contacts.byId.queryKey(),
 					trpc.dashboard.summary.queryKey(),
 				],
 				options,

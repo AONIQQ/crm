@@ -6,6 +6,8 @@ export const contactListInput = listInput.extend({
 	owner: z.string().default("all"),
 	/** A company id, `"none"`, or `"all"`. */
 	company: z.string().default("all"),
+	/** A `RecordSource`, or `"all"` — how a bad auto-create rule gets undone. */
+	source: z.string().default("all"),
 });
 
 export type ContactListInput = z.infer<typeof contactListInput>;

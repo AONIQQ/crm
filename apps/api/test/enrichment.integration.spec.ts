@@ -50,6 +50,9 @@ const { ContextDevClient } = await import(
 	"../src/enrichment/context-dev.client"
 );
 const { EnrichmentQueue } = await import("../src/enrichment/enrichment.queue");
+const { ActivityStampService } = await import(
+	"../src/crm/activity-stamp.service"
+);
 const { EnrichmentService } = await import(
 	"../src/enrichment/enrichment.service"
 );
@@ -112,7 +115,12 @@ let userId: string;
 
 beforeAll(async () => {
 	const client = new ContextDevClient(config);
-	service = new EnrichmentService(db, client, new FastQueue());
+	service = new EnrichmentService(
+		db,
+		client,
+		new FastQueue(),
+		new ActivityStampService(db),
+	);
 
 	const user = await db.user.upsert({
 		where: { email: "enrichment-test@localhost" },

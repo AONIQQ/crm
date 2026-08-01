@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
+import { ContactEnrichmentService } from "./contact-enrichment.service";
 import { ContextDevClient } from "./context-dev.client";
 import { EnrichmentQueue } from "./enrichment.queue";
 import { EnrichmentService } from "./enrichment.service";
+import { LinkdapiClient } from "./linkdapi.client";
 
 /**
  * The agent.
@@ -11,7 +13,13 @@ import { EnrichmentService } from "./enrichment.service";
  * HTTP client behind it.
  */
 @Module({
-	providers: [ContextDevClient, EnrichmentQueue, EnrichmentService],
-	exports: [EnrichmentService],
+	providers: [
+		ContextDevClient,
+		EnrichmentQueue,
+		EnrichmentService,
+		ContactEnrichmentService,
+		LinkdapiClient,
+	],
+	exports: [EnrichmentService, ContactEnrichmentService],
 })
 export class EnrichmentModule {}

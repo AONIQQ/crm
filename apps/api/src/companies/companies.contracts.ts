@@ -13,6 +13,13 @@ export const companyListInput = listInput.extend({
 	industry: z.string().default("all"),
 	/** An `EnrichmentStatus`, or `"all"`. */
 	enrichment: z.string().default("all"),
+	/**
+	 * A `RecordSource`, or `"all"`.
+	 *
+	 * What makes an auto-create rule reversible: filter to `EMAIL`, see exactly
+	 * what the sync decided, and delete the lot if it got it wrong.
+	 */
+	source: z.string().default("all"),
 });
 
 export type CompanyListInput = z.infer<typeof companyListInput>;
