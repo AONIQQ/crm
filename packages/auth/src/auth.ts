@@ -1,8 +1,10 @@
 import { db } from "@crm/db";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError } from "better-auth/api";
 import { env } from "./env";
 import { SYNC_SCOPES } from "./scopes";
+import { isWorkspaceEmail, PRIMARY_WORKSPACE_DOMAIN } from "./workspace";
 
 const socialProviders: NonNullable<BetterAuthOptions["socialProviders"]> = {};
 
@@ -32,6 +34,12 @@ if (env.google) {
 		// token. The missing-refresh-token case is detected and repaired rather
 		// than pre-empted.
 		accessType: "offline",
+
+		// Google only offers accounts on our domain in the chooser. This is a
+		// convenience, not the control — `hd` is a hint the client sends and a
+		// determined caller can omit it, so the real check is the database hook
+		// below, which sees the verified email.
+		hd: PRIMARY_WORKSPACE_DOMAIN,
 	};
 }
 
@@ -81,7 +89,31 @@ export const auth = betterAuth({
 
 	trustedOrigins: [...env.trustedOrigins],
 	hooks: {},
-	databaseHooks: {},
+
+	databaseHooks: {
+		user: {
+			create: {
+				/**
+				 * The actual door.
+				 *
+				 * Runs against the profile Google verified, before a row exists, so
+				 * a personal account that gets past the `hd` hint never becomes a
+				 * user. This is a single-tenant internal tool: an account outside
+				 * the workspace has nothing legitimate to do here, and every record
+				 * is visible to every signed-in person.
+				 */
+				before: async (user) => {
+					if (!isWorkspaceEmail(user.email)) {
+						throw new APIError("FORBIDDEN", {
+							message: `Comp AI CRM is internal. Sign in with your @${PRIMARY_WORKSPACE_DOMAIN} account.`,
+						});
+					}
+
+					return { data: user };
+				},
+			},
+		},
+	},
 });
 
 export type Auth = typeof auth;

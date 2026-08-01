@@ -8,3 +8,8 @@ export {
 	REQUIRED_SCOPES,
 	SYNC_SCOPES,
 } from "./scopes";
+export {
+	isWorkspaceEmail,
+	PRIMARY_WORKSPACE_DOMAIN,
+	WORKSPACE_DOMAINS,
+} from "./workspace";

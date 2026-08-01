@@ -2,12 +2,12 @@ import { db } from "@crm/db";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { EnrichmentLogService } from "../src/crm/enrichment-log.service";
 import { AvatarService } from "../src/enrichment/avatar.service";
-import { LinkdapiClient } from "../src/enrichment/linkdapi.client";
 import {
 	looksLikeSameCompany,
 	nameMatchesLocalPart,
 	searchTerms,
 } from "../src/enrichment/contact-enrichment.service";
+import { LinkdapiClient } from "../src/enrichment/linkdapi.client";
 
 /**
  * Fills in every contact we can identify, once.

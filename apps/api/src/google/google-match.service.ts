@@ -1,3 +1,4 @@
+import { WORKSPACE_DOMAINS } from "@crm/auth/workspace";
 import { type Db, RecordSource } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
 import { EnrichmentLogService } from "../crm/enrichment-log.service";
@@ -98,7 +99,11 @@ export class GoogleMatchService {
 		const users = await this.db.user.findMany({ select: { email: true } });
 
 		const addresses = new Set<string>();
-		const domains = new Set<string>();
+		// Seeded with the workspace domains rather than relying only on what the
+		// User table happens to contain. Sign-in is restricted to these, so they
+		// are internal by definition — and this holds on an empty database, and
+		// for colleagues who have never signed in and so are not users yet.
+		const domains = new Set<string>(WORKSPACE_DOMAINS);
 
 		for (const user of users) {
 			const email = user.email.toLowerCase();
