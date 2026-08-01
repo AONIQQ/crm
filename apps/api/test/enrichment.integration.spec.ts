@@ -53,6 +53,9 @@ const { EnrichmentQueue } = await import("../src/enrichment/enrichment.queue");
 const { ActivityStampService } = await import(
 	"../src/crm/activity-stamp.service"
 );
+const { EnrichmentLogService } = await import(
+	"../src/crm/enrichment-log.service"
+);
 const { EnrichmentService } = await import(
 	"../src/enrichment/enrichment.service"
 );
@@ -120,6 +123,7 @@ beforeAll(async () => {
 		client,
 		new FastQueue(),
 		new ActivityStampService(db),
+		new EnrichmentLogService(db, new ActivityStampService(db)),
 	);
 
 	const user = await db.user.upsert({

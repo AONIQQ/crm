@@ -1,6 +1,7 @@
 import { type Db, RecordSource } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
 import { domainFromEmail } from "../companies/domain";
+import { EnrichmentLogService } from "../crm/enrichment-log.service";
 import { InjectDatabase } from "../database/database.constants";
 import { isDerivedName, splitName } from "../google/participants";
 import { ContextDevClient } from "./context-dev.client";
@@ -42,6 +43,7 @@ export class ContactEnrichmentService {
 		private readonly context: ContextDevClient,
 		private readonly queue: EnrichmentQueue,
 		private readonly linkedin: LinkdapiClient,
+		private readonly log: EnrichmentLogService,
 	) {}
 
 	get enabled(): boolean {
@@ -117,6 +119,14 @@ export class ContactEnrichmentService {
 					? {}
 					: { linkedinUrl: found.linkedinUrl ?? null }),
 			},
+		});
+
+		await this.log.record({
+			contactId,
+			companyId: null,
+			subject: "Identified from LinkedIn",
+			body: `Matched to ${found.fullName}${found.title ? `, ${found.title}` : ""}.\n${found.sourceUrl}`,
+			meta: { source: "linkedin", sourceUrl: found.sourceUrl },
 		});
 
 		this.logger.log({

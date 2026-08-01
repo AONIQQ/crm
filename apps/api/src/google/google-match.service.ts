@@ -1,5 +1,6 @@
 import { type Db, RecordSource } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
+import { EnrichmentLogService } from "../crm/enrichment-log.service";
 import { InjectDatabase } from "../database/database.constants";
 import { ContactEnrichmentService } from "../enrichment/contact-enrichment.service";
 import { EnrichmentService } from "../enrichment/enrichment.service";
@@ -74,6 +75,7 @@ export class GoogleMatchService {
 		@InjectDatabase() private readonly db: Db,
 		private readonly enrichment: EnrichmentService,
 		private readonly contacts: ContactEnrichmentService,
+		private readonly log: EnrichmentLogService,
 	) {}
 
 	/**
@@ -236,6 +238,15 @@ export class GoogleMatchService {
 			request,
 		);
 
+		await this.log.record({
+			companyId,
+			subject: "Company added from your inbox",
+			body:
+				`Created because you ${request.source === "CALENDAR" ? "met" : "emailed"} ` +
+				`someone at ${domain}.`,
+			meta: { source: request.source, domain },
+		});
+
 		this.logger.log({
 			message: "Company auto-created from Google sync",
 			companyId,
@@ -262,6 +273,11 @@ export class GoogleMatchService {
 
 		// `Contact.email` is unique, so this is the race-safe form: two reps'
 		// syncs hitting the same new person resolve to one row.
+		const existing = await this.db.contact.findUnique({
+			where: { email: person.email },
+			select: { id: true },
+		});
+
 		const contact = await this.db.contact.upsert({
 			where: { email: person.email },
 			create: {
@@ -276,6 +292,16 @@ export class GoogleMatchService {
 			update: {},
 			select: { id: true, firstName: true, lastName: true },
 		});
+
+		if (!existing) {
+			await this.log.record({
+				contactId: contact.id,
+				companyId,
+				subject: "Contact added from your inbox",
+				body: `${person.email} appeared in a ${request.source === "CALENDAR" ? "meeting" : "thread"}.`,
+				meta: { source: request.source },
+			});
+		}
 
 		// Google hands back an attendee with no `displayName` far more often than
 		// it hands back one with a name, so a contact is routinely created from the

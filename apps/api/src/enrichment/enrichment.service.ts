@@ -2,6 +2,10 @@ import { ActivityType, type Db, EnrichmentStatus } from "@crm/db";
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { domainFromEmail, normalizeDomain } from "../companies/domain";
 import { ActivityStampService } from "../crm/activity-stamp.service";
+import {
+	describeFilled,
+	EnrichmentLogService,
+} from "../crm/enrichment-log.service";
 import { InjectDatabase } from "../database/database.constants";
 import { brandToUpdate, filledFields } from "./brand-mapping";
 import { ContextDevClient } from "./context-dev.client";
@@ -51,6 +55,7 @@ export class EnrichmentService {
 		private readonly context: ContextDevClient,
 		private readonly queue: EnrichmentQueue,
 		private readonly stamp: ActivityStampService,
+		private readonly log: EnrichmentLogService,
 	) {}
 
 	/**
@@ -183,11 +188,20 @@ export class EnrichmentService {
 			}),
 		]);
 
+		const filled = filledFields(update);
+
+		await this.log.record({
+			companyId,
+			subject: "Enriched from Context.dev",
+			body: describeFilled(filled),
+			meta: { source: "context.dev", endpoint: "brand/retrieve", filled },
+		});
+
 		this.logger.log({
 			message: "Company enriched",
 			companyId,
 			domain,
-			filled: filledFields(update),
+			filled,
 		});
 	}
 
@@ -245,6 +259,13 @@ export class EnrichmentService {
 		// Created from a lookup we already have — apply it rather than paying for
 		// the same brand twice.
 		this.enqueueCompany(company.id);
+
+		await this.log.record({
+			companyId: company.id,
+			subject: "Company added automatically",
+			body: `Created from the domain ${domain}. Looking up brand details.`,
+			meta: { source: "email-domain", domain },
+		});
 
 		this.logger.log({
 			message: "Company created from a contact's email domain",
