@@ -4,6 +4,7 @@ import { domainFromEmail } from "../companies/domain";
 import { EnrichmentLogService } from "../crm/enrichment-log.service";
 import { InjectDatabase } from "../database/database.constants";
 import { isDerivedName, splitName } from "../google/participants";
+import { AvatarService } from "./avatar.service";
 import { ContextDevClient } from "./context-dev.client";
 import { EnrichmentQueue } from "./enrichment.queue";
 import { LinkdapiClient } from "./linkdapi.client";
@@ -12,6 +13,8 @@ type Resolved = {
 	fullName: string;
 	title: string | null;
 	linkedinUrl: string | null;
+	/** LinkedIn's signed CDN URL — mirrored, never stored as-is. */
+	pictureUrl: string | null;
 	sourceUrl: string;
 };
 
@@ -44,6 +47,7 @@ export class ContactEnrichmentService {
 		private readonly queue: EnrichmentQueue,
 		private readonly linkedin: LinkdapiClient,
 		private readonly log: EnrichmentLogService,
+		private readonly avatars: AvatarService,
 	) {}
 
 	get enabled(): boolean {
@@ -74,6 +78,7 @@ export class ContactEnrichmentService {
 				email: true,
 				title: true,
 				linkedinUrl: true,
+				imageUrl: true,
 				source: true,
 				company: { select: { name: true, domain: true } },
 			},
@@ -108,11 +113,18 @@ export class ContactEnrichmentService {
 
 		const { firstName, lastName } = splitName(found.fullName, contact.email);
 
+		// Mirrored before the write so the record never points at a URL that
+		// expires. A failure here just means no photo.
+		const imageUrl = found.pictureUrl
+			? await this.avatars.mirror(found.pictureUrl, contactId)
+			: null;
+
 		await this.db.contact.update({
 			where: { id: contactId },
 			data: {
 				firstName,
 				lastName,
+				...(imageUrl && !contact.imageUrl ? { imageUrl } : {}),
 				// Only fills gaps — never overwrites what is already there.
 				...(contact.title ? {} : { title: found.title ?? null }),
 				...(contact.linkedinUrl
@@ -199,6 +211,7 @@ export class ContactEnrichmentService {
 				fullName: person.fullName,
 				title: person.headline,
 				linkedinUrl: person.profileUrl,
+				pictureUrl: person.pictureUrl,
 				sourceUrl: person.profileUrl,
 			};
 		}

@@ -54,6 +54,8 @@ export type ContactRow = {
 	lastName: string | null;
 	email: string | null;
 	title: string | null;
+	/** Our mirrored copy, never LinkedIn's expiring CDN URL. */
+	imageUrl: string | null;
 	company: {
 		id: string;
 		name: string;
@@ -118,6 +120,7 @@ export class ContactsService {
 					lastName: true,
 					email: true,
 					title: true,
+					imageUrl: true,
 					source: true,
 					company: { select: COMPANY_SELECT },
 					owner: { select: OWNER_SELECT },
@@ -151,6 +154,7 @@ export class ContactsService {
 				phone: true,
 				title: true,
 				linkedinUrl: true,
+				imageUrl: true,
 				createdAt: true,
 				company: {
 					select: { ...COMPANY_SELECT, industry: true, primaryContactId: true },

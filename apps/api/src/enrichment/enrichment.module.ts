@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AvatarService } from "./avatar.service";
 import { ContactEnrichmentService } from "./contact-enrichment.service";
 import { ContextDevClient } from "./context-dev.client";
 import { EnrichmentQueue } from "./enrichment.queue";
@@ -19,6 +20,7 @@ import { LinkdapiClient } from "./linkdapi.client";
 		EnrichmentService,
 		ContactEnrichmentService,
 		LinkdapiClient,
+		AvatarService,
 	],
 	exports: [EnrichmentService, ContactEnrichmentService],
 })

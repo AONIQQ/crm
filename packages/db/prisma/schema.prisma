@@ -248,6 +248,11 @@ model Contact {
   phone       String?
   title       String?
   linkedinUrl String?
+  /// The contact's photo, mirrored into Vercel Blob.
+  ///
+  /// Never LinkedIn's own CDN URL: those carry an `e=` expiry parameter and go
+  /// dead within weeks, so a hotlinked avatar silently becomes a broken image.
+  imageUrl    String?
   companyId   String?
   company     Company? @relation("CompanyContacts", fields: [companyId], references: [id], onDelete: SetNull)
   ownerId     String?

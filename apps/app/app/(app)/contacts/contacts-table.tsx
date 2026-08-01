@@ -1,12 +1,13 @@
 "use client";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@crm/ui/components/avatar";
 import {
 	DataTable,
 	type DataTableColumn,
 	type DataTableFacet,
 } from "@crm/ui/components/data-table";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
-import { relativeTimeFromIso } from "@crm/ui/lib/format";
+import { initialsFromName, relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { CompanyCell } from "@/components/crm/company-cell";
 import { contactName } from "@/components/crm/contact-name";
@@ -27,7 +28,13 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 		hideable: false,
 		width: "w-[22%]",
 		cell: (row) => (
-			<span className="truncate font-medium">{contactName(row)}</span>
+			<span className="flex min-w-0 items-center gap-2">
+				<Avatar size="sm">
+					{row.imageUrl ? <AvatarImage alt="" src={row.imageUrl} /> : null}
+					<AvatarFallback>{initialsFromName(contactName(row))}</AvatarFallback>
+				</Avatar>
+				<span className="truncate font-medium">{contactName(row)}</span>
+			</span>
 		),
 	},
 	{
