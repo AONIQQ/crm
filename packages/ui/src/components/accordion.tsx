@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@crm/ui/lib/utils";
+import { cva, type VariantProps } from "class-variance-authority";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
 import type * as React from "react";
@@ -31,19 +32,37 @@ function AccordionItem({
 	);
 }
 
+const accordionTriggerVariants = cva(
+	"group/accordion-trigger relative flex items-start rounded-none border border-transparent text-left outline-none transition-all focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:after:border-ring disabled:pointer-events-none disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:text-muted-foreground",
+	{
+		variants: {
+			// `subtle` is the one that belongs inside a record sheet: a line of
+			// small print that happens to open, rather than a heading with a rule
+			// under it. The panel is `text-xs` throughout and a `text-sm` trigger
+			// in the middle of it reads as a different component.
+			variant: {
+				default:
+					"flex-1 justify-between py-2.5 font-medium text-sm hover:underline **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4",
+				subtle:
+					"w-fit max-w-full items-center gap-1 py-1 text-muted-foreground text-xs hover:text-foreground **:data-[slot=accordion-trigger-icon]:size-3",
+			},
+		},
+		defaultVariants: { variant: "default" },
+	},
+);
+
 function AccordionTrigger({
 	className,
+	variant,
 	children,
 	...props
-}: React.ComponentProps<typeof AccordionPrimitive.Trigger>) {
+}: React.ComponentProps<typeof AccordionPrimitive.Trigger> &
+	VariantProps<typeof accordionTriggerVariants>) {
 	return (
 		<AccordionPrimitive.Header className="flex">
 			<AccordionPrimitive.Trigger
 				data-slot="accordion-trigger"
-				className={cn(
-					"group/accordion-trigger relative flex flex-1 items-start justify-between rounded-none border border-transparent py-2.5 text-left font-medium text-sm outline-none transition-all hover:underline focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:after:border-ring disabled:pointer-events-none disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4 **:data-[slot=accordion-trigger-icon]:text-muted-foreground",
-					className,
-				)}
+				className={cn(accordionTriggerVariants({ variant }), className)}
 				{...props}
 			>
 				{children}
@@ -68,7 +87,7 @@ function AccordionContent({
 	return (
 		<AccordionPrimitive.Content
 			data-slot="accordion-content"
-			className="overflow-hidden text-sm data-closed:animate-accordion-up data-open:animate-accordion-down"
+			className="overflow-hidden text-xs data-closed:animate-accordion-up data-open:animate-accordion-down"
 			{...props}
 		>
 			<div
@@ -83,4 +102,10 @@ function AccordionContent({
 	);
 }
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionContent };
+export {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+	accordionTriggerVariants,
+};

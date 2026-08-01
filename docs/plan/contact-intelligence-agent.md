@@ -272,7 +272,7 @@ plan does not have to.
 | `web_search`, `web_fetch` | Half of `lib/perplexity.ts`. Perplexity stays for *cited synthesis*; plain retrieval is a built-in. |
 | `bash`, `read_file`, `write_file`, `glob`, `grep` | A `/workspace` dossier per contact: dump the profile JSON, grep it, diff this month's against last month's. Job-change detection becomes a `diff`. |
 | `todo` | Durable per-session task list. Multi-step research stops living in the prompt. |
-| `ask_question` | The agent asks the rep — "two Bighams at HubSpot, which one?" — and parks. Worth more than any heuristic we could write for that case. |
+| `ask_question` | The agent asks the rep — "two Marchettis at Fernhill, which one?" — and parks. Worth more than any heuristic we could write for that case. |
 | `agent` (root-only) | Parallel research fan-out. Meeting prep with four attendees is four children, not four sequential passes. |
 | `load_skill` | Procedures load on demand instead of bloating every turn. |
 
@@ -449,8 +449,8 @@ gives the record something neither incumbent has:
   on the page.
 - **Interrupt and redirect.** "Is he still at Fleetio?" continues the same
   durable session, with the same history, on the same record.
-- **Answer its questions.** `ask_question` renders inline: two Bighams at
-  HubSpot, pick one. The answer is worth more than any tiebreak heuristic.
+- **Answer its questions.** `ask_question` renders inline: two Marchettis at
+  Fernhill, pick one. The answer is worth more than any tiebreak heuristic.
 - **Replay.** Sessions are durable for 30 days and the stream is rewindable, so
   "why does it think that?" is a question with an answer.
 

@@ -22,6 +22,7 @@ import {
 import { formatMoney } from "@crm/ui/lib/format";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { AgentPanel } from "@/components/crm/agent-panel";
 import { OPEN_STAGES } from "@/components/crm/deal-stage";
 import { EnrichmentActions } from "@/components/crm/enrichment-actions";
 import {
@@ -42,6 +43,7 @@ import {
 	DetailSheetBody,
 	DetailSheetEmpty,
 	DetailSheetProperties,
+	DetailSheetProse,
 	DetailSheetSection,
 	DetailSheetStat,
 	DetailSheetStats,
@@ -211,6 +213,14 @@ export function CompanySheet({ companyId }: { companyId: string }) {
 					value: "activity",
 					label: "Activity",
 					content: <Timeline anchor={{ companyId: company.id }} />,
+				},
+				{
+					value: "agent",
+					label: "Agent",
+					// Bare, not inside `DetailSheetBody`: the panel brings its own
+					// scroll container, and nesting two gives the sheet two
+					// scrollbars.
+					content: <AgentPanel record={{ kind: "company", id: company.id }} />,
 				},
 			]
 		: [];
@@ -386,9 +396,7 @@ function CompanyOverview({ company }: { company: Company }) {
 
 			{company.description ? (
 				<DetailSheetSection title="About">
-					<p className="text-pretty text-muted-foreground text-sm/6">
-						{company.description}
-					</p>
+					<DetailSheetProse>{company.description}</DetailSheetProse>
 				</DetailSheetSection>
 			) : null}
 

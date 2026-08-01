@@ -37,7 +37,7 @@ direction that makes it look useful.
   cannot: never overwrite a human, never re-offer a dismissal, never write
   without a primary source.
 - The bands are behaviour, not labels. `PROBABLE` means *a rep decides*, and
-  that is a correct outcome — four Bighams work at HubSpot.
+  that is a correct outcome — four Marchettis work at Fernhill.
 
 Adding a fact field means adding it to `FIELDS` in `lib/facts.ts` **and** to
 `FACT_COLUMNS` in `apps/api/src/contacts/contacts.service.ts`, which is where an
@@ -99,13 +99,22 @@ The contact sheet's **Agent** tab talks to a running agent. The path:
 
 ```
 browser  →  /eve/v1/*  (same origin, session cookie)
+              + x-crm-contact: the record the rep has open
          →  apps/app/app/eve/v1/[...path]/route.ts
               checks the Better Auth session
               strips the cookie
               mints a 2-minute HS256 token naming the rep
+              and carrying the contact id
          →  AGENT_URL/eve/v1/*
               agent/channels/eve.ts → repFromCrm() verifies it
+              instructions/task.ts reads attributes.contactId
 ```
+
+**The record travels in the token, never in the message.** The panel used to
+prefix everything a rep typed with `About contact <cuid> (Name):` so the agent
+knew what it was looking at, which meant the rep read their own question back
+with plumbing bolted to the front. The claim reaches the agent through the same
+`session.auth.attributes` path the dispatcher uses, so the message stays theirs.
 
 Mounted at `/eve/v1/*` deliberately: that is where `useEveAgent()` looks by
 default, so the hook needs no `host` and there is no CORS and no cross-site
@@ -127,12 +136,93 @@ Three things worth knowing before you touch it:
   The panel stops working; the agent keeps running its own schedule. An
   optional capability's absence must never widen access.
 
+### The panel knows which record it is on
+
+`lib/agent-record.ts` is the single place that maps a record kind to everything
+downstream: the header the panel sends, the claim the proxy mints, the field a
+conversation is filed under, and the questions offered on an empty thread. A
+contact is asked "Who is this person?", a company "What do they do?", a deal
+"Where does this stand?" — offering the first of those on a company is the tell
+that a chat box was bolted on rather than built into the record.
+
+The agent gets the same context: `instructions/task.ts` opens a session with a
+preamble built from the record, so a deal session starts knowing the stage, the
+amount, the close date and who is on it, rather than spending its first two tool
+calls finding out.
+
+Adding a fourth kind is one entry in `COPY` plus a branch in the agent's
+preamble — not four edits in four layers.
+
+### Conversations are kept
+
+A record accumulates conversations, and they survive a reload. `AgentConversation`
+holds the *handle* — the durable eve session id plus its cursor — while the
+transcript itself is already in `AgentEvent`, written by the audit hook. Nothing
+is stored twice.
+
+- **Resuming.** The panel passes the saved cursor as `initialSession`, so
+  reopening a contact continues last week's thread rather than starting another.
+  eve keeps sessions for 30 days.
+- **Replay from the start.** `streamIndex: 0` on resume, deliberately — the
+  saved index is where the *last reader* stopped, and a reopened thread should
+  show what was said in it, not only what has happened since.
+- **Which thread is open lives in the URL** (`?thread=`), like every other view
+  state in the sheet, so a refresh keeps your place and a conversation is a link.
+  It is cleared when the record or the tab changes, by the same rule that drops
+  a half-typed quick-add form.
+- **Nothing mounts until the list has loaded.** Rendering a thread while the
+  history is still in flight starts a *new* eve session and then remounts onto
+  the real one — which presents as "the history only appears if I refresh".
+- **The thread the panel landed on is captured once.** Re-deriving "the latest"
+  as the list changes would swap the open conversation out from under a live
+  answer the moment the first save adds a row. `resolveThread` in
+  `lib/agent-transcript.ts` holds the rule, and it is tested.
+- **The transcript refetches on every mount** (`refetchOnMount: "always"`).
+  Switching tabs unmounts the panel and tears the live stream down with it, so
+  coming back rebuilds from the stored events — and a cached rebuild is the
+  transcript as it stood *before* the last answer. That presented as "the newest
+  reply is missing until I reload".
+- **`autoScroll` and nothing else.** The scroller is a state machine
+  (`following-bottom`, `free-scrolling`, `anchored-to-message`) and
+  `scrollAnchor` selects the third, which *stops it following the bottom* — the
+  answer then streams below the fold while the modes fight over each new row.
+  Left alone, `autoScroll` follows the tail while the reader is at the bottom
+  and releases the moment they scroll away, which lights the jump-to-end button.
+- **One `MessageScrollerItem` per message, not per part.** The row is what the
+  scroller measures; a row per tool call adds a boundary every few hundred
+  milliseconds during an answer. Part ids prefer `toolCallId`, which is stable
+  across a call's streaming states.
+- **The continuation token is recovered, not trusted.** eve accepts input only
+  on a *waiting* session, and a stored token goes stale the moment a turn ends
+  with the panel unmounted — which is every tab switch. `lib/agent-resume.ts`
+  reads the session's newest durable event and takes the token off
+  `session.waiting`, per eve's own recipe. Without it, sending into a resumed
+  thread did nothing and said nothing.
+- **That read takes the first line and hangs up.** The stream endpoint
+  *follows*; `includeTailIndex` is a header for the client to stop on, not an
+  instruction to the server to close. Awaiting the whole body never returns, so
+  every session read as busy and the composer stayed locked.
+- **A turn that has gone quiet for 90 seconds is finished, not busy.** A
+  restarted agent leaves sessions with no closing boundary; they never reach
+  `session.waiting`, and treating them as in-flight locks that thread forever.
+- **Scoped to the rep.** Two people asking about the same contact are having two
+  conversations. `ConversationsService` filters on the caller, and a session id
+  in a request body decides which row, never whose.
+- **Cached the way `api.md` prescribes**: read through
+  `cache-manager` (Redis when `REDIS_URL` is set), write on miss, explicit
+  invalidation on every save. The list is read on every sheet open and changes
+  only when somebody sends a message, which is the shape a cache is for.
+
+This lives in the API rather than the agent, and that is not a breach of rule
+one: listing a record's history researches nothing, scores nothing and decides
+nothing. The agent owns judgement; the data surface owns filing.
+
 ### Turning it on
 
 Same value in both processes, from the one root `.env`:
 
 ```sh
-AGENT_URL="http://localhost:2000"        # the default
+AGENT_URL="http://127.0.0.1:2000"        # the default
 AGENT_BRIDGE_SECRET="$(openssl rand -base64 32)"
 ```
 
@@ -145,6 +235,13 @@ Then `bun run dev` (the agent serves on `:2000`) and open any contact.
 | `503`, "not configured for this install" | `AGENT_BRIDGE_SECRET` is unset in the app's process |
 | `401` | The two processes hold *different* secrets |
 | `502`, "not reachable" | The agent is not running, or `AGENT_URL` is wrong |
+
+`eve dev` takes about five seconds to bind, and it listens on **IPv4 only**.
+That is why `AGENT_URL` defaults to `http://127.0.0.1:2000` rather than
+`http://localhost:2000`: Node resolves `localhost` to `::1` first, so the
+`localhost` form fails to connect on a machine where the agent is plainly
+running — and reports itself as "not reachable", which sends you looking in the
+wrong place.
 
 A variable in `.env` is not enough on its own: Turbo runs in strict env mode, so
 `apps/app/turbo.json` and `apps/agent/turbo.json` both declare the pair in

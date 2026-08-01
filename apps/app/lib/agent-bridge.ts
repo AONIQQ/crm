@@ -37,7 +37,15 @@ const AUDIENCE = "crm-agent";
 /** Long enough for a slow request, short enough not to be worth stealing. */
 const TTL_SECONDS = 120;
 
-export const AGENT_URL = process.env.AGENT_URL ?? "http://localhost:2000";
+/**
+ * `127.0.0.1`, not `localhost`.
+ *
+ * `eve dev` binds IPv4 only, while Node's resolver hands `localhost` back as
+ * `::1` first — so a default of `http://localhost:2000` fails to connect on a
+ * machine where the agent is plainly running, and reports itself as "the agent
+ * is not reachable". Naming the address avoids the resolution entirely.
+ */
+export const AGENT_URL = process.env.AGENT_URL ?? "http://127.0.0.1:2000";
 
 export function bridgeConfigured(): boolean {
 	return Boolean(process.env.AGENT_BRIDGE_SECRET);
@@ -50,11 +58,24 @@ export function bridgeConfigured(): boolean {
  * set with one algorithm, and `crypto.subtle` does HMAC. A dependency here
  * would be more surface than code.
  */
-export async function mintBridgeToken(user: {
-	id: string;
-	email: string;
-	name: string;
-}): Promise<string> {
+export async function mintBridgeToken(
+	user: {
+		id: string;
+		email: string;
+		name: string;
+	},
+	/**
+	 * The record the rep has open.
+	 *
+	 * Carried in the token rather than pasted into the message, because the
+	 * agent already knows how to read it from there: `instructions/task.ts`
+	 * resolves `attributes.contactId` at `session.started`, which is the same
+	 * path the dispatcher uses. The alternative — prefixing every message with
+	 * "About contact <cuid> (Name):" — put plumbing in front of a person and
+	 * made their own question unreadable.
+	 */
+	record: { contactId?: string; companyId?: string; dealId?: string } = {},
+): Promise<string> {
 	const secret = process.env.AGENT_BRIDGE_SECRET;
 	if (!secret) throw new Error("AGENT_BRIDGE_SECRET is not set.");
 
@@ -67,6 +88,9 @@ export async function mintBridgeToken(user: {
 		sub: user.id,
 		email: user.email,
 		name: user.name,
+		...(record.contactId ? { contactId: record.contactId } : {}),
+		...(record.companyId ? { companyId: record.companyId } : {}),
+		...(record.dealId ? { dealId: record.dealId } : {}),
 		iat: now,
 		// `nbf` a little in the past: the agent allows clock skew, but there is no
 		// reason to hand it a token that is not valid yet.

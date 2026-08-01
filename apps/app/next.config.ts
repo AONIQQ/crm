@@ -16,8 +16,17 @@ loadRootEnv();
  * `env` rather than a runtime read, because `NEXT_PUBLIC_*` is inlined at build
  * time and a value that only exists in the root `.env` would otherwise be
  * `undefined` in the bundle.
+ *
+ * `NEXT_PUBLIC_API_URL` is still honoured as a fallback. It is the name this
+ * used to have, and a deployment that still sets it must not be silently
+ * rewritten to `localhost` by the default below — that failure builds and
+ * deploys cleanly, then every request from the browser goes to the reader's own
+ * machine.
  */
-const apiUrl = process.env.API_URL ?? "http://localhost:3001";
+const apiUrl =
+	process.env.API_URL ??
+	process.env.NEXT_PUBLIC_API_URL ??
+	"http://localhost:3001";
 
 const nextConfig: NextConfig = {
 	env: {

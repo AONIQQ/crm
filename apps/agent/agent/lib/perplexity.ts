@@ -6,9 +6,9 @@ const TIMEOUT_MS = 45_000;
  * finding where a person lives on the web, and saying what has happened
  * recently that a rep should know before a call.
  *
- * It is **not** the source of truth for identity. Asked for Abbie Bigham's job
- * title it answered "Account Executive L3" while her own LinkedIn profile says
- * "Growth Specialist at HubSpot" — an aggregator reconciling stale sources.
+ * It is **not** the source of truth for identity. Asked for Paula Marchetti's job
+ * title it answered "Account Executive L3" while their own LinkedIn profile says
+ * "Growth Specialist at Fernhill" — an aggregator reconciling stale sources.
  * LinkedIn is self-reported and wins on identity; Perplexity wins on context.
  *
  * Every answer carries its citations, and a claim without one does not get

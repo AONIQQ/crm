@@ -8,7 +8,6 @@ import {
 } from "@crm/ui/components/accordion";
 import { Skeleton } from "@crm/ui/components/skeleton";
 import { ThreadMessage } from "@crm/ui/components/thread-message";
-import { relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTRPC } from "@/lib/trpc/client";
@@ -51,8 +50,8 @@ export function EmailThreadEntry({
 				if (value) setOpened(true);
 			}}
 		>
-			<AccordionItem value={threadId} className="border-b-0">
-				<AccordionTrigger className="py-1 text-muted-foreground text-xs">
+			<AccordionItem value={threadId}>
+				<AccordionTrigger variant="subtle">
 					{messageCount === 1 ? "1 message" : `${messageCount} messages`}
 				</AccordionTrigger>
 
@@ -63,7 +62,7 @@ export function EmailThreadEntry({
 							<Skeleton className="h-4 w-2/3" />
 						</div>
 					) : thread.isError ? (
-						<p className="text-muted-foreground text-sm">
+						<p className="text-muted-foreground text-xs">
 							{thread.error.message}
 						</p>
 					) : (
@@ -96,13 +95,4 @@ export function EmailThreadEntry({
 			</AccordionItem>
 		</Accordion>
 	);
-}
-
-/** "3 messages · latest 2h ago", for the collapsed row. */
-export function threadSummary(
-	messageCount: number,
-	lastMessageAt: string,
-): string {
-	const count = messageCount === 1 ? "1 message" : `${messageCount} messages`;
-	return `${count} · latest ${relativeTimeFromIso(lastMessageAt)}`;
 }

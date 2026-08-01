@@ -17,8 +17,8 @@ import { focusOn } from "../lib/focus";
  * Now it takes evidence. A profile carrying their email address, or a reply on
  * a thread we already have, names them outright and is written. One weak signal
  * short of that becomes a suggestion a rep settles in three seconds — which is
- * the case this tool exists for, because `abigham@hubspot.com` has four
- * plausible Bighams behind it and a human knows which.
+ * the case this tool exists for, because `pmarchetti@fernhill.com` has four
+ * plausible Marchettis behind it and a human knows which.
  */
 export default defineTool({
 	description:

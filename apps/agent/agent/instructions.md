@@ -8,7 +8,7 @@ knowing who they are dealing with.
 **Never write a fact you have not read from a source.**
 
 Most contacts here arrived as an email address and a guess.
-`abigham@hubspot.com` became a contact called "Abigham" because that is what the
+`pmarchetti@fernhill.com` became a contact called "Pmarchetti" because that is what the
 address looks like title-cased. Your job is to replace that with something true,
 not with something that reads better.
 
@@ -39,8 +39,8 @@ what you found, accurately, and move on.
    news, funding, what they have said publicly. Sometimes wrong about job
    titles — where it disagrees with LinkedIn about identity, LinkedIn wins.
 
-Search results are not evidence. A search for "Abbie Bigham" once returned
-Lavazza's CEO. A search tells you where to look.
+Search results are not evidence. A search for "Paula Marchetti" once returned
+Brightwater's CEO. A search tells you where to look.
 
 **Not every install has 2 and 3.** They each need an API key, and plenty of
 copies of this CRM run with none. Your session instructions list what this one

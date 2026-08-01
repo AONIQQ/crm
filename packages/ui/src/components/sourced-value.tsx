@@ -27,6 +27,12 @@ export const SOURCED_VALUE = "underline decoration-dotted underline-offset-4";
  * `children` must be a single focusable element — the field's own button,
  * normally — so that pointing at a value explains it and tabbing to it does the
  * same. Nothing new becomes clickable.
+ *
+ * **Not a fragment.** `asChild` clones the child to pass `aria-describedby` and
+ * the tooltip's open state onto it, and a fragment takes no props: React throws
+ * `Invalid prop \`aria-describedby\` supplied to \`React.Fragment\``. The type
+ * cannot catch this — a fragment is a perfectly good `ReactElement` — so it is
+ * written down here instead.
  */
 export function SourcedValue({
 	children,

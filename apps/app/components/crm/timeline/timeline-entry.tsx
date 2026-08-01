@@ -11,7 +11,7 @@ import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { ActivityIcon, activityLabel } from "./activity-icon";
-import { EmailThreadEntry, threadSummary } from "./email-thread-entry";
+import { EmailThreadEntry } from "./email-thread-entry";
 import { MeetingEntry } from "./meeting-entry";
 
 export type TimelineEntryData =
@@ -68,7 +68,7 @@ export function TimelineEntry({
 		: entry.createdBy.name;
 
 	return (
-		<li className="flex gap-3 py-3">
+		<li className="flex gap-2.5 py-2">
 			<span className="mt-0.5 text-muted-foreground">
 				{isTask ? (
 					<Checkbox
@@ -84,9 +84,9 @@ export function TimelineEntry({
 				)}
 			</span>
 
-			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-					<span className="font-medium text-sm">
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+					<span className="font-medium text-xs">
 						{change
 							? `${dealStageLabel(change.from as never)} → ${dealStageLabel(change.to as never)}`
 							: (entry.subject ?? activityLabel(entry.type))}
@@ -95,33 +95,33 @@ export function TimelineEntry({
 					{overdue ? (
 						<StatusIndicator
 							tone="error"
-							className="text-xs"
 							label={`Overdue ${relativeTimeFromIso(entry.dueAt)}`}
 						/>
 					) : isTask && !done && entry.dueAt ? (
 						<StatusIndicator
 							tone="info"
-							className="text-xs"
 							label={`Due ${relativeTimeFromIso(entry.dueAt)}`}
 						/>
 					) : null}
 
-					<span className="text-muted-foreground text-xs">
-						{author} · {timeFormat.format(new Date(when))}
-					</span>
+					<span className="text-muted-foreground text-xs">{author}</span>
 
-					{entry.emailThread ? (
-						<span className="text-muted-foreground text-xs">
-							{threadSummary(
-								entry.emailThread.messageCount,
-								entry.emailThread.lastMessageAt,
-							)}
-						</span>
-					) : null}
+					{/*
+					 * Pushed to the right edge, so the times form a column you can run
+					 * your eye down instead of sitting at a different offset on every
+					 * row. Same place `ThreadMessage` puts it.
+					 *
+					 * The thread's message count used to live here too, next to a
+					 * timestamp that *is* its last message — and directly above an
+					 * accordion whose label is the same count.
+					 */}
+					<span className="ml-auto shrink-0 text-muted-foreground text-xs tabular-nums">
+						{timeFormat.format(new Date(when))}
+					</span>
 				</div>
 
 				{entry.body ? (
-					<p className="whitespace-pre-wrap text-pretty text-muted-foreground text-sm/6">
+					<p className="whitespace-pre-wrap text-pretty text-muted-foreground text-xs/5">
 						{entry.body}
 					</p>
 				) : null}

@@ -19,9 +19,9 @@ contradicts the vendor's own marketing page.
 ### People search is broken. Do not build on it.
 
 `GET /api/v1/search/people?keywords=...` returns `HTTP 200` with a well-formed
-payload of **entirely unrelated people**. `keywords=bigham hubspot` returned a
-list of Seattle-area engineers; `keywords=Abbie Bigham` returned Italian
-executives — Lavazza's CEO, an HR lead at Reply. Different random set each time.
+payload of **entirely unrelated people**. `keywords=marchetti fernhill` returned a
+list of Seattle-area engineers; `keywords=Paula Marchetti` returned Italian
+executives — Brightwater's CEO, an HR lead at Reply. Different random set each time.
 The parameter appears to be ignored.
 
 This matters more than a broken endpoint usually would: search was the entry
@@ -51,13 +51,13 @@ slug             →  LinkDAPI profile/overview                      →  deep s
 Proven end to end on a real CRM contact:
 
 ```
-ymadar@valley.com
-  → site:linkedin.com/in ymadar "Valley"
-  → yael-madar
-  → Yael Madar — VP, Fund Finance & Venture Lending — Valley Bank
+tokonkwo@northwind.com
+  → site:linkedin.com/in tokonkwo "Northwind"
+  → tomi-okonkwo
+  → Tomi Okonkwo — VP, Fund Finance & Venture Lending — Northwind Bank
 ```
 
-`y` + `madar`. That is the "Ymadar" row from the contacts list, resolved to a
+`y` + `okonkwo`. That is the "Tokonkwo" row from the contacts list, resolved to a
 real person with a real title at the right employer.
 
 It also means the two vendors are used for what each is actually good at.
@@ -67,7 +67,7 @@ this.
 
 ### Hit rate is partial, and that is the honest headline
 
-`abigham@hubspot.com` resolved to **nothing** — no candidate slug at all. An
+`pmarchetti@fernhill.com` resolved to **nothing** — no candidate slug at all. An
 unusual local part at an 8,000-person company is the hard case, and it is the
 one that prompted this work. Expect a meaningful miss rate on exactly the
 contacts that look worst in the UI.
@@ -77,8 +77,8 @@ Two consequences:
 - The fallback matters. When no slug resolves, the existing Context.dev
   extract path still runs and may find a team page.
 - **A miss must stay a miss.** With search returning plausible strangers, the
-  temptation to accept a near-match is exactly how Antonio Baravalle ends up
-  filed as Abbie Bigham. §5's confidence bands are not ceremony.
+  temptation to accept a near-match is exactly how Dario Fontana ends up
+  filed as Paula Marchetti. §5's confidence bands are not ceremony.
 
 ### A bug this spike caught in already-shipped code
 
@@ -91,7 +91,7 @@ the reason to spike against a real key rather than a type definition.
 
 ## 1. What this is actually for
 
-The prompt for this was a contacts list reading `Abigham`, `Ymadar`, `Chris` —
+The prompt for this was a contacts list reading `Pmarchetti`, `Tokonkwo`, `Chris` —
 names derived from an email address because Google Calendar returned no
 `displayName`. Fixing those is the *entry* case, and on its own it would not
 justify an agent.
@@ -139,8 +139,8 @@ markets, and anyone who does not keep a profile. §5.
 2. **The agent proposes; the CRM decides.** Writes go through one tool that
    stamps provenance, and a low-confidence identity match is approval-gated
    rather than merged. Getting a person wrong is worse than not knowing them. §6.
-3. **Identity matching is the hard part, not data fetching.** `abigham@hubspot.com`
-   → which of the four Bighams at a 8,000-person company? This gets a skill, a
+3. **Identity matching is the hard part, not data fetching.** `pmarchetti@fernhill.com`
+   → which of the four Marchettis at a 8,000-person company? This gets a skill, a
    confidence rubric and evals. §5.
 4. **A separate Vercel app, sharing `@crm/db`.** eve is its own runtime with its
    own build; it does not embed in NestJS. It reads and writes the CRM through
@@ -264,8 +264,8 @@ is not, which is another reason the counter is on the client and not the tool.
 
 ## 5. Identity matching
 
-The actual problem. `abigham@hubspot.com` is one address at a company with
-thousands of employees, and picking the wrong Bigham writes a real person's
+The actual problem. `pmarchetti@fernhill.com` is one address at a company with
+thousands of employees, and picking the wrong Marchetti writes a real person's
 career history onto the wrong CRM record.
 
 This gets a **skill** — an on-demand procedure the agent loads when it needs it —
@@ -275,8 +275,8 @@ rather than being buried in the system prompt:
 
 1. **Exact email on the profile** — decisive. LinkDAPI exposes contact info on
    some profiles; when the address matches, the match is certain.
-2. **Local-part decomposition against a real name.** `abigham` is consistent
-   with `a` + `bigham` and with `abi` + `gham`. Checked *against candidates*,
+2. **Local-part decomposition against a real name.** `pmarchetti` is consistent
+   with `a` + `marchetti` and with `abi` + `gham`. Checked *against candidates*,
    never used to generate a name — the direction matters, and it is the whole
    difference between this and guessing.
 3. **Company match**, current employer equals the contact's company.
@@ -417,7 +417,7 @@ it is the thing that makes the rest defensible.
 | --- | --- | --- |
 | **0 — Spike** | ~~Prove the API resolves real CRM addresses~~ | **Done — §0.** Search is unusable; profile and company are excellent; the hybrid resolver works end to end on a real contact; hit rate is partial. |
 | **1 — Skeleton** | `apps/agent`, `eve link`, `update_contact` writing to `@crm/db`, schedule claiming a batch, no LinkedIn | A contact's title changes because the agent changed it, on a cron, in a deployed environment. The loop is proven before the vendor is in it. |
-| **2 — Enrichment** | Five tools, `identity-matching` skill, confidence bands, `ContactEnrichment` | `Ymadar` becomes Yael Madar, VP Fund Finance at Valley Bank, with a `sourceUrl` against it — and an ambiguous address becomes a suggestion rather than a wrong answer. |
+| **2 — Enrichment** | Five tools, `identity-matching` skill, confidence bands, `ContactEnrichment` | `Tokonkwo` becomes Tomi Okonkwo, VP Fund Finance at Northwind Bank, with a `sourceUrl` against it — and an ambiguous address becomes a suggestion rather than a wrong answer. |
 | **3 — Trust** | Approval on `medium`, evals with a labelled fixture set, provenance in the contact sheet | Precision measured, not asserted. A rep can see where a field came from. |
 | **4 — Meeting prep briefs** | On a calendar event with external attendees, research everyone and write a brief to the timeline before the call | Opening a company the morning of a call shows who is attending, what they do, how long they have been there, what the company just announced, and where the deal stands. **This is the feature people will describe to other people.** It is only possible because the Calendar sync already knows the meeting is coming. |
 | **5 — Job changes** | Re-read on a 30-day cadence, diff against the stored payload, activity + task on a move | A champion changing employer creates an activity on their old company's timeline and a task for their owner. The highest-intent signal in B2B, and nobody else in the stack sees it. |
@@ -440,7 +440,7 @@ click.
    simpler and almost certainly right for an internal tool.
 2. **Does a `medium` suggestion surface in the UI, or a queue?** The Gmail plan
    argued against approval queues because they rot. A suggestion inline on the
-   contact — "LinkedIn thinks this is Abbie Bigham · accept" — probably beats a
+   contact — "LinkedIn thinks this is Paula Marchetti · accept" — probably beats a
    separate inbox, but it is more UI work.
 3. **Retention.** How long does `ContactEnrichment.raw` live? It is the thing
    that makes re-derivation free and the thing an erasure request is about.

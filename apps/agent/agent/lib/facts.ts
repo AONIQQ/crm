@@ -299,8 +299,8 @@ export async function writeBrief(input: {
  * For ordinary fields the test is simple: something is in the column and no
  * applied fact explains it, so a human typed it.
  *
- * A name needs a different test, because the sync always writes one. `Abigham`
- * is a placeholder derived from `abigham@hubspot.com` and is ours to replace;
+ * A name needs a different test, because the sync always writes one. `Pmarchetti`
+ * is a placeholder derived from `pmarchetti@fernhill.com` and is ours to replace;
  * anything that is not derived came from a mail header or a person, and is not.
  */
 function humanOwns({

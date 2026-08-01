@@ -207,6 +207,39 @@ works without any app running.
   multi-instance deploy (see `docs/api.md`).
 - **Sign-in method** — Google-only, in code, not configurable.
 
+## `vercel env pull` writes to `.env.local`, which wins
+
+The two conventions collide, and the collision is quiet:
+
+- `.env.local` is the *local override* file, so the loader reads it **after**
+  `.env` and it wins.
+- `vercel env pull` writes **production** credentials into that same file by
+  default — database, auth secret, OAuth client, Blob, Redis, the lot.
+
+Pull once and every process in the repo silently points at production. The
+symptom is not an error; it is `bun run dev` working perfectly against the live
+database, and `prisma migrate dev` in `packages/db` applying migrations to it.
+That happened here on 2026-08-01: eleven migrations landed on Neon from a
+laptop, and only the backfill in `20260801140000_contact_intelligence` kept it
+from dropping three columns of real data.
+
+Two defences, and you want both:
+
+1. **Pull somewhere inert.** `vercel env pull .env.vercel` — the loader does not
+   read it, so it is reference material rather than configuration.
+2. **The destructive `db:*` scripts refuse a non-local host.**
+   `packages/db/scripts/require-local-db.ts` guards `db:migrate`, `db:push`,
+   `db:reset` and `db:seed`, prints which file the URL came from, and takes
+   `ALLOW_REMOTE_DB=1` when you mean it. `db:deploy` is deliberately unguarded —
+   pointing that at a remote database is what it is for.
+
+The guard resolves the URL by reading the root files directly, in the loader's
+order, rather than trusting `process.env`. That is not fussiness: Bun
+auto-loads the `.env` in the *working directory* before running a script, while
+Prisma's CLI is a Node process that only sees `@crm/env/load`. The first version
+of the guard read `process.env`, saw the `packages/db/.env` copy, and waved the
+Neon case through. A guard that is wrong in that direction is worse than none.
+
 ## Secrets hygiene
 
 The root `.gitignore` ignores `.env` and `.env.*` with a single negation for

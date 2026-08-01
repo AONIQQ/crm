@@ -1,6 +1,7 @@
 import {
 	Controller,
 	ForbiddenException,
+	Get,
 	Headers,
 	Logger,
 	Post,
@@ -30,9 +31,35 @@ export class SyncController {
 		this.secret = config.get("CRON_SECRET", { infer: true });
 	}
 
+	/**
+	 * `GET`, because Vercel Cron only issues `GET`.
+	 *
+	 * This route was `POST`-only, and the scheduler dutifully called it every
+	 * five minutes and got a 404 every time — a sync that looked configured,
+	 * logged nothing alarming, and never ran.
+	 *
+	 * Two handlers rather than two decorators on one: Nest keeps only the last
+	 * HTTP-method decorator applied to a method, so stacking them silently
+	 * registers one verb and drops the other. That is how this was broken in
+	 * the first place, and it would have been broken the same way again.
+	 *
+	 * A `GET` that performs work is not REST, but the method is not the guard
+	 * here — `CRON_SECRET` is, and both paths run the identical check.
+	 */
+	@Get("google")
+	@AllowAnonymous()
+	async googleViaGet(@Headers("authorization") authorization?: string) {
+		return this.google(authorization);
+	}
+
+	/** The same thing, for anything calling it by hand. */
 	@Post("google")
 	@AllowAnonymous()
-	async google(@Headers("authorization") authorization?: string) {
+	async googleViaPost(@Headers("authorization") authorization?: string) {
+		return this.google(authorization);
+	}
+
+	private async google(authorization?: string) {
 		// No secret configured means the route is open, which is worse than it
 		// being unavailable. Fail closed. This is the only thing gating the sync —
 		// there is no feature flag, because mailbox access is a condition of

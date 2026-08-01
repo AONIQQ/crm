@@ -41,9 +41,10 @@ industry. A research agent then works out who these people actually are — real
 current title, employer — and writes it down with the evidence attached.
 
 The rule it never breaks: **nothing about a person is guessed.** A contact who arrived
-as `abigham@hubspot.com` is called "Abigham" until something proves otherwise. A
-confidently wrong fact about a customer is worse than a blank field, because nobody
-can tell it is wrong.
+as `pmarchetti@example.com` is called "Pmarchetti" until something proves otherwise —
+the address is not a name, and a model asked what it stands for will happily invent
+someone. A confidently wrong fact about a customer is worse than a blank field,
+because nobody can tell it is wrong.
 
 It is single-tenant and internal by design. Sign-in is Google, the allow-list is one
 environment variable, and everyone who gets in can see everything. That is the whole

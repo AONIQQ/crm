@@ -60,13 +60,32 @@ async function handler(request: Request): Promise<Response> {
 		headers.delete(header);
 	}
 
+	// Which record the rep has open, if any. Taken from a header the panel sets
+	// and put into the token, so the agent gets it through the same
+	// `session.auth` path the dispatcher uses — and the rep's own message stays
+	// their own words. Not trusted for anything but focus: it decides what the
+	// agent looks at, never what it may do.
+	const contactId = request.headers.get("x-crm-contact");
+	const companyId = request.headers.get("x-crm-company");
+	const dealId = request.headers.get("x-crm-deal");
+	headers.delete("x-crm-contact");
+	headers.delete("x-crm-company");
+	headers.delete("x-crm-deal");
+
 	headers.set(
 		"authorization",
-		`Bearer ${await mintBridgeToken({
-			id: session.user.id,
-			email: session.user.email,
-			name: session.user.name,
-		})}`,
+		`Bearer ${await mintBridgeToken(
+			{
+				id: session.user.id,
+				email: session.user.email,
+				name: session.user.name,
+			},
+			{
+				contactId: cuid(contactId),
+				companyId: cuid(companyId),
+				dealId: cuid(dealId),
+			},
+		)}`,
 	);
 
 	const init: RequestInit & { duplex?: "half" } = {
@@ -127,3 +146,8 @@ export {
 	handler as POST,
 	handler as PUT,
 };
+
+/** A cuid, or nothing. Decides what the agent looks at, never what it may do. */
+function cuid(value: string | null): string | undefined {
+	return value && /^[a-z0-9]{20,32}$/.test(value) ? value : undefined;
+}

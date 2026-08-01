@@ -9,7 +9,7 @@ import { findProfileUrls } from "../lib/perplexity";
  * Candidates, never an answer.
  *
  * The name is never taken from here — only the slug, which `get_linkedin_profile`
- * then verifies. A search for "Abbie Bigham" has returned Lavazza's CEO.
+ * then verifies. A search for "Paula Marchetti" has returned Brightwater's CEO.
  */
 export default defineTool({
 	description:

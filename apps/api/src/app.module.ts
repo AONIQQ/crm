@@ -8,6 +8,7 @@ import { AppCacheModule } from "./cache/cache.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { validateEnv } from "./config/env.validation";
 import { ContactsModule } from "./contacts/contacts.module";
+import { ConversationsModule } from "./conversations/conversations.module";
 import { CrmModule } from "./crm/crm.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { DatabaseModule } from "./database/database.module";
@@ -38,6 +39,7 @@ import { UsersModule } from "./users/users.module";
 		UsersModule,
 		CompaniesModule,
 		ContactsModule,
+		ConversationsModule,
 		DealsModule,
 		ActivitiesModule,
 		DashboardModule,

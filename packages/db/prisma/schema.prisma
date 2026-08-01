@@ -32,6 +32,7 @@ model User {
   activities     Activity[]    @relation("ActivityAuthor")
   mailboxSyncs   MailboxSync[]
   factDecisions  ContactFact[] @relation("FactDecider")
+  conversations  AgentConversation[] @relation("ConversationOwner")
 
   @@unique([email])
   @@map("user")
@@ -214,6 +215,7 @@ model Company {
   lastActivityAt DateTime?
 
   contacts       Contact[]       @relation("CompanyContacts")
+  conversations  AgentConversation[]
   deals          Deal[]
   activities     Activity[]
   emailThreads   EmailThread[]
@@ -273,8 +275,9 @@ model Contact {
 
   /// Who this person is (§3 of the contact-intelligence plan) and every claim
   /// behind the fields above.
-  brief ContactBrief?
-  facts ContactFact[]
+  brief         ContactBrief?
+  facts         ContactFact[]
+  conversations AgentConversation[]
 
   companyId   String?
   company     Company? @relation("CompanyContacts", fields: [companyId], references: [id], onDelete: SetNull)
@@ -450,9 +453,55 @@ model AgentEvent {
   @@map("agentEvent")
 }
 
+/// A conversation between a rep and the agent, about one record.
+///
+/// The transcript itself is already in `AgentEvent` — this is the *handle*: the
+/// durable eve session to resume, and enough metadata to list a record's
+/// history without reading a single event. Reopening a contact should show what
+/// you asked last week rather than an empty box.
+///
+/// `sessionId` is unique because one eve session is one conversation. The
+/// cursor beside it (`continuationToken`, `streamIndex`) is what `useEveAgent`
+/// needs to pick the thread back up instead of starting a new one.
+model AgentConversation {
+  id String @id @default(cuid())
+
+  /// Which record it is about. Exactly one of these is set.
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  dealId    String?
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  /// Whose conversation. Two reps asking about the same contact are having two
+  /// different conversations, and neither should see the other's half-finished
+  /// question.
+  userId String
+  user   User   @relation("ConversationOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId         String  @unique
+  continuationToken String?
+  /// How far the client had read, so a reopened thread does not replay.
+  streamIndex Int @default(0)
+
+  /// The first thing the rep asked, trimmed. Written once.
+  title        String?
+  messageCount Int     @default(0)
+
+  createdAt     DateTime @default(now())
+  lastMessageAt DateTime @default(now())
+
+  @@index([contactId, lastMessageAt])
+  @@index([companyId, lastMessageAt])
+  @@index([dealId, lastMessageAt])
+  @@map("agentConversation")
+}
+
 model Deal {
-  id        String  @id @default(cuid())
-  name      String
+  id            String              @id @default(cuid())
+  conversations AgentConversation[]
+  name          String
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   /// Required: every deal has a name against it.

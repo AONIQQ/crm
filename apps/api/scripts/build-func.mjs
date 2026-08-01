@@ -221,6 +221,24 @@ writeFileSync(
 		// Nest owns its own routing — /health, /api/auth/*, /api/trpc/* — so
 		// everything goes to the one function.
 		routes: [{ src: "/(.*)", dest: "/api/index" }],
+		/**
+		 * The Gmail and Calendar sync.
+		 *
+		 * Declared here rather than in `apps/api/vercel.json`, because that file
+		 * is never read: this project's Root Directory is the repository root,
+		 * so Vercel looks for `/vercel.json` and the one beside the app is
+		 * inert. The cron silently did not exist — the sync only ever ran when
+		 * somebody called the route by hand, and the CRM quietly stopped
+		 * learning anything new from the mailbox.
+		 *
+		 * A root `vercel.json` is not the fix, because `crm-agent` builds from
+		 * the same root directory and would inherit a schedule for a route it
+		 * does not serve. The Build Output API is per-project by construction.
+		 *
+		 * The route fails closed without `CRON_SECRET`, so this is safe to
+		 * declare unconditionally.
+		 */
+		crons: [{ path: "/internal/sync/google", schedule: "*/5 * * * *" }],
 	}),
 );
 

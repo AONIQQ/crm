@@ -14,10 +14,12 @@ import { SOURCED_VALUE, SourcedValue } from "@crm/ui/components/sourced-value";
 import { Spinner } from "@crm/ui/components/spinner";
 import { cn } from "@crm/ui/lib/utils";
 import { useId, useState } from "react";
+import { PROPERTY_LABEL, PROPERTY_ROW } from "@/components/detail-sheet";
 
-/** Label column, so every property in the sheet lines up on one edge. */
-const ROW = "grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2 py-0.5";
-const LABEL = "truncate text-muted-foreground text-xs";
+// The row shape is the sheet's, not this file's — a read-only fact and an
+// editable field are the same row with a different value slot.
+const ROW = cn(PROPERTY_ROW, "items-center");
+const LABEL = PROPERTY_LABEL;
 /**
  * Values look like text until you point at one.
  *
@@ -99,53 +101,58 @@ export function InlineField({
 
 	const sourced = Boolean(provenance) && !editing && shown !== "";
 
-	const control = (
-		<>
-			{editing ? (
-				<Input
-					id={id}
-					type={type}
-					// The input only exists because the user just clicked this field;
-					// not focusing it would mean clicking twice to type once.
-					autoFocus
-					value={draft}
-					placeholder={placeholder}
-					onChange={(event) => setDraft(event.target.value)}
-					onBlur={commit}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") {
-							event.preventDefault();
-							commit();
-						}
-						if (event.key === "Escape") {
-							setDraft(value ?? "");
-							setEditing(false);
-						}
-					}}
-				/>
+	/**
+	 * A single element, never a fragment.
+	 *
+	 * When this row carries provenance it becomes a tooltip trigger, and Radix's
+	 * `asChild` clones the child to pass `aria-describedby` and its open state
+	 * onto it. A fragment cannot take props, so wrapping the ternary in one threw
+	 * `Invalid prop \`aria-describedby\` supplied to \`React.Fragment\`` — on
+	 * every field in the sheet, because the trigger is decided per row.
+	 */
+	const control = editing ? (
+		<Input
+			id={id}
+			type={type}
+			// The input only exists because the user just clicked this field;
+			// not focusing it would mean clicking twice to type once.
+			autoFocus
+			value={draft}
+			placeholder={placeholder}
+			onChange={(event) => setDraft(event.target.value)}
+			onBlur={commit}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") {
+					event.preventDefault();
+					commit();
+				}
+				if (event.key === "Escape") {
+					setDraft(value ?? "");
+					setEditing(false);
+				}
+			}}
+		/>
+	) : (
+		<Button
+			variant="ghost"
+			size="sm"
+			className={CONTROL}
+			onClick={() => {
+				setDraft(value ?? "");
+				setEditing(true);
+			}}
+		>
+			{saving ? <Spinner /> : null}
+			{shown ? (
+				<span className={cn("truncate", sourced && SOURCED_VALUE)}>
+					{render ? render(shown) : shown}
+				</span>
 			) : (
-				<Button
-					variant="ghost"
-					size="sm"
-					className={CONTROL}
-					onClick={() => {
-						setDraft(value ?? "");
-						setEditing(true);
-					}}
-				>
-					{saving ? <Spinner /> : null}
-					{shown ? (
-						<span className={cn("truncate", sourced && SOURCED_VALUE)}>
-							{render ? render(shown) : shown}
-						</span>
-					) : (
-						<span className="truncate text-muted-foreground">
-							{placeholder ?? <EmptyCellValue />}
-						</span>
-					)}
-				</Button>
+				<span className="truncate text-muted-foreground">
+					{placeholder ?? <EmptyCellValue />}
+				</span>
 			)}
-		</>
+		</Button>
 	);
 
 	// The tooltip goes on the control the row already has, rather than a new

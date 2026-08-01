@@ -159,7 +159,7 @@ export async function extract(
  *
  * Accepts Google-style operators, which is what makes a person lookup *sourced*
  * rather than guessed: we search for evidence and read a name off a page,
- * instead of asking a model what "abigham" probably stands for.
+ * instead of asking a model what "pmarchetti" probably stands for.
  */
 export async function search(
 	query: string,

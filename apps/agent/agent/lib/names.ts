@@ -3,15 +3,15 @@
  * answer that comes back.
  *
  * All pure, and all verified against real CRM addresses rather than reasoned
- * about: `abigham@hubspot.com` → `bigham` → `linkedin.com/in/abigailbigham` →
- * Abbie Bigham, Growth Specialist at HubSpot.
+ * about: `pmarchetti@fernhill.com` → `marchetti` → `linkedin.com/in/paulamarchetti` →
+ * Paula Marchetti, Growth Specialist at Fernhill.
  */
 
 /**
  * Search terms for an email local part, most specific first.
  *
- * Searching the raw handle finds nothing — `abigham` is not a slug, a name or a
- * word. Searching the surname it contains finds her on the first result.
+ * Searching the raw handle finds nothing — `pmarchetti` is not a slug, a name or a
+ * word. Searching the surname it contains finds them on the first result.
  *
  * The split is generated blind and every candidate it produces is verified
  * afterwards, so a wrong guess costs a search rather than producing a wrong
@@ -35,7 +35,7 @@ export function searchTerms(local: string): string[] {
 	add(handle);
 
 	// One token: try the surname left when a one- or two-letter initial comes off
-	// the front. This is the `abigham` → `bigham` step.
+	// the front. This is the `pmarchetti` → `marchetti` step.
 	if (parts.length === 1) {
 		add(handle.slice(1));
 		add(handle.slice(2));
@@ -47,9 +47,9 @@ export function searchTerms(local: string): string[] {
 /**
  * Whether a LinkedIn employer is the company we think it is.
  *
- * Loose enough that "Valley Bank" matches a CRM company called "Valley", but
+ * Loose enough that "Northwind Bank" matches a CRM company called "Northwind", but
  * anchored on containment rather than fuzzy distance — which would cheerfully
- * match "Valley" to "Silicon Valley Bank".
+ * match "Northwind" to "Northwind Savings Group".
  */
 export function looksLikeSameCompany(
 	employer: string,
@@ -71,8 +71,8 @@ export function looksLikeSameCompany(
  * Whether a name is consistent with the address it was found from.
  *
  * The direction is the whole point: the name is checked against the local part,
- * never derived from it. `ymadar` is consistent with Yael Madar (`y` + `madar`).
- * It is not consistent with Antonio Baravalle, which is how a confident wrong
+ * never derived from it. `tokonkwo` is consistent with Tomi Okonkwo (`y` + `okonkwo`).
+ * It is not consistent with Dario Fontana, which is how a confident wrong
  * answer from a search engine gets rejected.
  */
 export function nameMatchesLocalPart(
@@ -108,7 +108,7 @@ export function nameMatchesLocalPart(
  * their address, rather than something a person or a mail header supplied.
  *
  * The test is narrow on purpose: no surname, and the first name is the whole
- * handle. "Abigham" from `abigham@hubspot.com` is a placeholder; "Abbie" from a
+ * handle. "Pmarchetti" from `pmarchetti@fernhill.com` is a placeholder; "Paula" from a
  * mail header is not, even though both are single words.
  */
 export function isDerivedName(

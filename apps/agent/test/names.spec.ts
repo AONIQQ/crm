@@ -16,10 +16,10 @@ import {
 
 describe("searchTerms", () => {
 	it("strips the initial off a run-together handle", () => {
-		// The case that forced this: searching "abigham" finds nothing, searching
-		// "bigham" returns linkedin.com/in/abigailbigham as the first result.
-		expect(searchTerms("abigham")).toContain("bigham");
-		expect(searchTerms("ymadar")).toContain("madar");
+		// The case that forced this: searching "pmarchetti" finds nothing, searching
+		// "marchetti" returns linkedin.com/in/paulamarchetti as the first result.
+		expect(searchTerms("pmarchetti")).toContain("marchetti");
+		expect(searchTerms("tokonkwo")).toContain("okonkwo");
 	});
 
 	it("trusts an explicit separator over any guess", () => {
@@ -40,22 +40,22 @@ describe("searchTerms", () => {
 
 describe("looksLikeSameCompany", () => {
 	it("matches an employer to the shorter name the CRM holds", () => {
-		// Yael Madar's employer reads "Valley Bank"; the CRM knows "Valley".
-		expect(looksLikeSameCompany("Valley Bank", "Valley", "valley.com")).toBe(
-			true,
-		);
-		expect(looksLikeSameCompany("HubSpot", "HubSpot", "hubspot.com")).toBe(
+		// Tomi Okonkwo's employer reads "Northwind Bank"; the CRM knows "Northwind".
+		expect(
+			looksLikeSameCompany("Northwind Bank", "Northwind", "northwind.com"),
+		).toBe(true);
+		expect(looksLikeSameCompany("Fernhill", "Fernhill", "fernhill.com")).toBe(
 			true,
 		);
 	});
 
 	it("rejects an unrelated employer", () => {
-		// The failure this exists to prevent: search handed back Lavazza's CEO for
-		// a HubSpot query, and something has to stop him being written down.
+		// The failure this exists to prevent: search handed back Brightwater's CEO for
+		// a Fernhill query, and something has to stop them being written down.
 		expect(
-			looksLikeSameCompany("Lavazza Group", "HubSpot", "hubspot.com"),
+			looksLikeSameCompany("Brightwater Group", "Fernhill", "fernhill.com"),
 		).toBe(false);
-		expect(looksLikeSameCompany("", "HubSpot", "hubspot.com")).toBe(false);
+		expect(looksLikeSameCompany("", "Fernhill", "fernhill.com")).toBe(false);
 	});
 });
 
@@ -66,10 +66,12 @@ describe("nameMatchesLocalPart", () => {
 	});
 
 	it("accepts the initial-plus-surname form", () => {
-		expect(nameMatchesLocalPart(person("Abbie", "Bigham"), "abigham")).toBe(
+		expect(
+			nameMatchesLocalPart(person("Paula", "Marchetti"), "pmarchetti"),
+		).toBe(true);
+		expect(nameMatchesLocalPart(person("Tomi", "Okonkwo"), "tokonkwo")).toBe(
 			true,
 		);
-		expect(nameMatchesLocalPart(person("Yael", "Madar"), "ymadar")).toBe(true);
 	});
 
 	it("accepts first-name-only and run-together forms", () => {
@@ -78,20 +80,20 @@ describe("nameMatchesLocalPart", () => {
 	});
 
 	it("rejects a stranger who merely turned up in the results", () => {
-		// This is the guard that keeps Antonio Baravalle from being filed as
-		// Abbie Bigham. The name is checked against the address, never derived
+		// This is the guard that keeps Dario Fontana from being filed as
+		// Paula Marchetti. The name is checked against the address, never derived
 		// from it.
 		expect(
-			nameMatchesLocalPart(person("Antonio", "Baravalle"), "abigham"),
+			nameMatchesLocalPart(person("Antonio", "Fontana"), "pmarchetti"),
 		).toBe(false);
-		expect(nameMatchesLocalPart(person("Preeti", "Prajapati"), "ymadar")).toBe(
+		expect(nameMatchesLocalPart(person("Preeti", "Duarte"), "tokonkwo")).toBe(
 			false,
 		);
 	});
 
 	it("rejects when the profile carries no name at all", () => {
 		expect(
-			nameMatchesLocalPart({ firstName: null, lastName: null }, "abigham"),
+			nameMatchesLocalPart({ firstName: null, lastName: null }, "pmarchetti"),
 		).toBe(false);
 	});
 });

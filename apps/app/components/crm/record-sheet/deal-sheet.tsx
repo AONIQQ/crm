@@ -1,7 +1,6 @@
 "use client";
 
 import UserMultiple from "@carbon/icons-react/es/UserMultiple";
-import { Alert, AlertDescription, AlertTitle } from "@crm/ui/components/alert";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import {
 	EntityLogo,
@@ -12,6 +11,7 @@ import { TableCell } from "@crm/ui/components/table";
 import { formatMoney, relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { AgentPanel } from "@/components/crm/agent-panel";
 import {
 	InlineField,
 	InlineSelectField,
@@ -25,6 +25,7 @@ import {
 	DetailSheetBody,
 	DetailSheetEmpty,
 	DetailSheetProperties,
+	DetailSheetProperty,
 	DetailSheetSection,
 	DetailSheetStat,
 	DetailSheetStats,
@@ -95,6 +96,13 @@ export function DealSheet({ dealId }: { dealId: string }) {
 					value: "activity",
 					label: "Activity",
 					content: <Timeline anchor={{ dealId: deal.id }} />,
+				},
+				{
+					value: "agent",
+					label: "Agent",
+					// Bare, not inside `DetailSheetBody`: the panel brings its own
+					// scroll container.
+					content: <AgentPanel record={{ kind: "deal", id: deal.id }} />,
 				},
 			]
 		: [];
@@ -207,20 +215,28 @@ function DealOverview({ deal }: { deal: Deal }) {
 			 * nudge to the next step. */}
 			<DetailSheetSection title="Stage">
 				<StageStepper dealId={deal.id} stage={deal.stage} />
-			</DetailSheetSection>
 
-			{deal.closedReason ? (
-				<DetailSheetSection>
-					<Alert>
-						<AlertTitle>
-							{deal.closedAt
-								? `Closed ${dateFormat.format(new Date(deal.closedAt))}`
-								: "Closed"}
-						</AlertTitle>
-						<AlertDescription>{deal.closedReason}</AlertDescription>
-					</Alert>
-				</DetailSheetSection>
-			) : null}
+				{/*
+				 * Two properties under the rail rather than an alert of its own.
+				 * The rail's last segment already says the deal is lost; a bordered
+				 * callout underneath repeats that in a heavier voice, and it was the
+				 * only boxed thing in any of the three sheets.
+				 */}
+				{deal.closedReason ? (
+					<DetailSheetProperties>
+						<DetailSheetProperty label="Closed">
+							{deal.closedAt ? (
+								dateFormat.format(new Date(deal.closedAt))
+							) : (
+								<EmptyCellValue />
+							)}
+						</DetailSheetProperty>
+						<DetailSheetProperty label="Reason" wide>
+							{deal.closedReason}
+						</DetailSheetProperty>
+					</DetailSheetProperties>
+				) : null}
+			</DetailSheetSection>
 
 			<DetailSheetSection title="Details">
 				<DetailSheetProperties>

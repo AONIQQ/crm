@@ -51,6 +51,10 @@ const params = {
 	record: parseAsArrayOf(parseAsString, ",").withDefault([]),
 	tab: parseAsString,
 	add: parseAsStringLiteral(RECORD_FORMS),
+	// Which agent conversation is open. `new` is a value rather than the
+	// absence of one: "start a fresh thread" and "resume the latest" are
+	// different intentions, and the absence has to mean the second.
+	thread: parseAsString,
 	// Owned by the timeline, cleared from here. `useQueryState` over there and
 	// this entry are the same key, so the two stay in step.
 	[TIMELINE_PARAM]: timelineTabParser,
@@ -85,6 +89,7 @@ export function useRecordStack() {
 					record: next.length === 0 ? null : next.map(recordKey),
 					tab: null,
 					add: null,
+					thread: null,
 					[TIMELINE_PARAM]: null,
 				},
 				{ history },
@@ -148,7 +153,7 @@ export function useOpenRecord() {
  * discarded.
  */
 export function useRecordSheetView(fallbackTab: string) {
-	const [{ tab, add }, setParams] = useQueryStates(params);
+	const [{ tab, add, thread }, setParams] = useQueryStates(params);
 
 	// A form open in a panel implies the panel: landing on `?add=contact`
 	// should show the contacts tab, not leave the form mounted out of sight
@@ -165,6 +170,7 @@ export function useRecordSheetView(fallbackTab: string) {
 			void setParams({
 				tab: next === fallbackTab ? null : next,
 				add: null,
+				thread: null,
 				[TIMELINE_PARAM]: null,
 			});
 		},
@@ -176,5 +182,10 @@ export function useRecordSheetView(fallbackTab: string) {
 		[setParams],
 	);
 
-	return { tab: active, setTab, form: add, setForm };
+	const setThread = useCallback(
+		(next: string | null) => void setParams({ thread: next }),
+		[setParams],
+	);
+
+	return { tab: active, setTab, form: add, setForm, thread, setThread };
 }

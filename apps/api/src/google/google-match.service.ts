@@ -311,8 +311,8 @@ export class GoogleMatchService {
 		// Google hands back an attendee with no `displayName` far more often than
 		// it hands back one with a name, so a contact is routinely created from the
 		// address alone and then met again later with a real name attached. Taking
-		// the better name when it arrives is the difference between "Abigham" and
-		// "Abbie Bigham" — but only over a name nobody has improved on.
+		// the better name when it arrives is the difference between "Pmarchetti" and
+		// "Paula Marchetti" — but only over a name nobody has improved on.
 		const hasRealName = Boolean(person.name?.trim());
 		const isPlaceholder = isDerivedName(
 			person.email,

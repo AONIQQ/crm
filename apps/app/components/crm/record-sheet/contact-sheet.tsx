@@ -3,6 +3,12 @@
 import Email from "@carbon/icons-react/es/Email";
 import Partnership from "@carbon/icons-react/es/Partnership";
 import Star from "@carbon/icons-react/es/Star";
+import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "@crm/ui/components/accordion";
 import { Button } from "@crm/ui/components/button";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import {
@@ -13,7 +19,6 @@ import { Icon } from "@crm/ui/components/icon";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
 import { TableCell } from "@crm/ui/components/table";
-import { initialsFromName } from "@crm/ui/lib/format";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AgentPanel } from "@/components/crm/agent-panel";
@@ -41,6 +46,8 @@ import {
 	DetailSheetBody,
 	DetailSheetEmpty,
 	DetailSheetProperties,
+	DetailSheetProperty,
+	DetailSheetProse,
 	DetailSheetSection,
 	DetailSheetStat,
 	DetailSheetStats,
@@ -122,16 +129,12 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 					// A tab rather than a band on the overview: the panel opens a
 					// durable session the moment it mounts, and a rep flicking through
 					// records should not start one on every contact they glance at.
-					content: (
-						<DetailSheetBody>
-							<DetailSheetSection title="Ask the agent">
-								<AgentPanel
-									contactId={contact.id}
-									contactName={contactName(contact)}
-								/>
-							</DetailSheetSection>
-						</DetailSheetBody>
-					),
+					//
+					// Rendered bare, not inside `DetailSheetBody`. That wrapper is
+					// itself a scroll container, and the panel brings its own — nesting
+					// them gives the sheet two scrollbars and an agent transcript that
+					// cannot reach its own bottom.
+					content: <AgentPanel record={{ kind: "contact", id: contact.id }} />,
 				},
 			]
 		: [];
@@ -169,10 +172,11 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 			}
 			// A person, so initials rather than a logo — there are no avatars in
 			// the CRM and a broken image placeholder is worse than two letters.
+			// Still `EntityLogo` with no artwork: it draws exactly this, and a
+			// hand-rolled square meant the contact header wore a border the company
+			// header does not.
 			media={
-				<span className="inline-flex size-10 shrink-0 items-center justify-center border bg-muted font-medium text-muted-foreground text-sm uppercase">
-					{contact ? initialsFromName(contactName(contact)) : "?"}
-				</span>
+				<EntityLogo name={contact ? contactName(contact) : "?"} size="lg" />
 			}
 			actions={
 				contact ? (
@@ -446,10 +450,11 @@ function ContactOverview({ contact }: { contact: Contact }) {
  */
 function Background({ brief }: { brief: NonNullable<Contact["brief"]> }) {
 	const sections = brief.sections;
+	const previous = sections.previousRoles ?? [];
+
 	const lines = [
 		{ label: "Current role", value: sections.currentRole },
 		{ label: "Tenure", value: sections.tenure },
-		{ label: "Previously", value: sections.previousRoles?.join(" · ") },
 		{ label: "Seniority", value: sections.seniority },
 		{ label: "Function", value: sections.function },
 		{ label: "Based", value: sections.location },
@@ -475,26 +480,55 @@ function Background({ brief }: { brief: NonNullable<Contact["brief"]> }) {
 				</span>
 			}
 		>
-			<p className="text-pretty text-muted-foreground text-sm/6">
-				{brief.narrative}
-			</p>
+			<DetailSheetProse>{brief.narrative}</DetailSheetProse>
 
-			{lines.length > 0 ? (
-				<DetailSheetProperties>
-					{lines.map((line) => (
-						<div
-							key={line.label}
-							className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-2 py-0.5"
-						>
-							<span className="truncate text-muted-foreground text-xs">
-								{line.label}
-							</span>
-							<span className="min-w-0 text-sm">{line.value}</span>
-						</div>
-					))}
-				</DetailSheetProperties>
-			) : null}
+			<DetailSheetProperties>
+				{lines.map((line) => (
+					<DetailSheetProperty key={line.label} label={line.label}>
+						{line.value}
+					</DetailSheetProperty>
+				))}
+
+				{previous.length > 0 ? (
+					<DetailSheetProperty label="Previously" wide>
+						<PreviousRoles roles={previous} />
+					</DetailSheetProperty>
+				) : null}
+			</DetailSheetProperties>
 		</DetailSheetSection>
+	);
+}
+
+/**
+ * Where they worked before, folded away.
+ *
+ * It used to be one `·`-joined string, which was unreadable for a reason worth
+ * writing down: the agent writes each role as `"Head of Growth · Leap AI (Mar
+ * 2024 – Oct 2024)"`, so the separator between roles was the same separator
+ * used *inside* them. Six jobs came out as one forty-word sentence with no way
+ * to tell where a job ended.
+ *
+ * Closed by default because the narrative directly above already says this in
+ * prose — "he previously spent eight months as Head of Growth at Leap AI" —
+ * and the list is the dates behind that sentence, not news. One line when you
+ * do not need it, one click when you do.
+ */
+function PreviousRoles({ roles }: { roles: string[] }) {
+	return (
+		<Accordion type="single" collapsible>
+			<AccordionItem value="previous">
+				<AccordionTrigger variant="subtle">
+					{roles.length === 1 ? "1 role" : `${roles.length} roles`}
+				</AccordionTrigger>
+				<AccordionContent>
+					<ul className="space-y-1">
+						{roles.map((role) => (
+							<li key={role}>{role}</li>
+						))}
+					</ul>
+				</AccordionContent>
+			</AccordionItem>
+		</Accordion>
 	);
 }
 
@@ -535,34 +569,43 @@ function WeKnowThem({
 
 	const first = name.split(" ")[0] ?? name;
 
-	const summary = [
-		emails > 0 ? `${emails} email${emails === 1 ? "" : "s"}` : null,
-		emails > 0
-			? lastReplyAt
-				? `last reply ${daysAgo(lastReplyAt)}`
-				: `${first} has never replied`
-			: null,
-		meetings > 0 ? `${meetings} meeting${meetings === 1 ? "" : "s"}` : null,
-	].filter(Boolean);
-
 	return (
 		<DetailSheetSection title="We know them">
-			{summary.length > 0 ? (
-				<p className="text-muted-foreground text-sm/6">{summary.join(" · ")}</p>
-			) : null}
+			<DetailSheetProperties>
+				{emails > 0 ? (
+					<DetailSheetProperty label="Emails">
+						<span className="tabular-nums">{emails}</span>
+						<span className="text-muted-foreground">
+							{" · "}
+							{lastReplyAt
+								? `last reply ${daysAgo(lastReplyAt)}`
+								: `${first} has never replied`}
+						</span>
+					</DetailSheetProperty>
+				) : null}
 
-			{nextMeeting ? (
-				<p className="text-sm">
-					<span className="text-muted-foreground">Next </span>
-					{nextMeeting.title ?? "Meeting"}
-					<span className="text-muted-foreground">
-						{" · "}
-						{dateFormat.format(new Date(nextMeeting.startsAt))}
-					</span>
-				</p>
-			) : null}
+				{meetings > 0 ? (
+					<DetailSheetProperty label="Meetings">
+						<span className="tabular-nums">{meetings}</span>
+					</DetailSheetProperty>
+				) : null}
 
-			{colleagues.length > 0 ? <Colleagues colleagues={colleagues} /> : null}
+				{nextMeeting ? (
+					<DetailSheetProperty label="Next meeting" wide>
+						{nextMeeting.title ?? "Meeting"}
+						<span className="text-muted-foreground">
+							{" · "}
+							{dateFormat.format(new Date(nextMeeting.startsAt))}
+						</span>
+					</DetailSheetProperty>
+				) : null}
+
+				{colleagues.length > 0 ? (
+					<DetailSheetProperty label="Also here" wide>
+						<Colleagues colleagues={colleagues} />
+					</DetailSheetProperty>
+				) : null}
+			</DetailSheetProperties>
 		</DetailSheetSection>
 	);
 }
@@ -575,8 +618,7 @@ function Colleagues({
 	const openRecord = useOpenRecord();
 
 	return (
-		<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-			<span className="text-muted-foreground text-xs">Also here</span>
+		<span className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
 			{colleagues.map((colleague) => (
 				<button
 					key={colleague.id}
@@ -590,7 +632,7 @@ function Colleagues({
 					) : null}
 				</button>
 			))}
-		</div>
+		</span>
 	);
 }
 

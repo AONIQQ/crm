@@ -46,8 +46,38 @@ const GUTTER = "px-5";
  * are labels on a filing cabinet — they need to be findable when you scan for
  * them and invisible when you are not.
  */
-const SECTION_TITLE =
+export const SECTION_TITLE =
 	"font-medium text-muted-foreground text-xs uppercase tracking-wider";
+
+/**
+ * The one label column every property in every sheet is measured against.
+ *
+ * Exported because the editable rows in `crm/inline-field` are the same row
+ * with a control in the value slot. Two definitions is how the Background block
+ * ended up nine pixels left of the Details block above it — near enough to look
+ * accidental, far enough to see.
+ */
+export const PROPERTY_ROW = "grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2";
+
+/**
+ * The label in that column, on every kind of row.
+ *
+ * Same size as the value it labels. Everything in a sheet is `text-xs` — which
+ * is what `Button`, `Input`, `Select` and `Table` already are, so the panel is
+ * uniform only as long as nothing overrides them upward. Hierarchy comes from
+ * colour: a muted label against a foreground value.
+ */
+export const PROPERTY_LABEL = "truncate text-muted-foreground text-xs";
+
+/**
+ * A read-only row wears the box an editable one already has.
+ *
+ * An editable value lives in a ghost button — one pixel of transparent border,
+ * `px-2` of padding — so anything set flat beside it starts nine pixels
+ * further left. Giving both cells of a read-only row the same invisible box is
+ * what keeps a section of facts and a section of fields on one edge.
+ */
+const PROPERTY_CELL = "border border-transparent py-1";
 
 /**
  * The chrome every record sheet is built from.
@@ -120,7 +150,7 @@ export function DetailSheetHeader({
 	onClose: () => void;
 }) {
 	return (
-		<SheetHeader className={cn("gap-0 border-b py-4", GUTTER)}>
+		<SheetHeader className={cn("gap-0 border-b py-3", GUTTER)}>
 			<div className="flex items-start gap-3">
 				{onBack ? (
 					<Tooltip>
@@ -136,7 +166,7 @@ export function DetailSheetHeader({
 
 				{media}
 
-				<div className="min-w-0 flex-1 space-y-1 pt-0.5">
+				<div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
 					<SheetTitle size="lg" className="wrap-anywhere">
 						{title}
 					</SheetTitle>
@@ -190,9 +220,9 @@ export function DetailSheetStat({
 	children: ReactNode;
 }) {
 	return (
-		<div className={cn("flex min-w-0 flex-1 flex-col gap-1 py-2.5", GUTTER)}>
-			<dt className="truncate text-muted-foreground text-xs">{label}</dt>
-			<dd className="min-w-0 truncate text-sm">{children}</dd>
+		<div className={cn("flex min-w-0 flex-1 flex-col gap-0.5 py-2", GUTTER)}>
+			<dt className="truncate text-muted-foreground text-xs/5">{label}</dt>
+			<dd className="min-w-0 truncate text-xs/5">{children}</dd>
 		</div>
 	);
 }
@@ -291,13 +321,13 @@ export function DetailSheetSection({
 	return (
 		<section
 			className={cn(
-				"space-y-3 border-b py-4 last:border-b-0",
+				"space-y-2 border-b py-3 last:border-b-0",
 				GUTTER,
 				className,
 			)}
 		>
 			{title || action ? (
-				<div className="flex h-6 items-center justify-between gap-3">
+				<div className="flex h-5 items-center justify-between gap-3">
 					{title ? <h3 className={SECTION_TITLE}>{title}</h3> : <span />}
 					{action}
 				</div>
@@ -315,6 +345,55 @@ export function DetailSheetSection({
  */
 export function DetailSheetProperties({ children }: { children: ReactNode }) {
 	return <div className="grid gap-x-8 sm:grid-cols-2">{children}</div>;
+}
+
+/**
+ * A property nobody can edit — a fact the agent found, a count we derived.
+ *
+ * The read-only twin of `InlineField`, sharing its label column and its value
+ * indent so a section of these under a section of those reads as one table
+ * rather than two that nearly line up.
+ *
+ * `wide` for the ones that are a sentence rather than a value — a list of
+ * previous employers, the names of everyone else at the company. Half a panel
+ * turns those into a three-line paragraph wearing a label.
+ */
+export function DetailSheetProperty({
+	label,
+	wide = false,
+	children,
+}: {
+	label: ReactNode;
+	wide?: boolean;
+	children: ReactNode;
+}) {
+	return (
+		<div className={cn(PROPERTY_ROW, "items-start", wide && "sm:col-span-2")}>
+			{/* `text-xs/5` so the label's line box is the value's, and the two sit on
+			    one baseline without either being nudged by hand. */}
+			<span className={cn(PROPERTY_LABEL, PROPERTY_CELL, "text-xs/5")}>
+				{label}
+			</span>
+			<div className={cn(PROPERTY_CELL, "min-w-0 px-2 text-xs/5")}>
+				{children}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The one paragraph shape in the panel — a company's description, a contact's
+ * background.
+ *
+ * Full width, not measured. A `max-w-prose` here looked like the text had been
+ * cut off rather than set: the properties beneath it run the width of the
+ * panel, so a paragraph stopping two thirds of the way across reads as a
+ * rendering fault. At `text-xs` the line is short enough anyway.
+ */
+export function DetailSheetProse({ children }: { children: ReactNode }) {
+	return (
+		<p className="text-pretty text-muted-foreground text-xs/5">{children}</p>
+	);
 }
 
 /**

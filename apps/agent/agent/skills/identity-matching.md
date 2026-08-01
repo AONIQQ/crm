@@ -11,13 +11,13 @@ built to fail closed.
 
 ## Why the obvious approach does not work
 
-`abigham@hubspot.com` is not a name. Searching for it directly returns nothing.
-Asking a model what it stands for produces "Abbie Bigham" — which happens to be
+`pmarchetti@fernhill.com` is not a name. Searching for it directly returns nothing.
+Asking a model what it stands for produces "Paula Marchetti" — which happens to be
 right, and would have been just as confident had it been wrong. You cannot tell
 the difference afterwards, which is why guessing is banned outright.
 
-What works is decomposition: `abigham` contains the surname `bigham`, and
-searching *that* alongside the company returns `linkedin.com/in/abigailbigham`
+What works is decomposition: `pmarchetti` contains the surname `marchetti`, and
+searching *that* alongside the company returns `linkedin.com/in/paulamarchetti`
 as the first result. The guess went into the **query**, and the answer came from
 the profile.
 
@@ -36,10 +36,10 @@ That is the shape of every match: guess where to look, never what you will find.
 3. **Read the verdict, not the profile.** It checks two things:
    - `employerMatches` — a current position matches the company we have.
    - `nameMatches` — the real name is consistent with the email local part
-     (`y` + `madar` → Yael Madar).
+     (`y` + `okonkwo` → Tomi Okonkwo).
 4. **Both, or it is not them.** One of the two is not a weaker match, it is a
    different person who happens to share something.
-5. If no candidate passes, **stop**. Leaving "Abigham" in the CRM is the correct
+5. If no candidate passes, **stop**. Leaving "Pmarchetti" in the CRM is the correct
    outcome when you do not know.
 
 ## Reporting the match
@@ -53,7 +53,7 @@ Call `identify_contact` with what you actually saw:
 | One check passes | `employer-only`, or the profile as `search.cites-profile` | Offered to a rep as a suggestion. |
 | Sources disagree | add a `contradiction` entry | Held. Nobody is shown a guess. |
 
-The middle row is the case this exists for. Four Bighams work at HubSpot; a
+The middle row is the case this exists for. Four Marchettis work at Fernhill; a
 human settles that in three seconds, and the old rule — throw away anything
 short of certain — meant we paid for that lookup every run and learned nothing
 from it. A suggestion is not a failed match. It is the match, handed to the one
@@ -63,14 +63,14 @@ Do not add evidence you did not observe to push a claim over a line.
 
 ## Things that look like evidence and are not
 
-- **A search result.** Search says where to look. A query for "Abbie Bigham"
-  once returned Lavazza's CEO, an HR lead at Reply, and a data engineer in
+- **A search result.** Search says where to look. A query for "Paula Marchetti"
+  once returned Brightwater's CEO, an HR lead at Reply, and a data engineer in
   Seattle — all with total confidence.
 - **A matching first name.** Half the Chrises at a company are not your Chris.
   The surname or the employer has to carry it.
 - **Perplexity's view of somebody's job title.** It aggregates stale sources; it
   said "Account Executive L3" for a profile that reads "Growth Specialist at
-  HubSpot". For identity, the person's own profile wins.
+  Fernhill". For identity, the person's own profile wins.
 - **A very plausible expansion.** `jsmith` is probably J. Smith. Probably is not
   a source.
 

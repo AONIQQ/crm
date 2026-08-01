@@ -1,10 +1,19 @@
 "use client";
 
+import Chat from "@carbon/icons-react/es/Chat";
+import Checkmark from "@carbon/icons-react/es/Checkmark";
+import Email from "@carbon/icons-react/es/Email";
+import Events from "@carbon/icons-react/es/Events";
+import Task from "@carbon/icons-react/es/Task";
+import Time from "@carbon/icons-react/es/Time";
 import { Button } from "@crm/ui/components/button";
+import type { CarbonIcon } from "@crm/ui/components/icon";
 import { Spinner } from "@crm/ui/components/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@crm/ui/components/toggle-group";
+import { cn } from "@crm/ui/lib/utils";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useQueryState } from "nuqs";
+import { DetailSheetEmpty, SECTION_TITLE } from "@/components/detail-sheet";
 import { useTRPC } from "@/lib/trpc/client";
 import { ActivityComposer } from "./activity-composer";
 import { TimelineEntry, type TimelineEntryData } from "./timeline-entry";
@@ -31,12 +40,86 @@ const TAB_LABELS: Record<TimelineTab, string> = {
 	done: "Done",
 };
 
+/**
+ * What an empty filter means, said properly.
+ *
+ * One line of grey text reading "Nothing here yet" was the only empty state in
+ * a record sheet that was not `DetailSheetEmpty` — and it said the same thing
+ * on all six filters, so "this record has no history" and "this record has no
+ * *email*" were indistinguishable.
+ */
+const EMPTY_STATES: Record<
+	TimelineTab,
+	{ title: string; description: string }
+> = {
+	all: {
+		title: "Nothing has happened yet",
+		description:
+			"Calls, notes, emails and meetings all land here. Log the first one above, or wait for Gmail and Calendar to sync.",
+	},
+	notes: {
+		title: "No notes",
+		description:
+			"Notes are what you write down for the next person to read — what they care about, who else is involved, what you promised.",
+	},
+	email: {
+		title: "No email",
+		description:
+			"Threads appear here as they are synced from Gmail. Nothing from before this mailbox was connected is imported.",
+	},
+	meetings: {
+		title: "No meetings",
+		description:
+			"Calendar events with someone from this record on them show up here, past and upcoming.",
+	},
+	upcoming: {
+		title: "Nothing outstanding",
+		description:
+			"Tasks you have not finished appear here, and at the top of the All tab until they are done.",
+	},
+	done: {
+		title: "Nothing finished yet",
+		description: "Tasks move here once you tick them off.",
+	},
+};
+
+const EMPTY_ICONS: Record<TimelineTab, CarbonIcon> = {
+	all: Time,
+	notes: Chat,
+	email: Email,
+	meetings: Events,
+	upcoming: Task,
+	done: Checkmark,
+};
+
+// Abbreviated, because these are eyebrows like every other heading in a record
+// sheet — and "WEDNESDAY, SEPTEMBER 16, 2026" set in uppercase is a banner.
 const dayFormat = new Intl.DateTimeFormat(undefined, {
-	weekday: "long",
-	month: "long",
+	weekday: "short",
+	month: "short",
 	day: "numeric",
 	year: "numeric",
 });
+
+/**
+ * "Today" and "Yesterday" by name, everything else by date.
+ *
+ * Most of what a rep reads on a timeline happened in the last two days, and
+ * "SAT, AUG 1, 2026" makes them work out that today is Saturday to learn that
+ * this happened an hour ago.
+ */
+function dayLabel(at: Date): string {
+	const midnight = (date: Date) =>
+		new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+	const days = Math.round(
+		(midnight(new Date()) - midnight(at)) / (1000 * 60 * 60 * 24),
+	);
+
+	if (days === 0) return "Today";
+	if (days === 1) return "Yesterday";
+	return dayFormat.format(at);
+}
 
 /**
  * Entries under one heading per day, in the order they arrive.
@@ -62,11 +145,40 @@ function byDay(entries: TimelineEntryData[]) {
 		if (group) {
 			group.entries.push(entry);
 		} else {
-			groups.set(day, { day, label: dayFormat.format(at), entries: [entry] });
+			groups.set(day, { day, label: dayLabel(at), entries: [entry] });
 		}
 	}
 
 	return [...groups.values()];
+}
+
+/**
+ * One day's entries under a heading that stays put.
+ *
+ * Sticky, because the heading is the only thing that says *when* — the entries
+ * under it carry a clock time and nothing else, so scrolling a year of history
+ * with the date scrolled off the top leaves "2:41 PM" meaning nothing. It needs
+ * the panel's own surface behind it or the rows show through as they pass.
+ */
+function TimelineDay({
+	label,
+	entries,
+}: {
+	label: string;
+	entries: TimelineEntryData[];
+}) {
+	return (
+		<section>
+			<h3 className={cn("sticky top-0 z-10 bg-popover py-2", SECTION_TITLE)}>
+				{label}
+			</h3>
+			<ul className="divide-y">
+				{entries.map((entry) => (
+					<TimelineEntry key={entry.id} entry={entry} />
+				))}
+			</ul>
+		</section>
+	);
 }
 
 /**
@@ -129,7 +241,11 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 					{TIMELINE_TABS.map((option) => (
 						<ToggleGroupItem key={option} value={option}>
 							{TAB_LABELS[option]}
-							{counts.data ? (
+							{/* A zero is omitted rather than printed, the same rule the
+							    sheet's own tabs follow. Six filters each carrying a "0"
+							    is a row of noise on exactly the records where there is
+							    least to look at. */}
+							{counts.data?.[option] ? (
 								<span className="tabular-nums opacity-60">
 									{counts.data[option]}
 								</span>
@@ -139,56 +255,44 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 				</ToggleGroup>
 			</div>
 
-			<div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5">
-				{pinnedEntries.length > 0 ? (
-					<section>
-						<h3 className="pb-1 font-medium text-muted-foreground text-xs">
-							Outstanding
-						</h3>
-						<ul className="divide-y">
-							{pinnedEntries.map((entry) => (
-								<TimelineEntry key={entry.id} entry={entry} />
-							))}
-						</ul>
-					</section>
-				) : null}
+			{history.isPending ? (
+				<div className="flex min-h-0 flex-1 items-center justify-center">
+					<Spinner />
+				</div>
+			) : entries.length === 0 && pinnedEntries.length === 0 ? (
+				<DetailSheetEmpty
+					icon={EMPTY_ICONS[tab]}
+					title={EMPTY_STATES[tab].title}
+					description={EMPTY_STATES[tab].description}
+				/>
+			) : (
+				<div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4">
+					{pinnedEntries.length > 0 ? (
+						<TimelineDay label="Outstanding" entries={pinnedEntries} />
+					) : null}
 
-				{history.isPending ? (
-					<div className="flex justify-center py-6">
-						<Spinner />
-					</div>
-				) : entries.length === 0 && pinnedEntries.length === 0 ? (
-					<p className="py-10 text-center text-muted-foreground text-xs">
-						Nothing here yet.
-					</p>
-				) : (
-					byDay(entries).map((group) => (
-						<section key={group.day}>
-							<h3 className="pb-1 font-medium text-muted-foreground text-xs">
-								{group.label}
-							</h3>
-							<ul className="divide-y">
-								{group.entries.map((entry) => (
-									<TimelineEntry key={entry.id} entry={entry} />
-								))}
-							</ul>
-						</section>
-					))
-				)}
+					{byDay(entries).map((group) => (
+						<TimelineDay
+							key={group.day}
+							label={group.label}
+							entries={group.entries}
+						/>
+					))}
 
-				{history.hasNextPage ? (
-					<Button
-						variant="outline"
-						size="sm"
-						className="self-start"
-						disabled={history.isFetchingNextPage}
-						onClick={() => history.fetchNextPage()}
-					>
-						{history.isFetchingNextPage ? <Spinner /> : null}
-						Show older
-					</Button>
-				) : null}
-			</div>
+					{history.hasNextPage ? (
+						<Button
+							variant="outline"
+							size="sm"
+							className="mt-4 self-start"
+							disabled={history.isFetchingNextPage}
+							onClick={() => history.fetchNextPage()}
+						>
+							{history.isFetchingNextPage ? <Spinner /> : null}
+							Show older
+						</Button>
+					) : null}
+				</div>
+			)}
 		</div>
 	);
 }

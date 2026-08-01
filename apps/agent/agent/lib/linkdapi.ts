@@ -6,8 +6,8 @@ const TIMEOUT_MS = 20_000;
  *
  * **There is deliberately no search function here.** LinkDAPI publishes no
  * people-search endpoint, and the undocumented `/search/people?keywords=` path
- * answers `HTTP 200` with entirely unrelated people — a query for "Abbie Bigham"
- * returned Lavazza's CEO, and a different random set on the next call. Anything
+ * answers `HTTP 200` with entirely unrelated people — a query for "Paula Marchetti"
+ * returned Brightwater's CEO, and a different random set on the next call. Anything
  * that looked like search here would be a well-typed way to file a stranger
  * against a real customer. Finding the slug is Perplexity's job.
  *

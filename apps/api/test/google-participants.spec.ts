@@ -219,7 +219,7 @@ describe("isAutomatedAddress — scheduling tools", () => {
 
 	it("still lets real people through", () => {
 		for (const email of [
-			"abigham@hubspot.com",
+			"pmarchetti@fernhill.com",
 			"helena@acme.com",
 			"infante@acme.com",
 			"contacts.lead@acme.com",
@@ -231,14 +231,18 @@ describe("isAutomatedAddress — scheduling tools", () => {
 
 describe("isDerivedName", () => {
 	it("recognises a name that came from the address alone", () => {
-		// "Abigham" is what splitName produces from abigham@…, so it is a
+		// "Pmarchetti" is what splitName produces from pmarchetti@…, so it is a
 		// placeholder a real display name is allowed to replace.
-		expect(isDerivedName("abigham@hubspot.com", "Abigham", null)).toBe(true);
+		expect(isDerivedName("pmarchetti@fernhill.com", "Pmarchetti", null)).toBe(
+			true,
+		);
 		expect(isDerivedName("jane.doe@acme.com", "Jane", "Doe")).toBe(true);
 	});
 
 	it("leaves a real name alone", () => {
-		expect(isDerivedName("abigham@hubspot.com", "Abbie", "Bigham")).toBe(false);
+		expect(isDerivedName("pmarchetti@fernhill.com", "Paula", "Marchetti")).toBe(
+			false,
+		);
 		expect(isDerivedName("jane.doe@acme.com", "Jane", "Doherty")).toBe(false);
 	});
 });

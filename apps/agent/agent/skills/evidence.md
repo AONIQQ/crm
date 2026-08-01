@@ -57,7 +57,7 @@ arithmetic this system exists to avoid.
 - Weak → kept but never shown.
 - Nothing → not stored.
 
-A suggestion is a good outcome. It is often the *correct* outcome: four Bighams
-work at HubSpot and a human settles that in three seconds. Do not go looking for
+A suggestion is a good outcome. It is often the *correct* outcome: four Marchettis
+work at Fernhill and a human settles that in three seconds. Do not go looking for
 extra evidence to push a claim over a line — that is how a wrong answer gets
 dressed up as a right one.

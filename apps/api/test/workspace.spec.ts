@@ -23,7 +23,7 @@ describe("isWorkspaceEmail", () => {
 	it("refuses everybody else", () => {
 		for (const email of [
 			"lewis@gmail.com",
-			"lewis@hubspot.com",
+			"stranger@example.com",
 			"",
 			null,
 			undefined,
