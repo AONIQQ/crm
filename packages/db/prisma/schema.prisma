@@ -412,6 +412,14 @@ model AgentTask {
   /// Research units this task may spend. Depth is a decision, and this is
   /// what the agent decides it against.
   budget Int @default(4)
+  /// How many times this row has been handed to a session.
+  ///
+  /// The lease is a deadline rather than a flag so a crashed run frees its
+  /// row — but a deadline alone cannot tell "died, retry me" from "cannot
+  /// ever finish". Without a count the second case is re-leased every ten
+  /// minutes forever, resuming the same durable session and paying for a
+  /// model turn each time. Two rows did exactly that for an hour and a half.
+  attempts Int @default(0)
 
   dueAt DateTime
   /// Held by a dispatcher tick. An expired lease is free to reclaim, which is

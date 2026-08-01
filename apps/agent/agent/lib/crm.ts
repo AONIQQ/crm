@@ -144,7 +144,31 @@ export type CrmHistory = {
 		email: string | null;
 		title: string | null;
 		companyName: string | null;
+		/**
+		 * The company **id**, not just its name.
+		 *
+		 * Its absence was a real dead end: every company tool takes an id, this
+		 * was the only place a contact session could have learned one, and it
+		 * returned a display string. So an agent sitting on a contact who plainly
+		 * works somewhere reported that it had no company to look at.
+		 */
+		company: {
+			id: string;
+			name: string;
+			domain: string | null;
+			industry: string | null;
+		} | null;
 	};
+	/** The deals this person is attached to — the other way out of a contact. */
+	deals: {
+		id: string;
+		name: string;
+		stage: string;
+		role: string | null;
+		amount: number | null;
+		currency: string;
+		expectedCloseDate: string | null;
+	}[];
 	threads: {
 		subject: string | null;
 		messageCount: number;
@@ -202,7 +226,25 @@ export async function readCrmHistory(
 			email: true,
 			title: true,
 			companyId: true,
-			company: { select: { name: true } },
+			company: {
+				select: { id: true, name: true, domain: true, industry: true },
+			},
+			deals: {
+				orderBy: { deal: { lastActivityAt: "desc" } },
+				select: {
+					role: true,
+					deal: {
+						select: {
+							id: true,
+							name: true,
+							stage: true,
+							amount: true,
+							currency: true,
+							expectedCloseDate: true,
+						},
+					},
+				},
+			},
 		},
 	});
 
@@ -276,7 +318,17 @@ export async function readCrmHistory(
 			email: contact.email,
 			title: contact.title,
 			companyName: contact.company?.name ?? null,
+			company: contact.company,
 		},
+		deals: contact.deals.map(({ role, deal }) => ({
+			id: deal.id,
+			name: deal.name,
+			stage: deal.stage,
+			role,
+			amount: deal.amount === null ? null : Number(deal.amount),
+			currency: deal.currency,
+			expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
+		})),
 		threads: threads.map((thread) => ({
 			subject: thread.subject,
 			messageCount: thread.messageCount,

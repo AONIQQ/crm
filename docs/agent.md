@@ -69,6 +69,67 @@ throw.
   `reason` is shown to the rep. An agent that cannot say why it will be back in
   fourteen days does not have a reason, it has a default.
 
+## Three records, and no dead ends between them
+
+The CRM has contacts, companies and deals, and the agent is opened on any of
+them. Every read hands back the **ids** of the neighbouring records, and that
+rule is not decoration — the two worst answers this agent has given both came
+from breaking it:
+
+> I don't have a tool that lists contacts by company, only ones that look up a
+> specific contact by ID or email. Could you paste the contact's name or email
+> address?
+
+Said to a rep who had the company open, with the contacts on screen. The
+company preamble reported a *count* of contacts, the only read took a
+`contactId`, and the agent correctly concluded it had nowhere to go. And, on a
+contact who plainly worked somewhere, that no company was available: the
+history returned `companyName`, a display string, while every company tool
+takes an id.
+
+So:
+
+| Read | Free | Hands back |
+| --- | --- | --- |
+| `read_crm_history` | yes | the contact's **company id**, the deals they are on, their colleagues |
+| `read_company_history` | yes | **every contact with their id**, every deal, the account's threads and meetings, the notes |
+| `read_deal_history` | yes | the stage clock, every stage it moved through, the people on it with ids, the last reply |
+| `search_crm` | yes | contacts, companies and deals matching what a person would type |
+
+**A preamble or a tool result that names a record without its id is a bug**,
+because the only recovery available to the agent is to ask the human — which is
+the CRM handing its own join back to the person using it. Ambiguity is
+different, and fine: four Marchettis come back as four rows with their titles,
+and asking which one is a question rather than a chore.
+
+`search_crm` deliberately does no fuzzy matching. "Northwind" reaching
+"Northwind Savings Group" is useful; "Marchetti" reaching "Marchetta" is a
+wrong record in a CRM, and a wrong record about a real person is the one
+failure this whole design exists to prevent.
+
+### A session is a conversation, and they are not all the same one
+
+`lib/preamble.ts` builds what a session is told before it speaks, and it varies
+on two axes:
+
+- **Which record.** A person is asked who they are, a company what it does and
+  who we know there, a deal where it stands. Each preamble names that record's
+  neighbours, with ids, and points at the read to start from.
+- **Who opened it.** A dispatched task is a research pass with a budget; a rep
+  in the sheet is a conversation. Told neither, the agent assumed the first,
+  which is how a question got a work plan back. `taskKind` is the tell — the
+  dispatcher sets it and the panel never does.
+
+The prose lives in `lib/preamble.ts` rather than in `instructions/task.ts` so
+that `test/preamble.integration.spec.ts` can assert the thing that actually
+matters: that a company session can name its own contacts. `task.ts` is the
+resolver, and it owns the one side effect — seeding `lib/focus.ts`, without
+which the audit hook files a session's events against nothing.
+
+Adding a fourth record kind is an entry in `sessionPreamble`, a read beside the
+other three, and a line in `TOOL_VERBS` (`apps/app/lib/agent-transcript.ts`),
+which a test enforces so no tool ever shows a rep a bare slug.
+
 ## What the agent may read, and what may leave
 
 It may read **everything**, including full email bodies — single-tenant internal

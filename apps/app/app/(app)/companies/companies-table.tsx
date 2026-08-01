@@ -137,7 +137,9 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 		label: "Enrichment status",
 		defaultHidden: true,
 		width: "w-[14%]",
-		cell: (row) => <EnrichmentIndicator status={row.enrichmentStatus} />,
+		cell: (row) => (
+			<EnrichmentIndicator status={row.enrichmentStatus} queued={row.queued} />
+		),
 	},
 ];
 
@@ -156,7 +158,9 @@ export function CompaniesTable() {
 		// invalidate on. Ask while any row on this page is still working — a new
 		// company's logo then lands in the table rather than waiting for a reload.
 		refetchInterval: (query) =>
-			query.state.data?.rows.some((row) => isEnriching(row.enrichmentStatus))
+			query.state.data?.rows.some((row) =>
+				isEnriching(row.enrichmentStatus, row.queued),
+			)
 				? ENRICHMENT_POLL_MS
 				: false,
 	});

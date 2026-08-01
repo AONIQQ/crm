@@ -12,6 +12,7 @@ import {
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
+import { AgentQueueService } from "../agent/agent-queue.service";
 import { AgentTriggerService } from "../agent/agent-trigger.service";
 import { blankToNull, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
@@ -51,6 +52,13 @@ export type CompanyRow = {
 	brandColor: string | null;
 	industry: string | null;
 	enrichmentStatus: EnrichmentStatus;
+	/**
+	 * Whether the agent actually has this company on its list.
+	 *
+	 * Separate from `enrichmentStatus` because that column defaults to PENDING
+	 * and so cannot tell "waiting its turn" from "nobody ever asked".
+	 */
+	queued: boolean;
 	source: RecordSource;
 	owner: {
 		id: string;
@@ -97,6 +105,7 @@ export class CompaniesService {
 	constructor(
 		@InjectDatabase() private readonly db: Db,
 		private readonly agent: AgentTriggerService,
+		private readonly queue: AgentQueueService,
 	) {}
 
 	async list(input: CompanyListInput): Promise<ListResult<CompanyRow>> {
@@ -138,6 +147,10 @@ export class CompaniesService {
 			this.facetCounts(input),
 		]);
 
+		// After the page is known, so it is one query for the rows on screen
+		// rather than a join that would have to be repeated for the facet counts.
+		const queued = await this.queue.queuedCompanies(rows.map((row) => row.id));
+
 		return {
 			rows: rows.map((row) => ({
 				id: row.id,
@@ -150,6 +163,7 @@ export class CompaniesService {
 				brandColor: row.brandColor,
 				industry: row.industry,
 				enrichmentStatus: row.enrichmentStatus,
+				queued: queued.has(row.id),
 				source: row.source,
 				owner: row.owner,
 				contactCount: row._count.contacts,
@@ -240,6 +254,7 @@ export class CompaniesService {
 
 		return {
 			...rest,
+			queued: await this.queue.isQueued({ companyId: id }),
 			createdAt: createdAt.toISOString(),
 			enrichedAt: enrichedAt?.toISOString() ?? null,
 			primaryContactId: primaryContact?.id ?? null,

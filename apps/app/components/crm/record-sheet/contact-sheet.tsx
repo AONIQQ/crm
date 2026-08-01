@@ -89,8 +89,10 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 	const query = useQuery({
 		...trpc.contacts.byId.queryOptions({ id: contactId }),
 		refetchInterval: (current) => {
-			const status = current.state.data?.enrichmentStatus;
-			return status && isEnriching(status) ? ENRICHMENT_POLL_MS : false;
+			const record = current.state.data;
+			return record && isEnriching(record.enrichmentStatus, record.queued)
+				? ENRICHMENT_POLL_MS
+				: false;
 		},
 	});
 	const contact = query.data;
@@ -167,6 +169,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 						{contact.enrichmentStatus !== "COMPLETE" ? (
 							<EnrichmentIndicator
 								status={contact.enrichmentStatus}
+								queued={contact.queued}
 								title={contact.enrichmentError}
 							/>
 						) : null}

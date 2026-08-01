@@ -155,8 +155,10 @@ export function CompanySheet({ companyId }: { companyId: string }) {
 	const query = useQuery({
 		...trpc.companies.byId.queryOptions({ id: companyId }),
 		refetchInterval: (current) => {
-			const status = current.state.data?.enrichmentStatus;
-			return status && isEnriching(status) ? ENRICHMENT_POLL_MS : false;
+			const record = current.state.data;
+			return record && isEnriching(record.enrichmentStatus, record.queued)
+				? ENRICHMENT_POLL_MS
+				: false;
 		},
 	});
 
@@ -251,6 +253,7 @@ export function CompanySheet({ companyId }: { companyId: string }) {
 				company && company.enrichmentStatus !== "COMPLETE" ? (
 					<EnrichmentIndicator
 						status={company.enrichmentStatus}
+						queued={company.queued}
 						title={company.enrichmentError}
 					/>
 				) : null

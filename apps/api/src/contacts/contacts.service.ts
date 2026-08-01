@@ -13,6 +13,7 @@ import {
 	Logger,
 	NotFoundException,
 } from "@nestjs/common";
+import { AgentQueueService } from "../agent/agent-queue.service";
 import { AgentTriggerService } from "../agent/agent-trigger.service";
 import { CompanyDirectoryService } from "../companies/company-directory.service";
 import { blankToNull, toCents } from "../crm/values";
@@ -123,6 +124,7 @@ export class ContactsService {
 		@InjectDatabase() private readonly db: Db,
 		private readonly companies: CompanyDirectoryService,
 		private readonly agent: AgentTriggerService,
+		private readonly queue: AgentQueueService,
 	) {}
 
 	async list(input: ContactListInput): Promise<ListResult<ContactRow>> {
@@ -247,6 +249,8 @@ export class ContactsService {
 		return {
 			...rest,
 			company,
+			/** Whether the agent has this person on its list — see `AgentQueueService`. */
+			queued: await this.queue.isQueued({ contactId: id }),
 			createdAt: createdAt.toISOString(),
 			brief: brief
 				? {

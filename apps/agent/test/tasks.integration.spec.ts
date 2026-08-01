@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@crm/db";
-import { claimDue, completeTask, scheduleTask } from "../agent/lib/tasks";
+import {
+	claimDue,
+	completeTask,
+	MAX_ATTEMPTS,
+	retireExhausted,
+	scheduleTask,
+} from "../agent/lib/tasks";
 
 /**
  * The work queue against a real database.
@@ -14,13 +20,17 @@ import { claimDue, completeTask, scheduleTask } from "../agent/lib/tasks";
 const kind = "test-lease";
 
 async function clear() {
+	// Tasks first: they reference the contacts below.
 	await db.agentTask.deleteMany({ where: { kind } });
+	await db.contact.deleteMany({ where: { email: { startsWith: "lease-" } } });
 }
 
 beforeEach(clear);
 afterEach(clear);
 
-async function queue(overrides: { priority?: number; dueAt?: Date } = {}) {
+async function queue(
+	overrides: { priority?: number; dueAt?: Date; contactId?: string } = {},
+) {
 	return db.agentTask.create({
 		data: {
 			kind,
@@ -28,6 +38,26 @@ async function queue(overrides: { priority?: number; dueAt?: Date } = {}) {
 			dueAt: overrides.dueAt ?? new Date(Date.now() - 1000),
 			priority: overrides.priority ?? 0,
 			budget: 4,
+			contactId: overrides.contactId ?? null,
+		},
+		select: { id: true },
+	});
+}
+
+/** Frees a leased row the way a dispatcher dying mid-run would. */
+async function expire(taskId: string) {
+	await db.agentTask.update({
+		where: { id: taskId },
+		data: { leasedUntil: new Date(Date.now() - 1000) },
+	});
+}
+
+/** A contact to hang a task off, so the subject can be asserted on. */
+async function someone() {
+	return db.contact.create({
+		data: {
+			firstName: "Lease",
+			email: `lease-${crypto.randomUUID()}@example.test`,
 		},
 		select: { id: true },
 	});
@@ -87,6 +117,30 @@ describe("claimDue", () => {
 		expect((await claimDue(10)).map((t) => t.id)).toContain(task.id);
 	});
 
+	/**
+	 * The money bug. Two rows were re-leased every ten minutes for an hour and a
+	 * half, resuming the same durable session and paying for a model turn each
+	 * time, because nothing counted how often that had already happened.
+	 */
+	it("stops handing out a row that has spent its attempts", async () => {
+		const task = await queue();
+
+		for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+			expect((await claimDue(10)).map((t) => t.id)).toContain(task.id);
+			await expire(task.id);
+		}
+
+		expect(await claimDue(10)).toHaveLength(0);
+	});
+
+	it("counts the attempts it has handed out", async () => {
+		const task = await queue();
+
+		expect((await claimDue(10))[0]?.attempts).toBe(1);
+		await expire(task.id);
+		expect((await claimDue(10))[0]?.attempts).toBe(2);
+	});
+
 	it("stops claiming once the work is finished", async () => {
 		const task = await queue();
 		await claimDue(10);
@@ -98,6 +152,64 @@ describe("claimDue", () => {
 		});
 
 		expect(await claimDue(10)).toHaveLength(0);
+	});
+});
+
+describe("retireExhausted", () => {
+	it("gives up on a row that never reported back, and says who it was about", async () => {
+		const contact = await someone();
+		const task = await queue({ contactId: contact.id });
+
+		for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+			await claimDue(10);
+			await expire(task.id);
+		}
+
+		const retired = await retireExhausted();
+		expect(retired.map((t) => t.id)).toContain(task.id);
+		// The subject comes back so the caller can tell the record, rather than
+		// leaving it saying somebody is still working on it.
+		expect(retired.find((t) => t.id === task.id)?.contactId).toBe(contact.id);
+
+		const row = await db.agentTask.findUnique({ where: { id: task.id } });
+		expect(row?.finishedAt).not.toBeNull();
+		expect(row?.outcome).toContain("Gave up");
+	});
+
+	it("leaves a row that is still leased on its last attempt alone", async () => {
+		const task = await queue();
+
+		for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+			await claimDue(10);
+			if (attempt < MAX_ATTEMPTS - 1) await expire(task.id);
+		}
+
+		// Still holding a live lease: the run may yet park and close it itself.
+		expect(await retireExhausted()).toHaveLength(0);
+	});
+
+	it("leaves work that still has attempts left", async () => {
+		await queue();
+		await claimDue(10);
+
+		expect(await retireExhausted()).toHaveLength(0);
+	});
+});
+
+describe("completeTask", () => {
+	it("retires a row once, and reports who it was about", async () => {
+		const contact = await someone();
+		const task = await queue({ contactId: contact.id });
+		await claimDue(10);
+
+		const subject = await completeTask(task.id, "ran");
+		expect(subject?.contactId).toBe(contact.id);
+
+		// A session parks at the end of every turn. Only the turn that belongs to
+		// this dispatch may close the row — a later one must not re-stamp it.
+		expect(await completeTask(task.id, "ran again")).toBeNull();
+		const row = await db.agentTask.findUnique({ where: { id: task.id } });
+		expect(row?.outcome).toBe("ran");
 	});
 });
 

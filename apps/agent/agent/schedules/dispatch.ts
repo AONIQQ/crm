@@ -1,6 +1,8 @@
+import { EnrichmentStatus } from "@crm/db";
 import { defineSchedule } from "eve/schedules";
 import crm from "../channels/crm";
-import { claimDue, completeTask } from "../lib/tasks";
+import { markRunning, settle } from "../lib/enrichment";
+import { claimDue, noteSession, retireExhausted } from "../lib/tasks";
 
 /** Per tick. The cap is concurrency, not ambition — the queue keeps. */
 const BATCH = 5;
@@ -26,13 +28,26 @@ export default defineSchedule({
 	async run({ receive, waitUntil, appAuth }) {
 		waitUntil(
 			(async () => {
+				// Rows that spent their attempts without a session ever reporting
+				// back. Retiring them before claiming keeps the sweep on the same
+				// clock as the work rather than needing a schedule of its own.
+				for (const abandoned of await retireExhausted()) {
+					await settle(
+						abandoned,
+						EnrichmentStatus.FAILED,
+						"Research was attempted several times and never completed.",
+					);
+				}
+
 				const tasks = await claimDue(BATCH);
 				if (tasks.length === 0) return;
 
 				await Promise.all(
 					tasks.map(async (task) => {
+						await markRunning(task);
+
 						try {
-							await receive(crm, {
+							const session = await receive(crm, {
 								message: brief(task),
 								// The channel keys its continuation token off this, so a
 								// re-dispatched lease resumes the run rather than starting
@@ -53,14 +68,21 @@ export default defineSchedule({
 								},
 							});
 
-							await completeTask(task.id, "ran");
+							// Hand-off, not completion: `receive` resolves the moment the
+							// session accepts the message, and the run outlives this tick.
+							// Retiring the row is the channel's `session.waiting` hook,
+							// which fires when the turn is genuinely over. Completing here
+							// instead would close rows before the research ran.
+							await noteSession(task.id, session.id);
 						} catch (error) {
-							// The lease expires on its own, so a failure here is a retry
-							// later rather than a row nobody ever picks up again.
-							await completeTask(
-								task.id,
-								`failed: ${error instanceof Error ? error.message : String(error)}`,
-							);
+							const reason =
+								error instanceof Error ? error.message : String(error);
+
+							// A hand-off that threw never reached a session, so nothing
+							// downstream will ever close this row. Leave it open for the
+							// lease to re-offer, bounded by the attempt cap, and say on the
+							// record why nothing is happening yet.
+							await settle(task, EnrichmentStatus.FAILED, reason);
 						}
 					}),
 				);
@@ -82,8 +104,21 @@ function brief(task: {
 	reason: string;
 	contactId: string | null;
 	companyId: string | null;
+	attempts: number;
 }): string {
-	switch (task.kind) {
+	// A retry resumes the same durable session, so the transcript is already
+	// there — saying so is what stops it being read as a fresh identical request
+	// and researched from scratch on somebody else's budget.
+	const again =
+		task.attempts > 1
+			? `This is attempt ${task.attempts}; the earlier one did not finish. Carry on from what is already in this thread rather than starting again. `
+			: "";
+
+	return again + work(task.kind, task.reason);
+}
+
+function work(kind: string, reason: string): string {
+	switch (kind) {
 		case "identify":
 			return "Work out who this contact actually is, and record what you find. Read what we already have before spending anything.";
 		case "profile":
@@ -94,6 +129,6 @@ function brief(task: {
 		case "company-profile":
 			return "Fill in what we know about this company: brand, industry, location, links. Write a brief if there is something worth saying.";
 		default:
-			return `Handle this: ${task.reason}`;
+			return `Handle this: ${reason}`;
 	}
 }
