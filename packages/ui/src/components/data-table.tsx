@@ -88,6 +88,15 @@ export type DataTableProps<TRow, TSub> = {
 	facets?: DataTableFacet[];
 	tabs?: DataTableTabs;
 	onRowClick?: (row: TRow) => void;
+	/**
+	 * The pointer or the keyboard has landed on a row, ahead of any click.
+	 *
+	 * For warming the record the row opens. Opening a sheet is a cold fetch
+	 * otherwise, so the panel appears with a spinner and a placeholder title
+	 * and only becomes the record a moment later — which reads as the sheet
+	 * not having opened at all.
+	 */
+	onRowHover?: (row: TRow) => void;
 	expandable?: DataTableExpandable<TRow, TSub>;
 	actions?: ReactNode;
 	leadingActions?: ReactNode;
@@ -157,6 +166,7 @@ export function DataTable<TRow, TSub = unknown>({
 	facets,
 	tabs,
 	onRowClick,
+	onRowHover,
 	expandable,
 	actions,
 	leadingActions,
@@ -530,6 +540,10 @@ export function DataTable<TRow, TSub = unknown>({
 								<Fragment key={id}>
 									<TableRow
 										onClick={clickable ? handleClick : undefined}
+										onMouseEnter={
+											onRowHover ? () => onRowHover(row) : undefined
+										}
+										onFocus={onRowHover ? () => onRowHover(row) : undefined}
 										className={
 											clickable
 												? anyExpandable
