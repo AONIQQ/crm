@@ -452,12 +452,20 @@ export function DataTable<TRow, TSub = unknown>({
 				// truncates (cells are overflow-hidden) instead of blowing the table
 				// out horizontally.
 				className={cn(
-					"table-fixed [&_td:first-child]:pl-0 [&_th:first-child]:pl-0",
+					"table-fixed [&_td:first-child]:pl-4 [&_th:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:last-child]:pr-4",
 					tableClassName,
 				)}
-				containerClassName="min-h-0 flex-1 overflow-auto"
+				// The shell: one rounded, bordered surface the rows live inside,
+				// rather than rows floating on the page. `overflow-hidden` is what
+				// makes the first and last row clip to the radius.
+				containerClassName="min-h-0 flex-1 overflow-auto rounded-lg border bg-card"
 			>
-				<TableHeader className="sticky top-0 z-10 bg-background [&_th]:bg-background">
+				{/*
+				 * The header is a shelf above the rows, not another row. It gets the
+				 * muted fill and an inset rule rather than a border, so it stays put
+				 * when the body scrolls under it.
+				 */}
+				<TableHeader className="sticky top-0 z-10 bg-muted [&_th]:bg-muted [&_tr]:border-0 [&_tr]:shadow-[inset_0_-1px_0_var(--border)]">
 					<TableRow>
 						{anyExpandable && (
 							<TableHead className="h-11 w-10 px-3">
