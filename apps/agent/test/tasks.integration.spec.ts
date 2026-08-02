@@ -8,19 +8,9 @@ import {
 	scheduleTask,
 } from "../agent/lib/tasks";
 
-/**
- * The work queue against a real database.
- *
- * The lease is raw SQL — `FOR UPDATE SKIP LOCKED` has no Prisma equivalent —
- * which is exactly the kind of code that typechecks and then does the wrong
- * thing at runtime. It is also the thing standing between one dispatcher and
- * two dispatchers doing every job twice.
- */
-
 const kind = "test-lease";
 
 async function clear() {
-	// Tasks first: they reference the contacts below.
 	await db.agentTask.deleteMany({ where: { kind } });
 	await db.contact.deleteMany({ where: { email: { startsWith: "lease-" } } });
 }
@@ -44,7 +34,6 @@ async function queue(
 	});
 }
 
-/** Frees a leased row the way a dispatcher dying mid-run would. */
 async function expire(taskId: string) {
 	await db.agentTask.update({
 		where: { id: taskId },
@@ -52,7 +41,6 @@ async function expire(taskId: string) {
 	});
 }
 
-/** A contact to hang a task off, so the subject can be asserted on. */
 async function someone() {
 	return db.contact.create({
 		data: {
@@ -78,8 +66,6 @@ describe("claimDue", () => {
 	it("does not hand the same row to two dispatchers", async () => {
 		await Promise.all([queue(), queue(), queue()]);
 
-		// The case the raw SQL exists for: two ticks landing together must take
-		// disjoint sets, not race for the same rows.
 		const [first, second] = await Promise.all([claimDue(3), claimDue(3)]);
 		const ids = [...first, ...second].map((t) => t.id);
 
@@ -108,7 +94,6 @@ describe("claimDue", () => {
 
 		expect(await claimDue(10)).toHaveLength(0);
 
-		// A run that died mid-task must not strand its row forever.
 		await db.agentTask.update({
 			where: { id: task.id },
 			data: { leasedUntil: new Date(Date.now() - 1000) },
@@ -117,11 +102,6 @@ describe("claimDue", () => {
 		expect((await claimDue(10)).map((t) => t.id)).toContain(task.id);
 	});
 
-	/**
-	 * The money bug. Two rows were re-leased every ten minutes for an hour and a
-	 * half, resuming the same durable session and paying for a model turn each
-	 * time, because nothing counted how often that had already happened.
-	 */
 	it("stops handing out a row that has spent its attempts", async () => {
 		const task = await queue();
 
@@ -167,8 +147,6 @@ describe("retireExhausted", () => {
 
 		const retired = await retireExhausted();
 		expect(retired.map((t) => t.id)).toContain(task.id);
-		// The subject comes back so the caller can tell the record, rather than
-		// leaving it saying somebody is still working on it.
 		expect(retired.find((t) => t.id === task.id)?.contactId).toBe(contact.id);
 
 		const row = await db.agentTask.findUnique({ where: { id: task.id } });
@@ -184,7 +162,6 @@ describe("retireExhausted", () => {
 			if (attempt < MAX_ATTEMPTS - 1) await expire(task.id);
 		}
 
-		// Still holding a live lease: the run may yet park and close it itself.
 		expect(await retireExhausted()).toHaveLength(0);
 	});
 
@@ -205,8 +182,6 @@ describe("completeTask", () => {
 		const subject = await completeTask(task.id, "ran");
 		expect(subject?.contactId).toBe(contact.id);
 
-		// A session parks at the end of every turn. Only the turn that belongs to
-		// this dispatch may close the row — a later one must not re-stamp it.
 		expect(await completeTask(task.id, "ran again")).toBeNull();
 		const row = await db.agentTask.findUnique({ where: { id: task.id } });
 		expect(row?.outcome).toBe("ran");

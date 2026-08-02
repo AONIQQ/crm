@@ -23,6 +23,194 @@ expensive in a specific way: it typechecks, builds, and then behaves differently
 from what you assumed — see the note on principal mapping under [the
 bridge](#the-bridge).
 
+## The model is a setting, not a deploy
+
+The agent runs on **`zai/glm-5.2-fast`** by default, and a rep can change that
+on the settings page without touching the code.
+
+`DEFAULT_AGENT_MODEL` lives in [`@crm/db/settings`](../packages/db/src/settings.ts)
+because two processes need the same answer — the agent, to compile its
+fallback, and the API, to tell the settings page what "Default" resolves to.
+A second copy of that string is a second answer to the question.
+
+- **The choice is a row, not an env var.** `AppSetting` holds one record, and
+  `agent.ts` resolves it through `defineDynamic` on `session.started` — so a
+  change applies to the next session rather than the next deployment, which
+  matters in an install whose owner cannot redeploy. A conversation already
+  open finishes on the model it started with, and that is deliberate: prompt
+  caches are per model, so switching part-way re-ingests the thread at uncached
+  prices.
+- **The window travels with the id.** eve never inherits
+  `modelContextWindowTokens` from the fallback, so `lib/model.ts` always sends
+  it. A model with a smaller window than the default would otherwise be
+  compacted against a number it does not have, and the turn fails at the
+  provider after the context has been assembled and paid for.
+- **A failed read degrades, it does not throw.** No row, no database, a
+  resolver that raises — all of them leave the compiled fallback in force.
+  `lib/model.ts` logs the reason, because the alternative is a session quietly
+  running on a model nobody chose.
+- **The chooser only offers models this agent can run.** Every read the agent
+  has is a tool, so `ModelCatalogService` filters the gateway catalog to
+  language models tagged `tool-use`. An unreachable gateway makes the chooser
+  read-only rather than failing the page, and the id already stored keeps
+  running.
+- **Not a frontier model, on purpose.** The hard part of this job is refusing a
+  plausible-looking wrong answer, and that is enforced by the tools and the
+  evidence model below rather than by model strength. What the job does want is
+  a long window — a company preamble hands over every contact on the account —
+  and answers fast enough that the sheet's Agent tab reads as a conversation.
+
+## Pictures are copied, never linked
+
+A logo and a profile photograph both arrive as somebody else's URL, and neither
+may be stored as one. LinkedIn signs its CDN URLs with an expiry roughly three
+weeks out; a brand's own CDN is fine until it is a rate limit on a page drawing
+forty logos. Either way the failure is the same and it is the worst shape a
+failure can take here — a picture that works today and is a broken image next
+month, with nothing to connect the two.
+
+So `mirror()` copies the bytes into Vercel Blob and the record points at our
+copy.
+
+**It lives in [`@crm/db/blob`](../packages/db/src/blob.ts), not in the agent.**
+It started here, on the reasoning that whoever writes the URL onto the record
+should own fetching the bytes — which is still right, and is exactly why it had
+to move once more than one thing wrote one. There are four writers now, in three
+processes:
+
+| Writer | What it copies |
+| --- | --- |
+| `lib/brand-images.ts` (agent) | The four artwork columns on a company |
+| `lib/portrait.ts` (agent) | A contact's photograph |
+| `FaviconService` (API) | The icon a domain's own site serves |
+| `ImageMirrorService` (API) | Anything on an existing row still pointing off-site, including a signed-in user's Google avatar |
+
+`packages/db/prisma/seed.ts` is the fifth, and it matters more than it sounds:
+demo rows outlive their sources, and a clone seeded today is still open in six
+months.
+
+- **The key carries a hash of the bytes.** That is what makes re-running both
+  idempotent and correct: unchanged artwork lands on the same URL and the record
+  does not move, while a brand that redesigns its mark gets a *new* URL rather
+  than the same one behind a month of CDN cache.
+- **One list of the columns that hold a picture**, `COMPANY_IMAGE_FIELDS` in
+  [`@crm/db/images`](../packages/db/src/images.ts). Four things read it and a
+  column missing from one of them is a picture that is never brought in-house,
+  with nothing anywhere to say so.
+- **It fetches through `@crm/db/safe-fetch`**, which is the favicon resolver's
+  own guard, exported rather than copied. The URL came from a vendor's answer
+  about a domain a rep typed, so a logo link pointing at `169.254.169.254` is a
+  request forgery from inside our network. One copy of that rule, several
+  callers.
+- **No `BLOB_READ_WRITE_TOKEN` means no photographs**, and everything else keeps
+  the origin's URL. The distinction is deliberate: a face comes from a signed
+  CDN link that expires, so storing one would promise a picture that breaks in
+  three weeks, while a logo or a favicon merely stays somebody else's to serve.
+  It is an optional capability like every other, and it is in
+  `lib/capabilities.ts` so the agent is told before it plans.
+- **A mirrored URL is what lets the browser optimize it.** `isOptimizable` in
+  `@crm/db/images` is the whole of that decision and both halves are load
+  bearing: `next.config.ts` allow-lists our Blob host and nothing else, because
+  a wildcard would make the deployment an open image proxy — and a mirrored
+  *SVG* is still refused, because Blob's separate origin is the only reason we
+  store SVG at all, and `/_next/image` would re-serve those bytes from ours.
+  Everything that fails the check renders as the plain `<img>` it always was.
+- **Faces are not optimized, and that is not an oversight.** `EntityLogo` uses
+  `<Image>`; `AvatarImage` deliberately does not. Radix establishes an avatar's
+  load state by probing the URL with its own `new window.Image()`, so an
+  optimized child would request a second, different URL — two fetches per face
+  on a table drawing forty. There is nothing to win for the second one either:
+  every photograph we store arrives pre-thumbnailed by its source
+  (`shrink_100_100`, `=s96-c`), while brand artwork arrives at whatever size the
+  brand publishes.
+- **A photograph is only ever taken from a source already tied to this person.**
+  `lib/portrait.ts` holds the write and `lib/portrait-sources.ts` holds the
+  chain, in order of certainty: their LinkedIn profile, their GitHub account,
+  their employer's own team page. Every one is keyed on an identifier already on
+  the record, so each asks *what does this account look like* rather than *who
+  is this name*.
+- **There is no image search by name, and there must never be.** It is the
+  obvious fourth step and the one that breaks everything else. A search for
+  "Paula Marchetti" returned Brightwater's CEO, an HR lead at Reply and a data
+  engineer in Seattle, all confidently — and those were names, which a rep can
+  read and smell. Nobody audits a face. Guess where to look, never what you will
+  find: a team page is a guess about a URL, and the name printed beside the
+  photograph is the answer.
+- **`get_linkedin_profile` stores the picture itself** the moment it computes
+  `isSamePerson`, in code, rather than asking the model to remember a follow-up
+  call.
+
+### A portrait is not a research session
+
+`schedules/dispatch.ts` runs `portrait` rows **directly, without `receive`**.
+This is the one kind that skips the model, and it is worth knowing why: the work
+is three reads keyed on identifiers already on the record and a byte copy, with
+nothing in it to decide.
+
+Routed through a session it also did not work. Seven queued faces sat behind
+sixty LLM sessions at five a minute and had not landed twenty five minutes
+later, each one waiting to pay for a context window in order to make no
+decisions with it.
+
+The schedule still decides nothing, which is the rule it has to keep. The row
+says what the work is; the branch only says whether it needs a conversation.
+
+### Catching up what was missed
+
+Enrichment is queued when a record is created, so anything created before a
+capability existed never gets it. Two routes, and picking the wrong one is
+expensive:
+
+| | Covers | Cost |
+| --- | --- | --- |
+| Automatic sweep, on sign-in | Records never successfully looked up | Ten credits per company |
+| `ImageMirrorService`, in the same sweep | Rows whose picture is still served from somebody else's origin | Nothing |
+| `bun run --filter=agent backfill:images` | Records already enriched, missing only the *pictures* | Nothing |
+
+The middle row is the one that keeps "every picture is ours" true rather than
+true-since-Tuesday. Every writer copies as it writes, but that says nothing
+about rows written before it did, or rows whose copy failed at the time because
+the origin was down. Left alone those never resolve, and nothing looks broken —
+the pictures render perfectly, off someone else's server, forever. It is capped
+at twenty five rows per table per sweep, so a backlog drains over several
+sign-ins instead of in one burst that looks like a scrape.
+
+**A photo sweep queues anyone with a LinkedIn URL, a GitHub URL, or an employer
+with a website — the three doors the chain knows. The third reads the company's
+team page and costs Context.dev credits, which is why a **finished `portrait`
+task stands that contact down for thirty days**. Most people are not on their
+employer's team page and never will be; without the stand-down every sweep would
+pay to re-read the same sites and find the same nothing, forever. The task's
+`outcome` carries what was actually tried, so a month of paid lookups leaves
+something readable behind.
+
+The sweep has no button, deliberately.** It had one on each list page, and a
+control whose correct usage is "press it whenever you notice blanks" is a chore
+dressed as a feature — a rep has no way of knowing which records predate the
+favicon resolver, and no business fixing that by hand.
+
+The trigger is **signing in**, which is the one moment nothing else in the app
+can see. `packages/auth` owns it, through a Better Auth
+`databaseHooks.session.create.after`; `BackfillService.onModuleInit` subscribes
+via `onSignedIn`. The registry exists because the arrow cannot point the other
+way — `@crm/auth` is a dependency of the API, so it must not import a Nest
+provider — and it means the Next.js app, which imports the package only to read
+sessions, runs none of this.
+
+`BackfillService` has no router at all as a result. Nothing calls it; it is
+subscribed. A five-minute stand-down collapses a burst — a team arriving at
+nine, or Google linking an account mid-sign-in — and `auto()` returns before any
+work starts, so nothing is between a person and their CRM.
+
+It writes `AgentTask` rows and decides nothing, which is what keeps it on the
+API's side of the line in [`api.md`](./api.md); whether a given company is worth
+the credits stays the agent's call. Each pass is capped at 500 rows and the
+leftover is logged rather than rounded away.
+
+The script is the cheap half: it re-derives from the `CompanyEnrichment.raw`
+payloads already on disk, which is what keeping them was for. Reach for it when
+the records are fine and only the images are missing.
+
 ## Evidence, not confidence
 
 **No tool accepts a confidence, a score, or a `sourceUrl` offered as proof.** A

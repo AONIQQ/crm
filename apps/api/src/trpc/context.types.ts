@@ -6,7 +6,6 @@ export type BaseTrpcContext = {
 	session: Session | null;
 };
 
-/** What every procedure behind `AuthMiddleware` sees. */
 export type AuthedTrpcContext = BaseTrpcContext & {
 	user: SessionUser;
 };

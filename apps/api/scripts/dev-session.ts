@@ -1,19 +1,3 @@
-/**
- * Mints a signed session cookie for a local user.
- *
- * Google is the only sign-in method, which means there is no way to get a
- * session from a script, a test, or a terminal — you need a browser and a real
- * Google account. That is correct for the product and useless for development,
- * so this writes the two rows Better Auth would have written and prints the
- * cookie it would have set.
- *
- *   bun run --filter=api dev:session                 # dev@localhost
- *   bun run --filter=api dev:session ada@example.com
- *
- *   curl -H "Cookie: $(bun run --filter=api dev:session)" localhost:3001/auth/me
- *
- * Refuses to run in production: it hands out a valid session for any email.
- */
 import { db } from "@crm/db";
 
 const COOKIE_NAME = "better-auth.session_token";
@@ -33,7 +17,6 @@ if (!secret) {
 const email = process.argv[2] ?? "dev@localhost";
 const name = email.split("@")[0] ?? "Developer";
 
-/** `value.base64(hmacSha256(secret, value))`, url-encoded — Better Auth's format. */
 async function signCookieValue(value: string): Promise<string> {
 	const key = await crypto.subtle.importKey(
 		"raw",

@@ -7,11 +7,6 @@ import { XIcon } from "lucide-react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type * as React from "react";
 
-// Width scale for left/right sheets (desktop only — the mobile drawer is
-// full-width). Default is `sm` (forms); `lg` is the standard detail width;
-// `xl` is for content that needs the extra room. `2xl` is the record sheet —
-// a company, contact or deal with its tabs, which replaces what would
-// otherwise be a page, and so gets close to page width.
 const sheetContentVariants = cva(
 	"fixed z-50 flex flex-col bg-popover bg-clip-padding text-xs/relaxed text-popover-foreground shadow-lg duration-300 ease-out data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-open:animate-in data-[side=bottom]:data-open:slide-in-from-bottom-full data-[side=left]:data-open:slide-in-from-left-full data-[side=right]:data-open:slide-in-from-right-full data-[side=top]:data-open:slide-in-from-top-full data-closed:animate-out data-[side=bottom]:data-closed:slide-out-to-bottom-full data-[side=left]:data-closed:slide-out-to-left-full data-[side=right]:data-closed:slide-out-to-right-full data-[side=top]:data-closed:slide-out-to-top-full",
 	{
@@ -131,9 +126,6 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
 	);
 }
 
-// `default` is the form sheet — a line of instruction above some fields.
-// `lg` is the record sheet, where the title is the name of the thing you
-// opened and has to carry the panel the way a page heading would.
 const sheetTitleVariants = cva("font-heading font-medium text-foreground", {
 	variants: {
 		size: {

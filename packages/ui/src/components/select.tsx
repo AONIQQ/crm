@@ -31,11 +31,6 @@ function SelectValue({
 	return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
-// `ghost` is for a select sitting in a row of otherwise plain values — an
-// editable property in a record sheet. A boxed control among bare text reads
-// as the only thing on the panel you are allowed to touch, which is the
-// opposite of true: it borrows the surrounding row's look until you point at
-// it, and its chevron only appears on hover or focus.
 const selectTriggerVariants = cva(
 	"flex w-fit items-center justify-between gap-1.5 rounded-md text-xs whitespace-nowrap transition-colors outline-none select-none disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-muted-foreground data-[size=default]:h-8 data-[size=sm]:h-7 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 	{

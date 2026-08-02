@@ -12,28 +12,18 @@ const OWNER_SELECT = {
 	image: true,
 } as const;
 
-/** Months in the trend chart, the current one included. */
 const TREND_MONTHS = 6;
 
-/**
- * Window behind the rolling rates — win rate, average deal size, cycle time.
- *
- * A quarter is long enough that one good week does not swing it and short
- * enough that it still describes how the rep is selling now.
- */
 const RATE_WINDOW_DAYS = 90;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** "Feb". The chart has room for three letters, not "February". */
 const MONTH_LABEL = new Intl.DateTimeFormat("en-US", { month: "short" });
 
-/** Local month boundary, `offset` months from the one `from` falls in. */
 function monthStart(from: Date, offset: number): Date {
 	return new Date(from.getFullYear(), from.getMonth() + offset, 1);
 }
 
-/** Months since year zero — subtract two to get a bucket index. */
 function monthKey(date: Date): number {
 	return date.getFullYear() * 12 + date.getMonth();
 }
@@ -42,18 +32,6 @@ function monthKey(date: Date): number {
 export class DashboardService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
-	/**
-	 * How the rep is doing: what they have closed, what is still open, the rates
-	 * that describe how they sell, and what needs attention today.
-	 *
-	 * The open pipeline spans all history, so it is aggregated in Postgres — the
-	 * alternative is a page that gets slower every quarter. Everything derived
-	 * from closed and newly created deals comes off one bounded read of the last
-	 * six months and is folded up here: that window does not grow with history,
-	 * it is a single index scan instead of a dozen aggregates, and it keeps the
-	 * KPI strip and the chart underneath it on exactly the same month boundaries
-	 * rather than letting SQL's idea of a month drift from JavaScript's.
-	 */
 	async summary(actingUserId: string, input: DashboardSummaryInput) {
 		const mine = input.scope === "me";
 		const owned = mine ? { ownerId: actingUserId } : {};
@@ -79,9 +57,6 @@ export class DashboardService {
 				_count: { _all: true },
 				_sum: { amount: true },
 			}),
-			// One read covers the trend chart, this month vs. last, and the
-			// 90-day rates. `amount` is the only wide column and there are four
-			// of them, so this stays cheap even for a busy team.
 			this.db.deal.findMany({
 				where: {
 					...owned,
@@ -97,8 +72,6 @@ export class DashboardService {
 					closedAt: true,
 				},
 			}),
-			// A count and a sum, not rows: the KPI strip quotes "due this month"
-			// as one figure, and no list on the page shows the deals behind it.
 			this.db.deal.aggregate({
 				where: {
 					...owned,
@@ -123,12 +96,18 @@ export class DashboardService {
 					currency: true,
 					expectedCloseDate: true,
 					stageChangedAt: true,
-					company: { select: { id: true, name: true, iconUrl: true } },
+					company: {
+						select: {
+							id: true,
+							name: true,
+							iconUrl: true,
+							iconDarkUrl: true,
+							iconTone: true,
+						},
+					},
 					owner: { select: OWNER_SELECT },
 				},
 			}),
-			// Always the acting user's, in either scope: nobody else's tasks are
-			// theirs to tick off.
 			this.db.activity.findMany({
 				where: {
 					type: ActivityType.TASK,
@@ -190,8 +169,6 @@ export class DashboardService {
 		for (const deal of recentDeals) {
 			const cents = toCents(deal.amount) ?? 0;
 
-			// A deal closed inside the window but opened before it lands in no
-			// created bucket — the index is negative, and the lookup misses.
 			const created = trend[monthKey(deal.createdAt) - firstBucket];
 			if (created) created.created += cents;
 
@@ -218,9 +195,6 @@ export class DashboardService {
 				wonCents += cents;
 				cycleDays += (closedAt.getTime() - deal.createdAt.getTime()) / DAY_MS;
 			} else if (stage === DealStage.CLOSED_LOST) {
-				// Disqualified deals are deliberately neither: they never reached a
-				// decision, so counting them would turn the win rate into a
-				// measure of lead quality.
 				losses += 1;
 			}
 		}
@@ -236,7 +210,6 @@ export class DashboardService {
 			},
 			wonThisMonth,
 			wonPrevMonth,
-			/** Rolling rates over `windowDays`. `null` where nothing has closed. */
 			performance: {
 				windowDays: RATE_WINDOW_DAYS,
 				wins,
@@ -245,7 +218,6 @@ export class DashboardService {
 				avgDealCents: wins === 0 ? null : Math.round(wonCents / wins),
 				avgCycleDays: wins === 0 ? null : Math.round(cycleDays / wins),
 			},
-			/** Six months of closed-won value against new pipeline created. */
 			trend,
 			closingThisMonthTotal: {
 				count: closingThisMonthTotals._count._all,

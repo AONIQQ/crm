@@ -25,7 +25,6 @@ import {
 	timelineTabParser,
 } from "./timeline-search-params";
 
-/** Exactly one of these — a timeline is always about one record. */
 export type TimelineAnchor =
 	| { companyId: string }
 	| { contactId: string }
@@ -40,14 +39,6 @@ const TAB_LABELS: Record<TimelineTab, string> = {
 	done: "Done",
 };
 
-/**
- * What an empty filter means, said properly.
- *
- * One line of grey text reading "Nothing here yet" was the only empty state in
- * a record sheet that was not `DetailSheetEmpty` — and it said the same thing
- * on all six filters, so "this record has no history" and "this record has no
- * *email*" were indistinguishable.
- */
 const EMPTY_STATES: Record<
 	TimelineTab,
 	{ title: string; description: string }
@@ -92,8 +83,6 @@ const EMPTY_ICONS: Record<TimelineTab, CarbonIcon> = {
 	done: Checkmark,
 };
 
-// Abbreviated, because these are eyebrows like every other heading in a record
-// sheet — and "WEDNESDAY, SEPTEMBER 16, 2026" set in uppercase is a banner.
 const dayFormat = new Intl.DateTimeFormat(undefined, {
 	weekday: "short",
 	month: "short",
@@ -101,13 +90,6 @@ const dayFormat = new Intl.DateTimeFormat(undefined, {
 	year: "numeric",
 });
 
-/**
- * "Today" and "Yesterday" by name, everything else by date.
- *
- * Most of what a rep reads on a timeline happened in the last two days, and
- * "SAT, AUG 1, 2026" makes them work out that today is Saturday to learn that
- * this happened an hour ago.
- */
 function dayLabel(at: Date): string {
 	const midnight = (date: Date) =>
 		new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -121,16 +103,6 @@ function dayLabel(at: Date): string {
 	return dayFormat.format(at);
 }
 
-/**
- * Entries under one heading per day, in the order they arrive.
- *
- * Keyed by a map rather than by comparing against the previous entry: run-length
- * grouping silently depends on the list being sorted by the very field it groups
- * on, and the moment that stops being true it emits the same day twice — which
- * React sees as duplicate keys. The API does order by `occurredAt`, so runs
- * *are* contiguous; this just refuses to be the thing that breaks if that ever
- * changes.
- */
 function byDay(entries: TimelineEntryData[]) {
 	const groups = new Map<
 		string,
@@ -152,14 +124,6 @@ function byDay(entries: TimelineEntryData[]) {
 	return [...groups.values()];
 }
 
-/**
- * One day's entries under a heading that stays put.
- *
- * Sticky, because the heading is the only thing that says *when* — the entries
- * under it carry a clock time and nothing else, so scrolling a year of history
- * with the date scrolled off the top leaves "2:41 PM" meaning nothing. It needs
- * the panel's own surface behind it or the rows show through as they pass.
- */
 function TimelineDay({
 	label,
 	entries,
@@ -183,17 +147,6 @@ function TimelineDay({
 	);
 }
 
-/**
- * Everything that has happened to a record, and the box for adding to it.
- *
- * Built as a panel that fills its tab: the composer stays put at the top,
- * where a rep can log the call they just finished without scrolling past a
- * year of history to reach it.
- *
- * A company's timeline picks up its deals' and contacts' entries for free —
- * the API stamps `companyId` on every activity it can resolve one for, so this
- * is one indexed range scan rather than three joins.
- */
 export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 	const trpc = useTRPC();
 
@@ -201,8 +154,6 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 
 	const counts = useQuery(trpc.activities.timelineCounts.queryOptions(anchor));
 
-	// On the "All" tab, outstanding tasks are pinned above the history and the
-	// history excludes them, so nothing appears twice.
 	const pinned = useQuery({
 		...trpc.activities.timeline.queryOptions({
 			...anchor,
@@ -224,23 +175,13 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			{/* One band of controls, then history. Two stacked bordered bands push
-			    the first entry off the fold on a laptop. */}
 			<div className="flex shrink-0 flex-col gap-2 border-b px-5 py-3">
 				<ActivityComposer anchor={anchor} />
 
-				{/*
-				 * Borderless, and outside the composer's box. This is a view control,
-				 * not something you fill in — six outlined boxes gave it the same
-				 * weight as the five outlined boxes above it, and the pair read as one
-				 * confused row of eleven buttons.
-				 */}
 				<ToggleGroup
 					type="single"
 					value={tab}
 					onValueChange={(next) => {
-						// The group clears its value when you click the active item;
-						// a timeline with no filter at all is not a state it has.
 						if (next) void setTab(next as TimelineTab);
 					}}
 					size="sm"
@@ -249,10 +190,6 @@ export function Timeline({ anchor }: { anchor: TimelineAnchor }) {
 					{TIMELINE_TABS.map((option) => (
 						<ToggleGroupItem key={option} value={option}>
 							{TAB_LABELS[option]}
-							{/* A zero is omitted rather than printed, the same rule the
-							    sheet's own tabs follow. Six filters each carrying a "0"
-							    is a row of noise on exactly the records where there is
-							    least to look at. */}
 							{counts.data?.[option] ? (
 								<span className="tabular-nums opacity-60">
 									{counts.data[option]}

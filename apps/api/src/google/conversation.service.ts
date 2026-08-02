@@ -2,14 +2,6 @@ import type { Db } from "@crm/db";
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
-/**
- * Reading a synced thread or event back out.
- *
- * Separate from the sync services because this is the only path that returns
- * message bodies, and keeping it in one file makes "where can an email body
- * reach the browser" a question with one answer. The timeline never calls it —
- * it carries a snippet, and the accordion fetches this on expand.
- */
 @Injectable()
 export class ConversationService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
@@ -47,6 +39,10 @@ export class ConversationService {
 			throw new NotFoundException(`No email thread with id ${threadId}.`);
 		}
 
+		const faces = await this.facesFor(
+			thread.messages.map((message) => message.fromEmail),
+		);
+
 		return {
 			...thread,
 			firstMessageAt: thread.firstMessageAt.toISOString(),
@@ -55,12 +51,42 @@ export class ConversationService {
 				...message,
 				sentAt: message.sentAt.toISOString(),
 				recipients: recipientsOf(message.recipients),
-				/** Deep link back to Gmail, when we know which message it was. */
+				fromImageUrl: faces.get(message.fromEmail.toLowerCase()) ?? null,
 				gmailUrl: message.gmailMessageId
 					? `https://mail.google.com/mail/u/0/#all/${message.gmailMessageId}`
 					: null,
 			})),
 		};
+	}
+
+	private async facesFor(addresses: string[]): Promise<Map<string, string>> {
+		const emails = [
+			...new Set(addresses.map((address) => address.toLowerCase())),
+		];
+		if (emails.length === 0) return new Map();
+
+		const [contacts, users] = await Promise.all([
+			this.db.contact.findMany({
+				where: { email: { in: emails, mode: "insensitive" } },
+				select: { email: true, imageUrl: true },
+			}),
+			this.db.user.findMany({
+				where: { email: { in: emails, mode: "insensitive" } },
+				select: { email: true, image: true },
+			}),
+		]);
+
+		const faces = new Map<string, string>();
+		for (const contact of contacts) {
+			if (contact.email && contact.imageUrl) {
+				faces.set(contact.email.toLowerCase(), contact.imageUrl);
+			}
+		}
+		for (const user of users) {
+			if (user.image) faces.set(user.email.toLowerCase(), user.image);
+		}
+
+		return faces;
 	}
 
 	async event(eventId: string) {
@@ -88,6 +114,7 @@ export class ConversationService {
 						responseStatus: true,
 						isOrganizer: true,
 						contactId: true,
+						contact: { select: { imageUrl: true } },
 					},
 				},
 			},
@@ -101,11 +128,14 @@ export class ConversationService {
 			...event,
 			startsAt: event.startsAt.toISOString(),
 			endsAt: event.endsAt.toISOString(),
+			attendees: event.attendees.map(({ contact, ...attendee }) => ({
+				...attendee,
+				imageUrl: contact?.imageUrl ?? null,
+			})),
 		};
 	}
 }
 
-/** `recipients` is `Json`, so it is read back defensively. */
 function recipientsOf(
 	value: unknown,
 ): { email: string; name: string | null; kind: string }[] {

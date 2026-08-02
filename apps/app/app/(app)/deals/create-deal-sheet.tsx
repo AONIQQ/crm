@@ -40,17 +40,11 @@ import { useTRPC } from "@/lib/trpc/client";
 
 const UNSET = "";
 
-export function CreateDealSheet({
-	/** Pre-selects a company when opened from that company's page. */
-	companyId,
-}: {
-	companyId?: string;
-}) {
+export function CreateDealSheet({ companyId }: { companyId?: string }) {
 	const openRecord = useOpenRecord();
 	const trpc = useTRPC();
 	const cache = useCrmCache();
 
-	// URL state, like every other view state here — see CreateCompanySheet.
 	const [open, setOpen] = useQueryState(
 		"new",
 		parseAsBoolean.withDefault(false),
@@ -70,7 +64,6 @@ export function CreateDealSheet({
 	const companies = useQuery(trpc.companies.options.queryOptions({ q: "" }));
 	const me = useQuery(trpc.users.me.queryOptions());
 
-	// Whoever is adding the deal is almost always the one working it.
 	const resolvedOwner = ownerId || me.data?.id || UNSET;
 
 	const create = useMutation(
@@ -118,7 +111,6 @@ export function CreateDealSheet({
 							companyId: company,
 							ownerId: resolvedOwner,
 							stage: stage as never,
-							// Typed in whole currency, stored and summed in cents.
 							amountCents: Number.isFinite(parsed)
 								? Math.round(parsed * 100)
 								: null,

@@ -12,6 +12,7 @@ import {
 	type EntityLogoTone,
 } from "@crm/ui/components/entity-logo";
 import { Icon } from "@crm/ui/components/icon";
+import { PersonAvatar } from "@crm/ui/components/person-avatar";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { TableCell } from "@crm/ui/components/table";
 import {
@@ -70,15 +71,6 @@ type CompanyDeal = Company["deals"][number];
 
 const UNASSIGNED = "unassigned";
 
-/**
- * The fields only the agent can fill, that it has not filled yet.
- *
- * Strictly the ones with no editor anywhere in this sheet. Phone, email, city
- * and country are `InlineField`s a rep types into, so their emptiness means
- * "nobody has entered this" — listing them here would blame the agent for a
- * blank a human was always going to fill, and imply it was off looking for
- * something it never looks for.
- */
 function pendingFields(company: Company): string[] {
 	const missing: string[] = [];
 	if (!company.industry) missing.push("industry");
@@ -114,7 +106,6 @@ const shortDateFormat = new Intl.DateTimeFormat(undefined, {
 	day: "numeric",
 });
 
-/** The soonest a deal here could land, which is the number reps forecast on. */
 function nextClose(deals: CompanyDeal[]): string | null {
 	const dates = deals
 		.map((deal) => deal.expectedCloseDate)
@@ -123,12 +114,6 @@ function nextClose(deals: CompanyDeal[]): string | null {
 	return dates[0] ?? null;
 }
 
-/**
- * The last row of a list: "add another one".
- *
- * Part of the table rather than a button floating above it, so the affordance
- * is where you finish reading and does not need its own band of chrome.
- */
 function AddRow({
 	label,
 	columns,
@@ -155,17 +140,8 @@ function AddRow({
 	);
 }
 
-/**
- * A company, everything attached to it, and the agent's work on it.
- *
- * Polls while the agent is running: enrichment is a background write with no
- * client action behind it, so there is nothing to invalidate — the only way to
- * notice it finished is to ask. The interval stops the moment it settles.
- */
 export function CompanySheet({ companyId }: { companyId: string }) {
 	const trpc = useTRPC();
-	// Tab and quick-add form both live in `?tab=` / `?add=`, so a half-typed
-	// contact survives a refresh and lands on the panel it was typed into.
 	const {
 		tab,
 		setTab,
@@ -248,12 +224,7 @@ export function CompanySheet({ companyId }: { companyId: string }) {
 				{
 					value: "agent",
 					label: "Agent",
-					// Bare, not inside `DetailSheetBody`: the panel brings its own
-					// scroll container, and nesting two gives the sheet two
-					// scrollbars.
 					content: <AgentPanel record={{ kind: "company", id: company.id }} />,
-					// Stays mounted behind the other tabs: this one holds a live
-					// stream, and tearing it down mid-answer loses the answer.
 					keepMounted: true,
 				},
 			]
@@ -274,10 +245,6 @@ export function CompanySheet({ companyId }: { companyId: string }) {
 					/>
 				) : undefined
 			}
-			// Only when there is something to say. "Enriched" is the resting state
-			// of every company in here, and a row that says so on all of them is a
-			// row nobody reads — which means nobody reads it when it says "failed"
-			// either.
 			note={
 				company && company.enrichmentStatus !== "COMPLETE" ? (
 					<EnrichmentIndicator
@@ -349,8 +316,6 @@ function CompanyOverview({
 
 	const update = useMutation(
 		trpc.companies.update.mutationOptions({
-			// `settle: "record"` — the row's spinner should last until the new value
-			// is under it, not until the table behind the sheet has caught up too.
 			onSuccess: () => cache.company(company.id, { settle: "record" }),
 			onError: (error) => toast.error(error.message),
 		}),
@@ -371,14 +336,7 @@ function CompanyOverview({
 						</DetailSheetSection>
 					) : null}
 
-					{/*
-					 * Promoted out of its tab. "Who do we know there" is the question a
-					 * rep opens a company to answer, and it was behind a click while
-					 * eight label/value rows had the whole panel.
-					 */}
 					<DetailSheetSection title="People">
-						{/* Adding happens on the Contacts tab, which owns the form:
-						 * two quick-add forms bound to one `?add=` would both open. */}
 						<CompanyContacts
 							company={company}
 							adding={false}
@@ -389,11 +347,6 @@ function CompanyOverview({
 				</DetailSheetMain>
 
 				<DetailSheetRail>
-					{/*
-					 * Only the fields a rep would correct by hand are editable: the brand,
-					 * industry and socials come from the agent, and a text box inviting
-					 * someone to retype them is a text box inviting someone to fight it.
-					 */}
 					<DetailSheetSection title="Details">
 						<DetailSheetProperties columns={1}>
 							<InlineField
@@ -548,8 +501,6 @@ function CompanyContacts({
 											size="icon-xs"
 											aria-pressed={isPrimary}
 											disabled={isPrimary || setPrimary.isPending}
-											// Without this the row's own handler fires too and opens
-											// the contact over the change just made.
 											onClick={(event) => {
 												event.stopPropagation();
 												setPrimary.mutate({
@@ -570,9 +521,21 @@ function CompanyContacts({
 								</Tooltip>
 							</TableCell>
 							<TableCell className="truncate px-3 py-2.5 font-medium">
-								{[contact.firstName, contact.lastName]
-									.filter(Boolean)
-									.join(" ")}
+								<span className="flex min-w-0 items-center gap-2">
+									<PersonAvatar
+										src={contact.imageUrl}
+										name={[contact.firstName, contact.lastName]
+											.filter(Boolean)
+											.join(" ")}
+										email={contact.email}
+										size="sm"
+									/>
+									<span className="truncate">
+										{[contact.firstName, contact.lastName]
+											.filter(Boolean)
+											.join(" ")}
+									</span>
+								</span>
 							</TableCell>
 							<TableCell className="truncate px-3 py-2.5">
 								{contact.title ?? <EmptyCellValue />}

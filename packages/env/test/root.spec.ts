@@ -2,18 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-/**
- * Finding the workspace root is the part of this package that can fail
- * silently. If it stops one directory too early it reads a file that exists
- * but holds a different set of variables, and the symptom appears somewhere
- * else entirely — a missing `ALLOWED_SIGN_IN` reported by Nest's validator,
- * three frames from the reason.
- *
- * The first `turbo.json` walking up was exactly that bug: `apps/agent` and
- * `apps/api` have their own, so the API resolved its root to `apps/api`.
- */
-
-/** The same walk as `loadRootEnv`, kept here so the property is testable. */
 function findRoot(start: string): string | null {
 	let directory = resolve(start);
 
@@ -30,9 +18,7 @@ function findRoot(start: string): string | null {
 				) {
 					return directory;
 				}
-			} catch {
-				// fall through
-			}
+			} catch {}
 		}
 
 		const parent = dirname(directory);
@@ -49,7 +35,6 @@ describe("finding the workspace root", () => {
 	});
 
 	it("finds it from a package that has its own turbo.json", () => {
-		// The regression. Both of these ship a turbo.json.
 		for (const app of ["apps/api", "apps/agent"]) {
 			expect(findRoot(join(repoRoot, app))).toBe(repoRoot);
 		}
@@ -64,7 +49,6 @@ describe("finding the workspace root", () => {
 	});
 
 	it("only matches a manifest that declares workspaces", () => {
-		// Every package has a package.json; exactly one has `workspaces`.
 		const manifest: unknown = JSON.parse(
 			readFileSync(join(repoRoot, "apps", "api", "package.json"), "utf8"),
 		);
@@ -92,8 +76,6 @@ describe("the committed .env.example", () => {
 	});
 
 	it("ships no secret of its own", () => {
-		// A committed example with a real-looking secret in it is a secret people
-		// paste into production.
 		for (const line of example.split("\n")) {
 			if (line.startsWith("#") || !line.includes("=")) continue;
 			const value = line.slice(line.indexOf("=") + 1).trim();

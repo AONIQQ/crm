@@ -3,36 +3,7 @@ import { type Evidence, scoreEvidence } from "./evidence";
 import { currentFocus } from "./focus";
 import { isDerivedName, splitName } from "./names";
 
-/**
- * The only way a claim reaches a contact record.
- *
- * Three rules live here rather than in a prompt, because a rule the model is
- * asked to follow is a rule the model can talk itself out of:
- *
- * 1. **A human outranks the agent.** A value on the record with no fact behind
- *    it was typed by a person, and is never overwritten.
- * 2. **A dismissal is final.** Once a rep has said no to a value, it is not
- *    offered again — otherwise every run re-proposes it and the suggestion
- *    becomes something reps click through without reading.
- * 3. **Nothing is written without a primary source**, whatever the arithmetic
- *    says. Enforced by `bandFor`, restated here because it is the rule that
- *    stops a plausible stranger becoming a customer record.
- */
-
-/**
- * The fields a fact may be about.
- *
- * `column` is the `Contact` field an applied fact writes through to; the ones
- * without a column are true of the person but have nowhere on the record to
- * live, so they are read straight from the fact by the background panel. That
- * is deliberate: `employer` as a fact rather than a column is what makes a job
- * change a superseded row instead of a diffing job.
- */
 const FIELDS = {
-	/**
-	 * Their actual name. Applied by splitting into `firstName`/`lastName`, and
-	 * guarded differently from everything else — see `humanOwns`.
-	 */
 	name: { column: null },
 	title: { column: "title" },
 	linkedinUrl: { column: "linkedinUrl" },
@@ -64,7 +35,6 @@ export type RecordFactResult = {
 	band: FactBand | null;
 	score: number;
 	rationale: string;
-	/** Why nothing happened, when nothing happened. Written for the model. */
 	reason?: string;
 };
 
@@ -169,8 +139,6 @@ export async function recordFact(
 
 	await db.$transaction(async (tx) => {
 		if (applies && currentApplied) {
-			// The old value is not deleted — it is history, and for `employer` it
-			// is the job change itself.
 			await tx.contactFact.update({
 				where: { id: currentApplied.id },
 				data: { status: FactStatus.SUPERSEDED, supersededAt: new Date() },
@@ -222,7 +190,6 @@ export async function recordFact(
 	};
 }
 
-/** Whether a job change just happened: an applied `employer` fact superseded. */
 export async function lastEmployerChange(contactId: string) {
 	const [previous, current] = await Promise.all([
 		db.contactFact.findFirst({
@@ -293,16 +260,6 @@ export async function writeBrief(input: {
 	return { written: true, score: scored.score };
 }
 
-/**
- * Whether the value already there belongs to a person rather than to us.
- *
- * For ordinary fields the test is simple: something is in the column and no
- * applied fact explains it, so a human typed it.
- *
- * A name needs a different test, because the sync always writes one. `Pmarchetti`
- * is a placeholder derived from `pmarchetti@fernhill.com` and is ours to replace;
- * anything that is not derived came from a mail header or a person, and is not.
- */
 function humanOwns({
 	field,
 	column,

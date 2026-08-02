@@ -11,19 +11,6 @@ import {
 } from "@/components/detail-sheet";
 import { useRecordStack } from "./record-stack";
 
-/**
- * The frame every record sheet is poured into.
- *
- * The contents of the panel, not the panel: the one dialog every record is
- * shown in belongs to `RecordSheetHost`, so stepping sideways from a company
- * to one of its deals swaps what is in here without rebuilding the panel
- * around it.
- *
- * The header renders before the record has loaded — a sheet has to have a
- * title from the first frame or the dialog is unlabelled, and a panel that
- * pops into existence a beat after the click reads as a bug rather than as
- * loading.
- */
 export function RecordSheetFrame({
 	loading,
 	error,
@@ -49,9 +36,6 @@ export function RecordSheetFrame({
 	tab: string;
 	onTabChange: (tab: string) => void;
 }) {
-	// Back and close read from the same stack, so the frame does not need them
-	// passed down: Back appears when there is a record underneath, and closing
-	// leaves the trail.
 	const { stack, close, closeAll } = useRecordStack();
 
 	return (
@@ -89,7 +73,6 @@ export function RecordSheetFrame({
 	);
 }
 
-/** Money, or the dash that means nobody has put a number on it yet. */
 export function DealAmount({
 	amountCents,
 	currency,
@@ -103,11 +86,6 @@ export function DealAmount({
 	);
 }
 
-/**
- * A record's meta line: `attio.com · London · Software`, with the first part
- * optionally a link. Assembled here so a company, a contact and a deal all
- * separate their facts the same way.
- */
 export function MetaLine({
 	lead,
 	parts,
@@ -115,10 +93,6 @@ export function MetaLine({
 	lead?: ReactNode;
 	parts: (string | null | undefined)[];
 }) {
-	// Deduplicated, case-insensitively. The parts come from different fields that
-	// can legitimately hold the same string — a contact at a company called
-	// Architect whose title is "Architect" would otherwise read
-	// "Architect · Architect", and render two children under the same key.
 	const seen = new Set<string>();
 	const rest: string[] = [];
 
@@ -146,7 +120,6 @@ export function MetaLine({
 	);
 }
 
-/** The domain, as a link, which is what a domain is. */
 export function DomainLink({
 	domain,
 	website,

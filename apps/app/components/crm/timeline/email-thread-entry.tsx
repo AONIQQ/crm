@@ -19,13 +19,6 @@ const timeFormat = new Intl.DateTimeFormat(undefined, {
 	minute: "2-digit",
 });
 
-/**
- * A synced Gmail thread, collapsed to one line.
- *
- * The messages are fetched only when it is opened: the timeline payload carries
- * a snippet and a count, and email bodies are the one thing that must never
- * ride along on a list response.
- */
 export function EmailThreadEntry({
 	threadId,
 	messageCount,
@@ -46,7 +39,6 @@ export function EmailThreadEntry({
 			type="single"
 			collapsible
 			onValueChange={(value) => {
-				// Latched: collapsing again should not throw away what we fetched.
 				if (value) setOpened(true);
 			}}
 		>
@@ -72,6 +64,7 @@ export function EmailThreadEntry({
 									key={message.id}
 									from={message.fromName ?? message.fromEmail}
 									fromEmail={message.fromEmail}
+									fromImageUrl={message.fromImageUrl}
 									sentAt={timeFormat.format(new Date(message.sentAt))}
 									direction={message.direction}
 									body={message.body}

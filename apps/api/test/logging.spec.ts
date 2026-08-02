@@ -8,7 +8,6 @@ import {
 } from "../src/logging/request-context";
 import { RequestLoggerMiddleware } from "../src/logging/request-logger.middleware";
 
-/** The logger reads `NODE_ENV` live so format can be exercised both ways. */
 function withNodeEnv(value: string, fn: () => void): void {
 	const previous = process.env.NODE_ENV;
 	process.env.NODE_ENV = value;
@@ -96,9 +95,7 @@ describe("ContextLogger", () => {
 
 			expect(output).toContain("Hello");
 			expect(output).toContain("statusCode");
-			// Nest's default rendering for a plain object, which this replaces.
 			expect(output).not.toContain("Object(2)");
-			// The request id rides inside the context bracket.
 			expect(output).toContain("Ctx abcdef12");
 		});
 	});

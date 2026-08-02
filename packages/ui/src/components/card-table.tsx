@@ -17,8 +17,6 @@ export function CardTable({
 }) {
 	return (
 		<SimpleTable
-			// Gutters rather than flush: the table now draws its own border, and
-			// text sitting hard against it reads as a clipping bug.
 			className="min-w-[48rem] table-fixed [&_td:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:first-child]:pl-4 [&_th:last-child]:pr-4"
 			columns={columns}
 		>

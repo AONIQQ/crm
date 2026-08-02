@@ -28,7 +28,6 @@ import {
 } from "./participants";
 import { SyncStateService } from "./sync-state.service";
 
-/** Ceiling on one tick, so a burst of mail cannot stretch an invocation. */
 const MAX_MESSAGES_PER_TICK = 120;
 
 export type GmailSyncOutcome = {
@@ -40,7 +39,6 @@ export type GmailSyncOutcome = {
 	reason?: string;
 };
 
-/** A message parsed into the shape the database wants. */
 type ParsedMessage = {
 	rfcMessageId: string;
 	rootId: string;
@@ -52,13 +50,6 @@ type ParsedMessage = {
 	gmailMessageId: string | null;
 };
 
-/**
- * Gmail → `EmailThread`/`EmailMessage` → one projected `Activity` per thread.
- *
- * The two things that make this harder than calendar: identity has to be
- * derived from RFC headers rather than handed to us, and a reply carries the
- * whole conversation in its body, so what gets stored needs pruning first.
- */
 @Injectable()
 export class GmailSyncService {
 	private readonly logger = new Logger(GmailSyncService.name);
@@ -96,8 +87,6 @@ export class GmailSyncService {
 
 		await this.state.markRunning(row.id);
 
-		// Whose mailbox this is, so a message can be classed inbound or outbound
-		// and so "did the rep reply?" is answerable.
 		const profile = await this.gmail.profile(token.accessToken);
 		if (profile.outcome !== "ok") {
 			return this.handleFailure(row, profile, "gmail");
@@ -114,9 +103,6 @@ export class GmailSyncService {
 			};
 		}
 
-		// No cursor means this mailbox has never been seen. Sync is forward-only,
-		// so the first pass imports nothing at all — it just records where "now"
-		// is, and everything after that point arrives through `incremental`.
 		if (!row.cursor) {
 			return this.start(row, profile.data.historyId ?? null);
 		}
@@ -124,14 +110,6 @@ export class GmailSyncService {
 		return this.incremental(row, token.accessToken, mailbox, row.cursor);
 	}
 
-	/**
-	 * Marks the starting line.
-	 *
-	 * Deliberately imports nothing. A CRM that suddenly fills with three months
-	 * of a rep's old mail is noise nobody asked for, and the history is not what
-	 * the feature is for — what matters is that from this moment on, the
-	 * conversation shows up on the record.
-	 */
 	private async start(
 		row: MailboxSync,
 		historyId: string | null,
@@ -159,7 +137,6 @@ export class GmailSyncService {
 		return { source: "gmail", userId: row.userId, status: "synced" };
 	}
 
-	/** Everything added since the stored historyId. */
 	private async incremental(
 		row: MailboxSync,
 		accessToken: string,
@@ -171,11 +148,6 @@ export class GmailSyncService {
 		});
 
 		if (history.outcome === "cursor-invalid") {
-			// The historyId fell out of Gmail's retention window — which takes about
-			// a week of the sync not running at all. Forward-only means we do not
-			// go back and fetch the gap: the cursor is re-pointed at now and the
-			// missed window is simply not imported. Logged, because a mailbox that
-			// keeps landing here is a sync that keeps failing.
 			await this.state.clearCursor(row.id, history.reason);
 
 			return {
@@ -205,10 +177,6 @@ export class GmailSyncService {
 		);
 
 		await this.state.settle(row.id, {
-			// Hold the cursor when the batch was capped. Advancing past messages we
-			// never read would drop them permanently; leaving it means the next tick
-			// re-lists the same window, finds this run's writes already stored, and
-			// works through the next hundred.
 			cursor:
 				remaining > 0
 					? startHistoryId
@@ -233,14 +201,6 @@ export class GmailSyncService {
 		};
 	}
 
-	/**
-	 * Fetches and stores message ids, up to this tick's ceiling.
-	 *
-	 * Reports what it could not get to, so the caller knows whether it is safe to
-	 * advance the cursor. Filtering the already-stored ids out *before* taking the
-	 * batch is what makes a capped run make progress: otherwise every tick would
-	 * re-take the same first hundred, find them all present, and write nothing.
-	 */
 	private async ingest(
 		row: MailboxSync,
 		accessToken: string,
@@ -249,9 +209,6 @@ export class GmailSyncService {
 	): Promise<{ written: number; remaining: number }> {
 		if (ids.length === 0) return { written: 0, remaining: 0 };
 
-		// The unique index on `rfcMessageId` is the backstop, but checking Gmail's
-		// own id first avoids paying for a `messages.get` on something another
-		// rep's sync already ingested.
 		const alreadyHave = await this.db.emailMessage.findMany({
 			where: { gmailMessageId: { in: [...ids] } },
 			select: { gmailMessageId: true },
@@ -290,7 +247,6 @@ export class GmailSyncService {
 		return { written, remaining };
 	}
 
-	/** One message: match it, store it, keep its thread's projection current. */
 	private async store(
 		row: MailboxSync,
 		mailbox: string,
@@ -300,8 +256,6 @@ export class GmailSyncService {
 		const parsed = this.parse(message);
 		if (!parsed) return false;
 
-		// Already ingested from another mailbox. The unique index would catch this
-		// anyway; checking first keeps the log honest about what was written.
 		const existing = await this.db.emailMessage.findUnique({
 			where: { rfcMessageId: parsed.rfcMessageId },
 			select: { id: true },
@@ -311,8 +265,6 @@ export class GmailSyncService {
 		const participants = [parsed.from, ...parsed.recipients];
 		const outbound = parsed.from.email === mailbox;
 
-		// The thread may already exist from an earlier message, in which case its
-		// match is authoritative and the whole resolve step is skipped.
 		const thread = await this.db.emailThread.findUnique({
 			where: { rootMessageId: parsed.rootId },
 			select: { id: true, companyId: true, contactId: true },
@@ -322,9 +274,6 @@ export class GmailSyncService {
 		let contactId = thread?.contactId ?? null;
 
 		if (!thread) {
-			// Two-way engagement: the rep has to have sent something. An inbound-only
-			// thread is a newsletter, a recruiter or spam, and creating a company
-			// from one is how a CRM fills with junk.
 			const repliedTo =
 				outbound || (await this.hasOutboundInThread(parsed.rootId, mailbox));
 
@@ -333,7 +282,6 @@ export class GmailSyncService {
 					participants,
 					allowCreate: row.autoCreate && repliedTo,
 					source: RecordSource.EMAIL,
-					// Whoever's mailbox this is owns what it creates.
 					ownerId: row.userId,
 				},
 				context,
@@ -343,8 +291,6 @@ export class GmailSyncService {
 			contactId = match.contactId;
 
 			if (!companyId && !contactId) {
-				// Not anybody we track and not worth creating. Dropped at ingest —
-				// never written, per the plan §5.
 				return false;
 			}
 		}
@@ -381,9 +327,6 @@ export class GmailSyncService {
 			},
 		});
 
-		// Recomputed rather than incremented: messages arriving out of order would
-		// otherwise leave `lastMessageAt` pointing at whichever message happened to
-		// arrive last, which is not the same as the latest one.
 		const stats = await this.db.emailMessage.aggregate({
 			where: { threadId: record.id },
 			_count: { _all: true },
@@ -400,8 +343,6 @@ export class GmailSyncService {
 				messageCount: stats._count._all,
 				firstMessageAt,
 				lastMessageAt,
-				// A thread's subject is the one it started with, not the "Re: Re: Fwd:"
-				// it acquired.
 				...(parsed.sentAt <= firstMessageAt ? { subject: parsed.subject } : {}),
 			},
 		});
@@ -417,7 +358,6 @@ export class GmailSyncService {
 		return true;
 	}
 
-	/** Whether the mailbox owner has sent anything into this thread already. */
 	private async hasOutboundInThread(
 		rootMessageId: string,
 		mailbox: string,
@@ -433,12 +373,6 @@ export class GmailSyncService {
 		return found !== null;
 	}
 
-	/**
-	 * One `Activity` per thread, updated as the thread grows.
-	 *
-	 * Not one per message: a forty-message thread would otherwise be forty
-	 * timeline rows saying almost the same thing.
-	 */
 	private async project(
 		emailThreadId: string,
 		userId: string,
@@ -476,7 +410,6 @@ export class GmailSyncService {
 		);
 	}
 
-	/** Gmail's message resource → the fields we store. */
 	private parse(message: GmailMessage): ParsedMessage | null {
 		const headers = message.payload?.headers;
 
@@ -521,8 +454,6 @@ export class GmailSyncService {
 		message: GmailMessage,
 		headers: readonly GmailHeader[] | undefined,
 	): Date | null {
-		// `internalDate` is Gmail's own receipt time in ms and is always present
-		// and always parseable; the `Date` header is neither.
 		if (message.internalDate) {
 			const at = new Date(Number(message.internalDate));
 			if (!Number.isNaN(at.getTime())) return at;

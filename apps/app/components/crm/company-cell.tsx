@@ -10,12 +10,10 @@ export type CompanyRef = {
 	domain: string | null;
 	iconUrl: string | null;
 	iconDarkUrl?: string | null;
-	/** `opaque` | `dark` | `light` — see `EntityLogo`. */
 	iconTone?: string | null;
 	logoUrl?: string | null;
 };
 
-/** A company where it appears inside another record's row. */
 export function CompanyCell({ company }: { company: CompanyRef | null }) {
 	if (!company) return <EmptyCellValue />;
 

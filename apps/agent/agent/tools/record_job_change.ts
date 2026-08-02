@@ -6,29 +6,11 @@ import { writeTimelineNote } from "../lib/crm";
 import { lastEmployerChange } from "../lib/facts";
 import { focusOn } from "../lib/focus";
 
-/**
- * A champion changing employer — the highest-intent signal in B2B, and the one
- * nothing else in our stack sees.
- *
- * It costs nothing to detect, because it already happened: an `employer` fact
- * superseding an applied one *is* the job change. There is no diffing job and
- * no second data source. This tool turns that row into something a human will
- * actually notice.
- *
- * What it deliberately does **not** do is move the contact to their new
- * company. That re-parents the record — changes whose pipeline they sit in and
- * which timeline their history hangs off — and it is approval-gated for that
- * reason. Unattended, it raises the alert and lets their owner decide.
- */
 export default defineTool({
 	description:
 		"Raise a job change on a contact's timeline and task their owner. Reads the change from the facts already recorded; call it after recording a new employer.",
 	inputSchema: z.object({
 		contactId: z.string(),
-		/**
-		 * Moving them is the sensitive part, which is why it is a separate flag
-		 * rather than something that happens implicitly.
-		 */
 		moveToCompanyId: z
 			.string()
 			.optional()
@@ -65,8 +47,6 @@ export default defineTool({
 			.filter(Boolean)
 			.join(" ");
 
-		// Lands on the *old* company's timeline, which is where the relationship
-		// lives and where anyone reviewing that account will see it.
 		await writeTimelineNote(
 			contactId,
 			`${name} has moved to ${change.to}`,

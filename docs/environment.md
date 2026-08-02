@@ -137,7 +137,7 @@ with none of them. A missing key removes a place to look; it is never an error.
 | `RAPIDAPI_KEY` | LinkedIn profiles via LinkDAPI — name, title, employer, tenure |
 | `CONTEXT_DEV_API_KEY` | Company logo, industry, location and socials from a domain |
 | `GITHUB_TOKEN` | Raises the GitHub rate limit from 60/hour when matching profiles |
-| `BLOB_READ_WRITE_TOKEN` | Mirrors profile pictures into Vercel Blob rather than linking them |
+| `BLOB_READ_WRITE_TOKEN` | Mirrors every logo and profile picture into Vercel Blob rather than linking them. Read by the API and the seed too — see below |
 | `AI_GATEWAY_API_KEY` | The model. Not needed on Vercel, where OIDC handles it |
 | `AGENT_BRIDGE_SECRET` | Lets a rep talk to the agent from the contact sheet — [the bridge](./agent.md#the-bridge) |
 
@@ -147,6 +147,15 @@ agent plans around what it actually has, and gives the tools a shared
 "not configured, and retrying will not help" result — checked *before* the
 research budget is charged, so an install without a key does not pay for the
 discovery on every contact.
+
+`BLOB_READ_WRITE_TOKEN` is the one entry in that table the agent does not own
+alone, which is why it is also declared in `apps/api/src/config/env.validation.ts`
+and in `apps/api/turbo.json`. The API writes two pictures of its own — the
+favicon a domain serves, and the Google avatar of anyone who signs in — and
+`packages/db/prisma/seed.ts` writes fifteen. The Next.js app is deliberately
+*not* on that list: it only has to recognise one of our URLs to route it through
+the image optimizer, and recognising one needs no token. See
+[the agent's picture rules](./agent.md#pictures-are-copied-never-linked).
 
 ## Gmail and Calendar sync
 

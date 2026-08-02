@@ -20,13 +20,6 @@ import {
 import { GoogleConnectionService } from "./google-connection.service";
 import { GoogleSyncService } from "./google-sync.service";
 
-/**
- * The Google integration's data surface.
- *
- * Connecting is absent on purpose: the browser calls `authClient.linkSocial()`
- * directly, and `status` reads the result off the granted scopes. A procedure
- * here would only be a second way to describe the same grant.
- */
 @Router({ alias: "google" })
 @UseMiddlewares(AuthMiddleware)
 export class GoogleRouter {
@@ -43,18 +36,11 @@ export class GoogleRouter {
 		return this.connection.status(ctx.user.id);
 	}
 
-	/**
-	 * Deletes what this mailbox put into the CRM and re-imports it.
-	 *
-	 * Not a disconnect: syncing is a condition of having an account, so there is
-	 * no state where a signed-in rep is not syncing. `revokeAccess` is the exit.
-	 */
 	@Mutation()
 	async purgeSyncedData(@Ctx() ctx: AuthedTrpcContext) {
 		return this.connection.purgeSyncedData(ctx.user.id);
 	}
 
-	/** Hard revoke. Ends sign-in access too — the UI confirms before calling it. */
 	@Mutation()
 	async revokeAccess(@Ctx() ctx: AuthedTrpcContext) {
 		return this.connection.revoke(ctx.user.id);
@@ -87,7 +73,6 @@ export class GoogleRouter {
 		});
 	}
 
-	/** The messages behind a timeline entry. Only called when one is expanded. */
 	@Query({ input: threadInput })
 	async thread(@Input("threadId") threadId: string) {
 		return this.conversations.thread(threadId);

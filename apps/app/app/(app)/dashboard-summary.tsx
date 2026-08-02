@@ -14,6 +14,10 @@ import { CardTableEmpty } from "@crm/ui/components/card-table";
 import { Checkbox } from "@crm/ui/components/checkbox";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import {
+	EntityLogo,
+	type EntityLogoTone,
+} from "@crm/ui/components/entity-logo";
+import {
 	SimpleTable,
 	type SimpleTableColumn,
 	SimpleTableRow,
@@ -43,38 +47,17 @@ import { useTRPC } from "@/lib/trpc/client";
 import { overviewParsers } from "./overview-search-params";
 import { SalesDashboard } from "./sales-dashboard";
 
-/**
- * Cell padding, in one constant.
- *
- * `SimpleTable` sets its own header padding and leaves the body to the caller,
- * so a table where one column forgot `py-2.5` is a row half a line taller than
- * the ones around it — which is most of what made these lists look ragged.
- */
 const CELL = "px-3 py-2.5 align-middle";
 
-/**
- * Every list on the overview is a table: a header row naming the columns, rows
- * divided by hairlines, and no icon in the leading cell. A glyph per row is
- * what this page deliberately does not do.
- *
- * The two panels below the charts are framed and set to one height because
- * their rows scroll; the activity log at the bottom is unframed and runs as
- * long as it needs to, because nothing sits beside it to end level with.
- */
 export function DashboardSummary() {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
 	const openRecord = useOpenRecord();
 
-	// Read, not written, here: the toggle in the page header owns the setter, and
-	// both sides agree because the value lives in the URL rather than in a
-	// provider threaded between them.
 	const [scope] = useQueryState("scope", overviewParsers.scope);
 
 	const summaryQuery = useQuery({
 		...trpc.dashboard.summary.queryOptions({ scope }),
-		// Switching scope keeps the previous numbers on screen while the new ones
-		// load, the same way the tables hold their rows while paging.
 		placeholderData: (previous) => previous,
 	});
 
@@ -129,11 +112,6 @@ export function DashboardSummary() {
 		<div className="flex flex-col gap-6">
 			<SalesDashboard summary={summary} />
 
-			{/*
-			 * Two panels of one fixed height rather than four cards that each grew
-			 * to fit their rows: the pair always ends level, and the activity list
-			 * below them stays where a rep last saw it however many deals are open.
-			 */}
 			<div className="grid gap-6 @3xl/page-content:grid-cols-2">
 				<Card className="min-w-0">
 					<CardHeader>
@@ -163,9 +141,7 @@ export function DashboardSummary() {
 										<TableCell className={CELL}>
 											<DealCell
 												name={deal.name}
-												company={deal.company.name}
-												// Rendered on the server and again in the browser,
-												// often a minute apart — the text is meant to drift.
+												company={deal.company}
 												meta={relativeTimeFromIso(deal.stageChangedAt)}
 											/>
 										</TableCell>
@@ -305,8 +281,6 @@ export function DashboardSummary() {
 								<TableCell
 									className={`${CELL} text-right text-muted-foreground`}
 								>
-									{/* Rendered on the server and again in the browser, often a
-									    minute apart — the text is meant to drift. */}
 									<span suppressHydrationWarning>
 										{relativeTimeFromIso(entry.createdAt)}
 									</span>
@@ -320,36 +294,42 @@ export function DashboardSummary() {
 	);
 }
 
-/**
- * A deal's name over the account it belongs to — two lines in one cell, so the
- * table keeps four columns in a half-width panel instead of seven.
- */
 function DealCell({
 	name,
 	company,
 	meta,
 }: {
 	name: string;
-	company: string;
+	company: {
+		name: string;
+		iconUrl: string | null;
+		iconDarkUrl: string | null;
+		iconTone: string | null;
+	};
 	meta?: string;
 }) {
 	return (
-		<span className="flex min-w-0 flex-col">
-			<span className="truncate font-medium">{name}</span>
-			<span className="truncate text-muted-foreground" suppressHydrationWarning>
-				{meta ? `${company} · ${meta}` : company}
+		<span className="flex min-w-0 items-center gap-2">
+			<EntityLogo
+				src={company.iconUrl}
+				darkSrc={company.iconDarkUrl}
+				tone={company.iconTone as EntityLogoTone | null | undefined}
+				name={company.name}
+				size="sm"
+			/>
+			<span className="flex min-w-0 flex-col">
+				<span className="truncate font-medium">{name}</span>
+				<span
+					className="truncate text-muted-foreground"
+					suppressHydrationWarning
+				>
+					{meta ? `${company.name} · ${meta}` : company.name}
+				</span>
 			</span>
 		</span>
 	);
 }
 
-/**
- * A deal's or a rep's share of the biggest one on the list.
- *
- * The same bar the charts use, in plain HTML: `bloom-*` is a theme-independent
- * utility in `globals.css` precisely so a meter beside a row matches the plot
- * above it. Hidden below `sm`, where the number alone has to carry it.
- */
 function ValueMeter({ share, color }: { share: number; color: string }) {
 	return (
 		<span
@@ -361,8 +341,6 @@ function ValueMeter({ share, color }: { share: number; color: string }) {
 				style={
 					{
 						backgroundColor: color,
-						// Rounded: a bar 24px wide cannot render the difference, and the
-						// raw ratio puts fourteen decimal places in the markup.
 						"--share": `${Math.round(Math.max(Math.min(share, 100), 0))}%`,
 					} as CSSProperties
 				}

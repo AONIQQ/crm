@@ -10,13 +10,6 @@ import { toast } from "sonner";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
-/**
- * The two things a rep can ask the agent for.
- *
- * Both are background work with no immediate result to show, so neither
- * navigates or blocks: the enrichment chip in the header goes to "Enriching"
- * and the page polls until it settles, and the brief appears on the timeline.
- */
 export function EnrichmentActions({
 	companyId,
 	hasDomain,
@@ -51,16 +44,11 @@ export function EnrichmentActions({
 		}),
 	);
 
-	// These sit in the sheet header, which on a phone is a full-width drawer
-	// with a logo and a name already in it. The labels drop below `sm` so the
-	// record's name keeps the room rather than two buttons about the agent.
 	return (
 		<>
 			<Button
 				variant="outline"
 				size="sm"
-				// Without a domain there is nothing to look up, and the API would only
-				// come back and say so.
 				disabled={!hasDomain || enrich.isPending}
 				onClick={() => enrich.mutate({ id: companyId })}
 			>
@@ -72,8 +60,6 @@ export function EnrichmentActions({
 				<span className="hidden sm:inline">Re-enrich</span>
 			</Button>
 
-			{/* Research is the action on this record, so it takes the fill.
-			 * Re-enrich beside it is the quieter "do that again". */}
 			<Button
 				size="sm"
 				disabled={!hasDomain || research.isPending}
@@ -87,5 +73,38 @@ export function EnrichmentActions({
 				<span className="hidden sm:inline">Research</span>
 			</Button>
 		</>
+	);
+}
+
+export function ContactEnrichmentAction({ contactId }: { contactId: string }) {
+	const trpc = useTRPC();
+	const cache = useCrmCache();
+
+	const enrich = useMutation(
+		trpc.contacts.enrich.mutationOptions({
+			onSuccess: async () => {
+				await cache.contact(contactId);
+				toast.success(
+					"Taking another look — this page will update when it finishes.",
+				);
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	return (
+		<Button
+			variant="outline"
+			size="sm"
+			disabled={enrich.isPending}
+			onClick={() => enrich.mutate({ id: contactId })}
+		>
+			{enrich.isPending ? (
+				<Spinner />
+			) : (
+				<Icon icon={Renew} data-icon="inline-start" />
+			)}
+			<span className="hidden sm:inline">Re-enrich</span>
+		</Button>
 	);
 }

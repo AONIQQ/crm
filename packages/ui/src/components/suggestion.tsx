@@ -7,18 +7,6 @@ import { Icon } from "@crm/ui/components/icon";
 import { Spinner } from "@crm/ui/components/spinner";
 import type * as React from "react";
 
-/**
- * Something a machine thinks is true, offered to somebody who can tell.
- *
- * The rule this encodes: **a suggestion is never rendered as a value.** It sits
- * under the empty field it would fill, in muted text, with the two buttons that
- * settle it. A guess formatted identically to a fact is how a CRM quietly
- * teaches people to distrust every field in it.
- *
- * It lives here rather than in the app because the same shape will be wanted on
- * companies and deals, and because "how does this product show uncertainty" is
- * exactly the sort of decision `design.md` says belongs in one place.
- */
 export function Suggestion({
 	value,
 	rationale,
@@ -27,7 +15,6 @@ export function Suggestion({
 	onDismiss,
 }: {
 	value: React.ReactNode;
-	/** Why the agent thinks so, in one line. */
 	rationale?: React.ReactNode;
 	pending?: boolean;
 	onAccept: () => void;

@@ -51,17 +51,8 @@ const COMPANY_SELECT = {
 	logoUrl: true,
 } as const;
 
-/** The facet value for a contact who works nowhere we know of. */
 const NO_COMPANY = "none";
 
-/**
- * Which `Contact` column an accepted fact writes through to.
- *
- * The agent's `facts.ts` holds the same map, because it is the one deciding
- * what a field means; this half only needs to know where an accepted value
- * lands. Fields absent from here (`seniority`, `employer`, `location`) have no
- * column — they are read straight off the fact by the background panel.
- */
 const FACT_COLUMNS: Record<string, string | undefined> = {
 	title: "title",
 	linkedinUrl: "linkedinUrl",
@@ -75,7 +66,6 @@ export type ContactRow = {
 	lastName: string | null;
 	email: string | null;
 	title: string | null;
-	/** Our mirrored copy, never LinkedIn's expiring CDN URL. */
 	imageUrl: string | null;
 	company: {
 		id: string;
@@ -96,17 +86,10 @@ export type ContactRow = {
 	createdAt: string;
 };
 
-/**
- * Orderings are arrays so every column can carry a tiebreak: without one,
- * everybody at the same company comes back in whatever order Postgres feels
- * like, and the order changes between pages of the same query.
- */
 const SORTABLE: Record<
 	string,
 	(dir: Prisma.SortOrder) => Prisma.ContactOrderByWithRelationInput[]
 > = {
-	// Surname first — a list of people sorted by first name is a list nobody can
-	// scan.
 	name: (dir) => [{ lastName: dir }, { firstName: dir }],
 	email: (dir) => [{ email: dir }],
 	title: (dir) => [{ title: dir }, { lastName: "asc" }],
@@ -192,10 +175,6 @@ export class ContactsService {
 						refreshedAt: true,
 					},
 				},
-				// Applied facts are the provenance behind values already on the
-				// record; proposed ones are suggestions the sheet offers. Dismissed
-				// and superseded stay out of the read path — they are history, and
-				// the timeline is where history belongs.
 				facts: {
 					where: { status: { in: [FactStatus.APPLIED, FactStatus.PROPOSED] } },
 					orderBy: { observedAt: "desc" },
@@ -249,7 +228,6 @@ export class ContactsService {
 		return {
 			...rest,
 			company,
-			/** Whether the agent has this person on its list — see `AgentQueueService`. */
 			queued: await this.queue.isQueued({ contactId: id }),
 			createdAt: createdAt.toISOString(),
 			brief: brief
@@ -264,9 +242,7 @@ export class ContactsService {
 				evidence: fact.evidence as FactEvidence[],
 				observedAt: fact.observedAt.toISOString(),
 			})),
-			/** What we have actually said to each other. */
 			relationship,
-			/** True when this is the person to call at their company. */
 			isPrimaryContact: company?.primaryContactId === contact.id,
 			deals: deals.map(({ role, deal }) => ({
 				...deal,
@@ -293,15 +269,10 @@ export class ContactsService {
 			}
 		}
 
-		// A work address tells us where someone works. Awaited rather than queued,
-		// unlike company enrichment: the contact should arrive already attached to
-		// the right company, not attach itself a few seconds later.
 		const companyId =
 			input.companyId ??
 			(email
 				? await this.companies.companyForEmail(email, {
-						// Same rule as the sync: a company conjured out of somebody's
-						// action belongs to them, not to nobody.
 						ownerId: input.ownerId,
 					})
 				: null);
@@ -321,10 +292,6 @@ export class ContactsService {
 
 		this.logger.log({ message: "Contact created", contactId: contact.id });
 
-		// A person typed this one, so there is no placeholder name to fix — but
-		// there is usually no title, no profile and no background either, and a
-		// rep who has just added somebody is the likeliest person to open them
-		// again in the next minute.
 		await this.agent.contactCreated(
 			contact.id,
 			"Added by a rep, with nothing on the record yet",
@@ -373,18 +340,6 @@ export class ContactsService {
 		}
 	}
 
-	/**
-	 * What we already know from our own mailbox and calendar.
-	 *
-	 * The one block on this sheet no CRM that buys its data can render: how many
-	 * emails, whether they have ever actually replied, when we last heard from
-	 * them, what is in the diary, and who else we know at the same company.
-	 *
-	 * Counts and dates only — the bodies stay out of the API. The agent reads
-	 * those (they are the best evidence we have) but the browser has no use for
-	 * them here, and shipping a thread into a record payload is how message
-	 * content ends up somewhere nobody expected.
-	 */
 	private async relationship(contactId: string, companyId: string | null) {
 		const now = new Date();
 
@@ -431,9 +386,6 @@ export class ContactsService {
 		return {
 			emails: threads._sum.messageCount ?? 0,
 			threads: threads._count._all,
-			// The distinction that matters on a sheet: we have emailed them 12
-			// times and they have never once written back is a different
-			// relationship from 12 emails with 6 replies.
 			lastReplyAt: lastReply?.sentAt.toISOString() ?? null,
 			meetings,
 			nextMeeting: nextMeeting
@@ -452,15 +404,31 @@ export class ContactsService {
 		};
 	}
 
-	/**
-	 * A rep accepting or dismissing something the agent proposed.
-	 *
-	 * Accepting writes the value through to the record and supersedes whatever
-	 * was there; dismissing keeps the row so the agent can be told never to
-	 * offer it again. Neither branch researches anything — this is a human
-	 * decision being executed, which is the only enrichment-shaped thing that
-	 * belongs on this side of the wire.
-	 */
+	async enrich(id: string): Promise<{ id: string; queued: true }> {
+		const contact = await this.db.contact.findUnique({
+			where: { id },
+			select: { id: true, imageUrl: true, linkedinUrl: true },
+		});
+
+		if (!contact) {
+			throw new NotFoundException(`No contact with id ${id}.`);
+		}
+
+		await this.db.contact.update({
+			where: { id },
+			data: { enrichmentStatus: "PENDING", enrichmentError: null },
+		});
+
+		await this.agent.contactCreated(
+			id,
+			contact.linkedinUrl && !contact.imageUrl
+				? "A rep asked for a fresh look — they have a LinkedIn profile on file but no picture"
+				: "A rep asked for a fresh look",
+		);
+
+		return { id, queued: true };
+	}
+
 	async decideFact(
 		input: FactDecisionInput,
 		userId: string,
@@ -540,7 +508,6 @@ export class ContactsService {
 		return { contactId: fact.contactId, field: fact.field, applied: accepted };
 	}
 
-	/** `q` matches a name, an email address, or where they work. */
 	private searchFilter(q: string): Prisma.ContactWhereInput {
 		const term = q.trim();
 		if (!term) return {};
@@ -572,7 +539,6 @@ export class ContactsService {
 		return where;
 	}
 
-	/** Counts against the search term only — see `CompaniesService.facetCounts`. */
 	private async facetCounts(input: ContactListInput) {
 		const where = this.searchFilter(input.q);
 

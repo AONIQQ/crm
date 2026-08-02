@@ -10,9 +10,6 @@ export default async function AppLayout({
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
-	// Not just `requireSession`: mailbox access is a condition of using this
-	// tool, and a granular-consent untick would otherwise leave someone inside
-	// the app with a CRM that silently syncs nothing.
 	const { user } = await requireGoogleAccess();
 
 	return (
@@ -25,24 +22,13 @@ export default async function AppLayout({
 						image: user.image ?? null,
 					}}
 				/>
-				{/*
-				 * No scroll container here: <PageShell> renders the scrolling
-				 * <main>, so the page can own its own transition snapshot while
-				 * the header and rail stay put.
-				 */}
 				<div className="flex min-h-0 flex-1">
 					<AppIconRail />
 					{children}
 				</div>
 
-				{/*
-				 * Records open over whatever list you were on rather than as pages of
-				 * their own, so the sheet lives in the shell — one instance, driven
-				 * by `?record=`, reachable from every row, card and search hit.
-				 */}
 				<RecordSheetHost />
 
-				{/* ⌘K from anywhere inside the app shell. */}
 				<QuickSwitcher />
 			</div>
 		</MobileNavProvider>

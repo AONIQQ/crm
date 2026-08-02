@@ -23,22 +23,11 @@ import type { RouterOutputs } from "@/lib/trpc/types";
 
 type Summary = RouterOutputs["dashboard"]["summary"];
 
-/**
- * Won is the outcome, created is the input that produces it six weeks later.
- * `--success` for the first because a rep already reads green as "closed"; the
- * chart ramp for the second because it is a leading indicator, not a verdict.
- */
 const TREND_CONFIG: ChartConfig = {
 	won: { label: "Closed won", color: "var(--success)" },
 	created: { label: "New pipeline", color: "var(--chart-1)" },
 };
 
-/**
- * Percentage change, or nothing.
- *
- * With no baseline there is no percentage to quote — "+100%" against a month
- * where nothing closed is arithmetic, not information.
- */
 function changeDelta(
 	current: number,
 	previous: number,
@@ -53,10 +42,6 @@ function changeDelta(
 	};
 }
 
-/**
- * The KPI strip and the two charts behind it: six months of closed-won against
- * new pipeline, and where the open pipeline currently sits.
- */
 export function SalesDashboard({ summary }: { summary: Summary }) {
 	const {
 		pipeline,
@@ -165,11 +150,6 @@ export function SalesDashboard({ summary }: { summary: Summary }) {
 									formatMoney(typeof value === "number" ? value : Number(value))
 								}
 							/>
-							{/*
-							 * A legend of links rather than `onSliceClick`: clicking a
-							 * wedge is pointer-only, and "show me the contracts I have
-							 * out" is the most likely thing a rep wants from this chart.
-							 */}
 							<ul className="flex flex-col px-5 pb-1 md:px-6">
 								{stageSlices.map((slice) => (
 									<li key={slice.key} className="border-t first:border-t-0">
@@ -205,14 +185,6 @@ export function SalesDashboard({ summary }: { summary: Summary }) {
 	);
 }
 
-/**
- * A titled, framed plot, built from the same `Card` header the lists below the
- * charts use so every section on the page shares one heading rhythm.
- *
- * The body keeps a border where a list does not: a chart floating against the
- * page with no frame reads as unmoored, and `flex-1` makes both columns of a
- * row end level however tall their plots are.
- */
 function ChartPanel({
 	title,
 	description,

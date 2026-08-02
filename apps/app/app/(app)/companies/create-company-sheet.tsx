@@ -38,21 +38,11 @@ import { useTRPC } from "@/lib/trpc/client";
 
 const UNASSIGNED = "unassigned";
 
-/**
- * Name, domain, owner — nothing else.
- *
- * Everything a form could ask for next (industry, address, logo, socials) is
- * something the agent can find from the domain, and a form that asks a rep to
- * type it is a form they will skip.
- */
 export function CreateCompanySheet() {
 	const openRecord = useOpenRecord();
 	const trpc = useTRPC();
 	const cache = useCrmCache();
 
-	// Open state lives in the URL, like every other view state here: "add a
-	// company" is then a link you can send someone, and Back closes the sheet
-	// instead of leaving the page. Shallow, so it costs no server round trip.
 	const [open, setOpen] = useQueryState(
 		"new",
 		parseAsBoolean.withDefault(false),
@@ -71,7 +61,6 @@ export function CreateCompanySheet() {
 			onSuccess: async (company) => {
 				await cache.company(company.id);
 				toast.success(`${company.name} added.`);
-				// `null` rather than `false` so the closed state leaves a clean URL.
 				await setOpen(null);
 				setName("");
 				setDomain("");

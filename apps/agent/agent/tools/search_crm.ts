@@ -2,19 +2,6 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { searchCrm } from "../lib/lookup";
 
-/**
- * Finding the record somebody meant.
- *
- * Every other CRM tool here takes an id, and until this existed there was no
- * way to obtain one except from a rep. So the agent asked — "could you paste
- * the contact's name or email address" — which is the CRM asking its user to
- * do a lookup on its behalf, from a screen that is already showing the answer.
- *
- * Free, local, and returns ambiguity rather than resolving it. Four people
- * called Marchetti come back as four rows with their titles and employers,
- * because choosing between them is a rep's three-second decision and a wrong
- * guess is a wrong record.
- */
 export default defineTool({
 	description:
 		"Find contacts, companies and deals by name, email address, domain or deal name — the way a person would search. Returns each match with its id, so you never have to ask a rep for one. Free. Use it whenever a question names a record you do not have the id for.",

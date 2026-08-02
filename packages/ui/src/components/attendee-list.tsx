@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback } from "@crm/ui/components/avatar";
+import { PersonAvatar } from "@crm/ui/components/person-avatar";
 import {
 	type StatusTone,
 	StatusIndicator,
@@ -15,17 +15,11 @@ export type Attendee = {
 	id: string;
 	email: string;
 	name: string | null;
-	/** Google's own values: needsAction | declined | tentative | accepted. */
 	responseStatus: string | null;
 	isOrganizer: boolean;
+	imageUrl?: string | null;
 };
 
-/**
- * Whether someone actually turned up to the invitation.
- *
- * Mapped onto the shared tones rather than to colours directly, so a declined
- * attendee reads the same red as a lost deal.
- */
 const RESPONSE_TONE: Record<string, StatusTone> = {
 	accepted: "success",
 	declined: "error",
@@ -40,18 +34,6 @@ const RESPONSE_LABEL: Record<string, string> = {
 	needsAction: "No reply",
 };
 
-/**
- * The people on a meeting, up to `max`, then a count. The full list is in the
- * tooltip because a nine-person kickoff should not push the timeline entry to
- * three lines.
- *
- * Side by side rather than the usual overlapping stack, and that is a fix, not
- * a preference. A stack needs a ring the colour of whatever is behind it to cut
- * each disc from the next — so the component had to name a surface, it named
- * `background`, and it is only ever rendered on `popover`, which drew a dark
- * halo round every face. The overlap also ate the second initial: two letters
- * in a 24px disc, eight of those pixels underneath the next avatar.
- */
 function AttendeeList({
 	attendees,
 	max = 5,
@@ -76,9 +58,16 @@ function AttendeeList({
 				{shown.map((attendee) => (
 					<Tooltip key={attendee.id}>
 						<TooltipTrigger asChild>
-							<Avatar size="sm">
-								<AvatarFallback>{initialsOf(attendee)}</AvatarFallback>
-							</Avatar>
+							<PersonAvatar
+								src={attendee.imageUrl}
+								name={
+									attendee.name?.trim() && !attendee.name.includes("@")
+										? attendee.name
+										: null
+								}
+								email={attendee.email}
+								size="sm"
+							/>
 						</TooltipTrigger>
 						<TooltipContent>
 							<span className="flex items-center gap-2">
@@ -101,20 +90,6 @@ function AttendeeList({
 			) : null}
 		</div>
 	);
-}
-
-function initialsOf(attendee: Attendee): string {
-	const source =
-		attendee.name?.trim() && !attendee.name.includes("@")
-			? attendee.name
-			: attendee.email;
-
-	return source
-		.split(/[\s._-]+/)
-		.filter(Boolean)
-		.slice(0, 2)
-		.map((word) => word.charAt(0).toUpperCase())
-		.join("");
 }
 
 export { AttendeeList };

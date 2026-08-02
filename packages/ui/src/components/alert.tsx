@@ -8,13 +8,6 @@ const alertVariants = cva(
 		variants: {
 			variant: {
 				default: "bg-card text-card-foreground",
-				/*
-				 * Neutral, not red. A failure panel is already announced by its
-				 * heading and its position on the page; painting the whole surface
-				 * red makes a recoverable problem — an API that needs enabling —
-				 * read like data loss. The grey keeps the alert legible and lets the
-				 * one action inside it be the loudest thing in the box.
-				 */
 				destructive:
 					"bg-muted text-foreground *:[svg]:text-current *:data-[slot=alert-description]:text-foreground/80",
 			},
@@ -32,15 +25,6 @@ function Alert({
 	...props
 }: React.ComponentProps<"div"> &
 	VariantProps<typeof alertVariants> & {
-		/**
-		 * Bump this to make the alert re-assert itself.
-		 *
-		 * A counter rather than a boolean, and it is the `key`: an animation only
-		 * replays when the node is new, so a flag flipping back to `true` a second
-		 * time would do nothing at all. Every increment remounts the alert and the
-		 * animation runs again — which is the whole point, since the case this
-		 * exists for is the *same* problem reported twice.
-		 */
 		attention?: number;
 	}) {
 	return (

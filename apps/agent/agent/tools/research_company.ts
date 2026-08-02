@@ -4,7 +4,6 @@ import { z } from "zod";
 import { extract } from "../lib/context-dev";
 import { spend } from "../lib/focus";
 
-/** The shape the brief is extracted into. */
 const RESEARCH_SCHEMA = {
 	type: "object",
 	properties: {
@@ -39,15 +38,6 @@ const RESEARCH_INSTRUCTIONS =
 	"for a first call. Be specific and factual; leave a field empty rather than " +
 	"guessing.";
 
-/**
- * Reads a company's own site and writes a brief to its timeline.
- *
- * Ported from the API unchanged, schema and all. The one difference is who
- * calls it: this used to be a tRPC mutation that ran a vendor extraction inside
- * the request, and is now something the agent does when it decides a company is
- * worth understanding — including on its own initiative, which the old one
- * could never do.
- */
 export default defineTool({
 	description:
 		"Read a company's marketing site and write a research brief to its timeline: positioning, pricing, who they sell to, notable customers, recent news.",
@@ -92,9 +82,6 @@ export default defineTool({
 			return { written: false as const, reason: result.reason };
 		}
 
-		// `Activity.createdById` is required. Attribute to the company's owner, or
-		// to any user if it is unowned; the meta marks it agent-written so the UI
-		// never claims a person typed it.
 		const author =
 			company.ownerId ??
 			(await db.user.findFirst({ select: { id: true } }))?.id ??

@@ -1,14 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { domainFromEmail, normalizeDomain } from "../src/companies/domain";
 
-/**
- * Domain parsing stayed on this side when enrichment left.
- *
- * It is not enrichment: turning "  Ada@WWW.Stripe.com " into `stripe.com` is
- * how the CRM decides which company row an address belongs to, and that
- * question has an answer without asking anybody anything.
- */
-
 describe("normalizeDomain", () => {
 	it("reduces anything a human might type to the bare host", () => {
 		for (const input of [
@@ -46,8 +38,6 @@ describe("domainFromEmail", () => {
 	});
 
 	it("ignores free and malformed addresses", () => {
-		// Creating a "Gmail" company from a personal address is the classic
-		// CRM junk row.
 		for (const email of [
 			"ada@gmail.com",
 			"ada@outlook.com",

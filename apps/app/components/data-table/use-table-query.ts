@@ -9,23 +9,10 @@ import type {
 } from "./list-search-params";
 
 export type TableQuery<TKey extends string> = {
-	/** Passed to `<DataTable query={…}>`. */
 	query: TableQueryState;
-	/** Passed to the module's `list` procedure. */
 	input: ListInput<TKey>;
 };
 
-/**
- * Binds a module's URL parsers to the `DataTable` contract.
- *
- * Lives in the app rather than in `@crm/ui` because it is routing state: the
- * design system renders the controls, the app decides what a URL means.
- *
- * Nothing here is debounced or deferred. `q` reaches the URL only once typing
- * has paused, because `ListSearch` holds the keystrokes in local state until
- * then — so by the time this reads it, every value in the URL is one a user
- * settled on and is worth a request.
- */
 export function useTableQuery<TTab extends string, TFacet extends string>(
 	searchParams: ListSearchParams<TTab, TFacet>,
 ): TableQuery<TTab | TFacet> {
@@ -52,8 +39,6 @@ export function useTableQuery<TTab extends string, TFacet extends string>(
 		tab,
 		tabId,
 		filters,
-		// Every filter change resets to page 1: staying on page 7 of a result set
-		// that now has two pages shows an empty table.
 		toggleSort: (id) =>
 			setState((prev) =>
 				prev.sort === id

@@ -53,8 +53,6 @@ export function TablePagination({
 					<span className="text-muted-foreground text-xs tabular-nums">
 						{page} / {totalPages}
 					</span>
-					{/* Next carries the weight: it is the one you press to move
-					 * through a list, and Previous is the way back. */}
 					<Button
 						variant="contrast"
 						size="sm"

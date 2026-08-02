@@ -34,11 +34,6 @@ function statusToTrpcCode(status: number): TrpcErrorCode {
 	}
 }
 
-/**
- * Services throw Nest's `HttpException` family because they are also reachable
- * from REST controllers. Without this, a `NotFoundException` from a service
- * would reach the browser as a 500 with no message.
- */
 @Injectable()
 export class DomainErrorMiddleware implements TRPCMiddleware {
 	async use(opts: MiddlewareOptions): Promise<MiddlewareResponse> {
@@ -48,10 +43,6 @@ export class DomainErrorMiddleware implements TRPCMiddleware {
 			return result;
 		}
 
-		// Read `error` off a widened alias rather than the narrowed union. The
-		// `ok` discriminant narrows under this repo's tsconfig but not under the
-		// one Vercel's Node builder compiles with, where `result.error` is a
-		// deploy-breaking TS2339. The guard above already proved `ok` is false.
 		const failure = result as { error?: unknown };
 		const cause = (failure.error as { cause?: unknown } | undefined)?.cause;
 

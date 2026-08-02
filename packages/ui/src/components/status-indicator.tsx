@@ -3,14 +3,14 @@ import { type Bloom, bloomClass } from "@crm/ui/lib/dither";
 import { cn } from "@crm/ui/lib/utils";
 import type * as React from "react";
 
-/**
- * The five states anything in this app can be in.
- *
- * Named for meaning rather than colour so a status reads the same everywhere:
- * "the agent failed" and "the deal was lost" are both `error`, and neither
- * caller gets to pick a shade.
- */
 export type StatusTone = "neutral" | "info" | "success" | "warning" | "error";
+
+export type StatusSize = "default" | "sm";
+
+const SIZE_CLASS: Record<StatusSize, string> = {
+	default: "",
+	sm: "text-xs",
+};
 
 const TONE_COLOR: Record<StatusTone, string> = {
 	neutral: "var(--color-muted-foreground)",
@@ -30,7 +30,6 @@ function IndicatorDot({
 	...props
 }: React.ComponentProps<"span"> & {
 	tone?: StatusTone;
-	/** An explicit colour, for scales the tones do not cover. */
 	color?: string;
 	pulse?: boolean;
 	bloom?: Bloom;
@@ -59,21 +58,14 @@ function IndicatorDot({
 	);
 }
 
-/**
- * A dot and a word — the only way this app shows a status.
- *
- * Deliberately not a badge: a table of pill-shaped chips in five colours is a
- * table you read the chips of instead of the rows. A dot carries the same
- * meaning at a tenth of the ink, and a column of them lines up.
- */
 function StatusIndicator({
 	tone = "neutral",
 	color,
 	label,
 	pulse = false,
-	/** In-flight work: a spinner replaces the dot, as nothing is settled yet. */
 	busy = false,
 	bloom = "low",
+	size = "default",
 	className,
 	...props
 }: Omit<React.ComponentProps<"span">, "color"> & {
@@ -83,6 +75,7 @@ function StatusIndicator({
 	pulse?: boolean;
 	busy?: boolean;
 	bloom?: Bloom;
+	size?: StatusSize;
 }) {
 	return (
 		<span
@@ -90,6 +83,7 @@ function StatusIndicator({
 			data-tone={tone}
 			className={cn(
 				"inline-flex min-w-0 items-center gap-2 text-muted-foreground",
+				SIZE_CLASS[size],
 				className,
 			)}
 			{...props}

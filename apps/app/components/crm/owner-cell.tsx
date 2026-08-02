@@ -14,10 +14,8 @@ export type Owner = {
 	image: string | null;
 };
 
-/** The person a company, contact or deal is assigned to. */
 export function OwnerCell({
 	owner,
-	/** Avatar only — for tight spots like a board card footer. */
 	compact = false,
 }: {
 	owner: Owner | null;

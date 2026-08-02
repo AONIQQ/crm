@@ -5,6 +5,7 @@
 	"type": "module",
 	"license": "MIT",
 	"scripts": {
+		"backfill:images": "bun scripts/backfill-brand-images.ts",
 		"dev": "eve dev",
 		"build": "eve build",
 		"start": "eve start",
@@ -16,7 +17,6 @@
 	"dependencies": {
 		"@crm/db": "workspace:*",
 		"@crm/env": "workspace:*",
-		"@vercel/blob": "^2.6.1",
 		"context.dev": "^2.7.0",
 		"eve": "^0.29.4",
 		"zod": "^4.4.3"

@@ -44,7 +44,6 @@ export class DealsRouter {
 		return this.deals.update(input.id, input.data);
 	}
 
-	/** Moves the deal and writes the `STAGE_CHANGE` activity in one transaction. */
 	@Mutation({ input: setStageInput })
 	async setStage(
 		@Ctx() ctx: AuthedTrpcContext,

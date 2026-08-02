@@ -19,9 +19,6 @@ export default defineTool({
 			.describe("Reason over more sources. Slower, better for prep briefs."),
 	}),
 	async execute({ question, deep }) {
-		// Checked before the budget is charged: an install without the key would
-		// otherwise pay for the discovery every time, and a contact could burn a
-		// whole budget learning the same thing four times over.
 		if (!enabled("PERPLEXITY_API_KEY"))
 			return unavailable("PERPLEXITY_API_KEY");
 

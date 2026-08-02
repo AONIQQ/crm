@@ -1,13 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { isBlockedAddress } from "../src/favicon";
 
-/**
- * The company domain is attacker-supplied, so this filter is the only thing
- * between "resolve a favicon" and a request to cloud metadata. The cases below
- * are the notations a filter written against `127.0.0.1` misses — the first
- * version of this one compared strings and let `::ffff:7f00:1` through, which
- * is loopback with the last four octets written in hex.
- */
 describe("isBlockedAddress", () => {
 	it("blocks loopback however it is written", () => {
 		for (const ip of [

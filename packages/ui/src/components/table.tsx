@@ -60,8 +60,6 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
 		<tr
 			data-slot="table-row"
 			className={cn(
-				// The whole row is a click target, so it needs a hover the eye can
-				// follow across all six columns — not just under the cursor.
 				"border-b transition-colors hover:bg-muted/60 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
 				className,
 			)}
@@ -75,8 +73,6 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
 		<th
 			data-slot="table-head"
 			className={cn(
-				// Column labels are signposts, not data: muted and lighter than the
-				// values beneath them, so the eye lands on the rows first.
 				"h-9 px-2 text-left align-middle font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
 				className,
 			)}

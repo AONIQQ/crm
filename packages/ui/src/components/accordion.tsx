@@ -36,10 +36,6 @@ const accordionTriggerVariants = cva(
 	"group/accordion-trigger relative flex items-start rounded-md border border-transparent text-left outline-none transition-all focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:after:border-ring disabled:pointer-events-none disabled:opacity-50 **:data-[slot=accordion-trigger-icon]:text-muted-foreground",
 	{
 		variants: {
-			// `subtle` is the one that belongs inside a record sheet: a line of
-			// small print that happens to open, rather than a heading with a rule
-			// under it. The panel is `text-xs` throughout and a `text-sm` trigger
-			// in the middle of it reads as a different component.
 			variant: {
 				default:
 					"flex-1 justify-between py-2.5 font-medium text-sm hover:underline **:data-[slot=accordion-trigger-icon]:ml-auto **:data-[slot=accordion-trigger-icon]:size-4",

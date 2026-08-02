@@ -5,21 +5,6 @@ import { WEIGHTS } from "../lib/evidence";
 import { recordFact } from "../lib/facts";
 import { focusOn } from "../lib/focus";
 
-/**
- * Putting a real name to an address.
- *
- * This used to take a `confidence` enum from the model and refuse anything
- * below `high`. Two things were wrong with that. The bar was set by the thing
- * being judged — a rubric the model could talk itself out of — and everything
- * below the bar was thrown away, so an ambiguous address cost a lookup every
- * run and produced nothing, forever.
- *
- * Now it takes evidence. A profile carrying their email address, or a reply on
- * a thread we already have, names them outright and is written. One weak signal
- * short of that becomes a suggestion a rep settles in three seconds — which is
- * the case this tool exists for, because `pmarchetti@fernhill.com` has four
- * plausible Marchettis behind it and a human knows which.
- */
 export default defineTool({
 	description:
 		"Put a verified name to a CRM contact, with the evidence for it. Strong evidence writes the name; anything less becomes a suggestion for a rep. Never overwrites a name a person supplied.",

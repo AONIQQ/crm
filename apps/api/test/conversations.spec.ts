@@ -2,19 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@crm/db";
 import { ConversationsService } from "../src/conversations/conversations.service";
 
-/**
- * A record's conversations, against a real database and a real cache.
- *
- * The cache is the part worth testing rather than asserting: a read-through
- * cache that never invalidates is indistinguishable from a working one until
- * somebody sends a second message and the panel does not show it.
- */
-
 const suffix = process.env.TEST_RUN_ID ?? "conversations-spec";
 const email = `conversation.subject.${suffix}@example.test`;
 const userId = `user-${suffix}`;
 
-/** A minimal stand-in with the two methods the service uses. */
 function memoryCache() {
 	const store = new Map<string, unknown>();
 	return {
@@ -94,7 +85,6 @@ describe("ConversationsService", () => {
 				sessionId: `ses_${suffix}_1`,
 				continuationToken: "eve:token-2",
 				streamIndex: 9,
-				// A later save carries no title, and must not clear the one there.
 				messageCount: 4,
 			},
 			userId,
@@ -114,7 +104,6 @@ describe("ConversationsService", () => {
 		await service.list({ contactId }, userId);
 		expect(cache.store.size).toBe(1);
 
-		// A write has to evict, or the panel shows yesterday's list.
 		await service.save(
 			{ contactId, sessionId: `ses_${suffix}_2`, messageCount: 1 },
 			userId,

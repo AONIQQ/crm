@@ -6,6 +6,7 @@ import {
 	EntityLogo,
 	type EntityLogoTone,
 } from "@crm/ui/components/entity-logo";
+import { PersonAvatar } from "@crm/ui/components/person-avatar";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { TableCell } from "@crm/ui/components/table";
 import {
@@ -51,8 +52,6 @@ const CONTACT_COLUMNS = [
 	{ header: "Email", width: "w-[25%]" },
 ];
 
-// For `closedAt`, which is a real instant: the moment somebody marked the deal
-// won or lost. A close *date* is a day, and goes through `formatDay`.
 const dateFormat = new Intl.DateTimeFormat(undefined, {
 	month: "short",
 	day: "numeric",
@@ -88,11 +87,7 @@ export function DealSheet({ dealId }: { dealId: string }) {
 				{
 					value: "agent",
 					label: "Agent",
-					// Bare, not inside `DetailSheetBody`: the panel brings its own
-					// scroll container.
 					content: <AgentPanel record={{ kind: "deal", id: deal.id }} />,
-					// Stays mounted behind the other tabs: this one holds a live
-					// stream, and tearing it down mid-answer loses the answer.
 					keepMounted: true,
 				},
 			]
@@ -103,8 +98,6 @@ export function DealSheet({ dealId }: { dealId: string }) {
 			loading={query.isPending}
 			error={query.error?.message ?? null}
 			title={deal?.name ?? "Deal"}
-			// A deal is always somebody's deal, so the company is the subtitle and
-			// it opens rather than just naming itself.
 			description={
 				deal ? (
 					<button
@@ -127,10 +120,6 @@ export function DealSheet({ dealId }: { dealId: string }) {
 					/>
 				) : null
 			}
-			// A deal's stage is the state it is in and the thing you change about
-			// it, so it is one control in the header — the same picker the deals
-			// table puts in every row — rather than a read-only cell in the stats
-			// strip plus a row of buttons further down the panel.
 			actions={
 				deal ? (
 					<DealStageMenu
@@ -154,16 +143,11 @@ export function DealSheet({ dealId }: { dealId: string }) {
 						</DetailSheetStat>
 						<DetailSheetStat label="Expected close">
 							{deal.expectedCloseDate ? (
-								// The stored day, not the local rendering of a midnight-UTC
-								// timestamp — that read a day early west of Greenwich and
-								// disagreed with the close-date row further down the sheet.
 								formatDay(deal.expectedCloseDate)
 							) : (
 								<EmptyCellValue />
 							)}
 						</DetailSheetStat>
-						{/* How long it has sat where it is — the staleness read that
-						    used to be a line of small print under the title. */}
 						<DetailSheetStat label="In stage">
 							{relativeTimeFromIso(deal.stageChangedAt)}
 						</DetailSheetStat>
@@ -189,9 +173,6 @@ function DealOverview({ deal }: { deal: Deal }) {
 
 	const update = useMutation(
 		trpc.deals.update.mutationOptions({
-			// `settle: "record"` — the row's spinner should last until the new value
-			// is under it, not until the board behind the sheet and every cached
-			// company have caught up too.
 			onSuccess: () => cache.deal(deal.id, { settle: "record" }),
 			onError: (error) => toast.error(error.message),
 		}),
@@ -204,18 +185,9 @@ function DealOverview({ deal }: { deal: Deal }) {
 
 	return (
 		<DetailSheetBody>
-			{/* Where the deal is, as a picture. Setting the stage — including
-			 * closing it — is the control in the header; this is the one-click
-			 * nudge to the next step. */}
 			<DetailSheetSection title="Stage">
 				<StageStepper dealId={deal.id} stage={deal.stage} />
 
-				{/*
-				 * Two properties under the rail rather than an alert of its own.
-				 * The rail's last segment already says the deal is lost; a bordered
-				 * callout underneath repeats that in a heavier voice, and it was the
-				 * only boxed thing in any of the three sheets.
-				 */}
 				{deal.closedReason ? (
 					<DetailSheetProperties>
 						<DetailSheetProperty label="Closed">
@@ -242,7 +214,6 @@ function DealOverview({ deal }: { deal: Deal }) {
 					/>
 					<InlineField
 						label="Amount"
-						// Edited in whole currency; stored and summed in cents.
 						value={
 							deal.amountCents === null ? null : String(deal.amountCents / 100)
 						}
@@ -325,7 +296,21 @@ function DealContacts({ deal }: { deal: Deal }) {
 					onClick={() => openRecord({ kind: "contact", id: contact.id })}
 				>
 					<TableCell className="truncate py-2.5 pr-3 pl-5 font-medium">
-						{[contact.firstName, contact.lastName].filter(Boolean).join(" ")}
+						<span className="flex min-w-0 items-center gap-2">
+							<PersonAvatar
+								src={contact.imageUrl}
+								name={[contact.firstName, contact.lastName]
+									.filter(Boolean)
+									.join(" ")}
+								email={contact.email}
+								size="sm"
+							/>
+							<span className="truncate">
+								{[contact.firstName, contact.lastName]
+									.filter(Boolean)
+									.join(" ")}
+							</span>
+						</span>
 					</TableCell>
 					<TableCell className="truncate px-3 py-2.5">
 						{contact.role ?? <EmptyCellValue />}

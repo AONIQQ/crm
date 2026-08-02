@@ -2,13 +2,7 @@
 	"$schema": "https://json.schemastore.org/tsconfig",
 	"extends": "@crm/typescript-config/nextjs.json",
 	"compilerOptions": {
-		// `api/app-router` re-exports the router classes as types, so tsc walks
-		// into apps/api and meets NestJS's legacy decorators. Nothing in this app
-		// uses a decorator; this is purely so the imported sources parse.
 		"experimentalDecorators": true,
-		// `bun:test` in `test/`. Additive rather than a replacement: Next's own
-		// ambient types come from `next-env.d.ts` and the include list, not from
-		// `types`, so naming one package here does not hide them.
 		"types": ["bun"],
 		"paths": {
 			"@/*": ["./*"]

@@ -18,11 +18,6 @@ export class DatabaseModule implements OnModuleInit, OnApplicationShutdown {
 
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
-	/**
-	 * Prisma connects lazily on first query, which turns a bad `DATABASE_URL`
-	 * into a confusing 500 on some unrelated endpoint. Connecting at startup
-	 * fails the boot instead.
-	 */
 	async onModuleInit(): Promise<void> {
 		try {
 			await this.db.$connect();

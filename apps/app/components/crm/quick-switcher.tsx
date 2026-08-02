@@ -13,6 +13,7 @@ import {
 	EntityLogo,
 	type EntityLogoTone,
 } from "@crm/ui/components/entity-logo";
+import { PersonAvatar } from "@crm/ui/components/person-avatar";
 import { useMountEffect } from "@crm/ui/hooks/use-mount-effect";
 import { useQuery } from "@tanstack/react-query";
 import { parseAsBoolean, useQueryState } from "nuqs";
@@ -28,14 +29,6 @@ const GROUP_LABEL = {
 
 const KINDS = ["company", "contact", "deal"] as const;
 
-/**
- * ⌘K over companies, contacts and deals.
- *
- * Open state is in the URL like every other overlay here, so a colleague can be
- * sent `?k=true` and land on the same thing. The query itself is not — a
- * half-typed search is not a view worth sharing, and it would put every
- * keystroke in the history.
- */
 export function QuickSwitcher() {
 	const openRecord = useOpenRecord();
 	const trpc = useTRPC();
@@ -43,8 +36,6 @@ export function QuickSwitcher() {
 	const [open, setOpen] = useQueryState("k", parseAsBoolean.withDefault(false));
 	const [query, setQuery] = useState("");
 
-	// The keyboard shortcut is a document-level listener, which is exactly what
-	// `useMountEffect` is for — it is a subscription, not derived state.
 	useMountEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
@@ -59,7 +50,6 @@ export function QuickSwitcher() {
 
 	const results = useQuery({
 		...trpc.search.quick.queryOptions({ q: query }),
-		// Two characters is where the results stop being "everything".
 		enabled: open && query.trim().length >= 2,
 		placeholderData: (previous) => previous,
 	});
@@ -79,11 +69,6 @@ export function QuickSwitcher() {
 			title="Search"
 			description="Jump to a company, contact or deal"
 		>
-			{/*
-			 * `shouldFilter={false}`: the API already matched and ranked these,
-			 * against fields the row does not always render (an email, a domain).
-			 * Letting cmdk filter again would drop hits whose match is invisible.
-			 */}
 			<Command shouldFilter={false}>
 				<CommandInput
 					placeholder="Search companies, contacts and deals…"
@@ -109,13 +94,21 @@ export function QuickSwitcher() {
 										value={`${hit.kind}:${hit.id}`}
 										onSelect={() => go(kind, hit.id)}
 									>
-										<EntityLogo
-											src={hit.iconUrl}
-											darkSrc={hit.iconDarkUrl}
-											tone={hit.iconTone as EntityLogoTone | null | undefined}
-											name={hit.label}
-											size="sm"
-										/>
+										{hit.kind === "contact" ? (
+											<PersonAvatar
+												src={hit.imageUrl}
+												name={hit.label}
+												size="sm"
+											/>
+										) : (
+											<EntityLogo
+												src={hit.iconUrl}
+												darkSrc={hit.iconDarkUrl}
+												tone={hit.iconTone as EntityLogoTone | null | undefined}
+												name={hit.label}
+												size="sm"
+											/>
+										)}
 										<span className="flex min-w-0 flex-col">
 											<span className="truncate">{hit.label}</span>
 											{hit.detail ? (

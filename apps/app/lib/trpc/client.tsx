@@ -28,12 +28,7 @@ export function TRPCReactProvider({ children }: { children: ReactNode }) {
 	const queryClient = getQueryClient();
 	const [trpcClient] = useState(() =>
 		createTRPCClient<AppRouter>({
-			links: [
-				// Same-origin: `app/api/[...path]/route.ts` forwards to the API, so
-				// the session cookie rides along without any CORS or credentials
-				// choreography.
-				httpBatchLink({ url: "/api/trpc" }),
-			],
+			links: [httpBatchLink({ url: "/api/trpc" })],
 		}),
 	);
 

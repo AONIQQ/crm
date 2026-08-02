@@ -8,8 +8,6 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TRPCReactProvider } from "@/lib/trpc/client";
 
-// --font-geist-sans / --font-geist-mono are the variables @crm/ui's theme reads
-// (see the @theme block in globals.css), so the design system picks these up.
 const fontSans = Geist({
 	variable: "--font-geist-sans",
 	subsets: ["latin"],
@@ -26,8 +24,6 @@ export const metadata: Metadata = {
 		template: "%s · Comp AI CRM",
 	},
 	description: "Customer Relationship Management for Comp AI",
-	// app/favicon.ico is picked up by Next's file convention and covers the
-	// legacy /favicon.ico request on its own; these are the modern additions.
 	icons: {
 		icon: [
 			{ url: "/favicon.svg", type: "image/svg+xml" },

@@ -1,16 +1,3 @@
-/**
- * Builds the API as a single Vercel function, via the Build Output API.
- *
- * Vercel's own tracing cannot deploy this app: the workspace packages export
- * raw TypeScript (`@crm/auth` -> src/index.ts), and every relative import in
- * `src` is extensionless because the repo compiles with
- * `moduleResolution: "Bundler"`. Traced and run as-is, Node fails on one or
- * the other — a missing `.ts`, or a missing `./create-app`.
- *
- * Bundling settles both at build time: bun resolves the whole graph, inlines
- * the workspace source, and emits one ESM file with no runtime resolution
- * left to do. Nothing about how the packages export has to change.
- */
 import { execSync } from "node:child_process";
 import {
 	cpSync,
@@ -31,14 +18,6 @@ const outDir = join(repoRoot, ".vercel/output");
 const funcDir = join(outDir, "functions/api/index.func");
 const bun = process.env.BUN_BIN || "bun";
 
-/**
- * Left out of the bundle.
- *
- * The `@nestjs/*` entries are optional platforms Nest probes for at runtime
- * and this app never installs; bundling them turns an absent peer into a
- * build error. The rest are native or environment-specific modules that
- * cannot survive being inlined.
- */
 const EXTERNALS = [
 	"@nestjs/microservices",
 	"@nestjs/websockets",
@@ -51,12 +30,6 @@ const EXTERNALS = [
 	"cardinal",
 ];
 
-/**
- * Copied into the function's `node_modules` instead of bundled.
- *
- * Express is resolved by name at runtime by `@nestjs/platform-express`, so a
- * bundled copy is invisible to it.
- */
 const VENDOR_ROOTS = ["express"];
 
 rmSync(outDir, { recursive: true, force: true });
@@ -71,11 +44,6 @@ execSync(
 		`--outfile=${JSON.stringify(join(funcDir, "index.mjs"))}`,
 		...EXTERNALS.map((e) => `--external ${e}`),
 	].join(" "),
-	// NODE_ENV matters at *build* time, not just at run time: bun constant-folds
-	// `process.env.NODE_ENV`, so `isProduction` in @crm/auth is burned into the
-	// bundle as a literal. Built without this, it folds to `false`, Better Auth
-	// drops the `__Secure-` cookie prefix, the app's proxy looks for the
-	// prefixed name over HTTPS and bounces every signed-in user to /sign-in.
 	{
 		cwd: apiDir,
 		stdio: "inherit",
@@ -83,17 +51,6 @@ execSync(
 	},
 );
 
-/**
- * Pin NODE_ENV at run time too.
- *
- * The line above settles everything bun folded, but vendored and external
- * packages still read `process.env.NODE_ENV` themselves, and Vercel does not
- * inject it into functions declared through the Build Output API (it also
- * strips the name from a function's `environment` map, since it is reserved).
- *
- * `??=` so a real environment value still wins, and prepended rather than
- * `--define`d because it has to run before any bundled module body reads it.
- */
 console.log("• pinning NODE_ENV in the bundle...");
 const entry = join(funcDir, "index.mjs");
 writeFileSync(
@@ -101,14 +58,6 @@ writeFileSync(
 	`process.env.NODE_ENV ??= "production";\n${readFileSync(entry, "utf8")}`,
 );
 
-/**
- * Vendoring walks bun's store rather than resolving by name across it.
- *
- * A store holds several versions of the same package side by side, so
- * resolving by name alone can copy a version the dependent never asked for.
- * Each `.bun/<pkg>@<ver>/node_modules/` entry links the exact versions that
- * package resolves to, so dependencies are followed from there.
- */
 console.log("• vendoring runtime-resolved dependencies...");
 const bunStore = join(repoRoot, "node_modules/.bun");
 const stores = existsSync(bunStore) ? readdirSync(bunStore) : [];
@@ -200,17 +149,7 @@ writeFileSync(
 		shouldAddHelpers: false,
 		maxDuration: 60,
 		memory: 1769,
-		/**
-		 * Vercel injects NODE_ENV for framework builds but not for functions
-		 * declared through the Build Output API, and Better Auth keys
-		 * `useSecureCookies` off it. Unset, it issued the session cookie without
-		 * the `__Secure-` prefix, the app's proxy looked for the prefixed name
-		 * over HTTPS, found nothing, and bounced every signed-in user back to
-		 * /sign-in. It also selects JSON logging over the colourised dev sink.
-		 */
 		environment: { NODE_ENV: "production" },
-		// Beside the database: Neon is us-east-1, and every request makes
-		// several round trips to it.
 		regions: ["iad1"],
 	}),
 );
@@ -218,26 +157,7 @@ writeFileSync(
 	join(outDir, "config.json"),
 	JSON.stringify({
 		version: 3,
-		// Nest owns its own routing — /health, /api/auth/*, /api/trpc/* — so
-		// everything goes to the one function.
 		routes: [{ src: "/(.*)", dest: "/api/index" }],
-		/**
-		 * The Gmail and Calendar sync.
-		 *
-		 * Declared here rather than in `apps/api/vercel.json`, because that file
-		 * is never read: this project's Root Directory is the repository root,
-		 * so Vercel looks for `/vercel.json` and the one beside the app is
-		 * inert. The cron silently did not exist — the sync only ever ran when
-		 * somebody called the route by hand, and the CRM quietly stopped
-		 * learning anything new from the mailbox.
-		 *
-		 * A root `vercel.json` is not the fix, because `crm-agent` builds from
-		 * the same root directory and would inherit a schedule for a route it
-		 * does not serve. The Build Output API is per-project by construction.
-		 *
-		 * The route fails closed without `CRON_SECRET`, so this is safe to
-		 * declare unconditionally.
-		 */
 		crons: [{ path: "/internal/sync/google", schedule: "*/5 * * * *" }],
 	}),
 );

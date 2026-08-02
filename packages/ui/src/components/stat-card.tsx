@@ -4,11 +4,8 @@ import type * as React from "react";
 type TrendDirection = "up" | "down" | "neutral";
 
 type StatDelta = {
-	/** Pre-formatted change, e.g. "+12%" or "+3". */
 	value: string;
-	/** Drives the color + arrow. Defaults to inferring from a leading sign. */
 	direction?: TrendDirection;
-	/** Trailing context, e.g. "vs. last month". */
 	label?: string;
 };
 
@@ -58,12 +55,6 @@ function StatDeltaText({
 	);
 }
 
-/**
- * A single KPI — label, headline value, optional trend delta, and an optional
- * slot (`children`) for a sparkline. Intentionally borderless: drop several into
- * a {@link StatGroup} so they read as one divider-separated strip rather than a
- * row of competing boxes. Per the dashboard guidelines, KPIs carry no icons.
- */
 function StatCard({
 	label,
 	value,

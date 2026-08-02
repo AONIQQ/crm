@@ -6,40 +6,11 @@ import {
 } from "./names";
 import { ask } from "./perplexity";
 
-/**
- * Finding somebody's X and GitHub accounts, and — the part that matters —
- * refusing to write one we cannot stand behind.
- *
- * The failure mode here is not "no link". It is a link to a *different real
- * person* with a similar handle, sitting on a customer record looking exactly
- * like a fact. `github.com/lewis` belongs to someone; so does `x.com/lewis`.
- * A search engine asked "what is Lewis Carhart's GitHub" will happily hand one
- * of them over, because that is what it was asked for.
- *
- * So each network is checked by whatever hard evidence that network actually
- * exposes, and the two are not equally checkable:
- *
- * - **GitHub** has a public API. We fetch the account and read its own `name`,
- *   `company` and `bio`. That is the person's own page telling us who they are,
- *   which is real corroboration.
- * - **X** has nothing readable — the profile page is a JavaScript shell to
- *   anyone without a paid API key. So the bar is the handle being a
- *   construction of their name *and* a search engine independently citing that
- *   exact profile when asked about this person by name and employer. Handles
- *   that clear neither are left empty.
- *
- * Every check in here runs against the CRM's own copy of who the contact is,
- * never against anything the model passed in — otherwise "verification" is just
- * the model marking its own homework.
- */
-
 export type Network = "x" | "github";
 
 export type SocialProfile = {
 	network: Network;
-	/** Lowercased, no leading `@`. */
 	handle: string;
-	/** The canonical profile URL, which is what gets written to the record. */
 	url: string;
 };
 
@@ -52,17 +23,6 @@ export type Person = {
 	companyDomain: string | null;
 };
 
-/**
- * What a check found, not what it decided.
- *
- * These functions used to return `accepted: true | false`, which made each one
- * its own little confidence policy — and meant a GitHub account that merely
- * shared an employer was written to a record with the same authority as one
- * that named the person. Returning evidence instead puts every network through
- * the same ledger, and the difference shows up where it should: a verified
- * GitHub account lands on the record, an X handle that can only ever be
- * corroborated indirectly becomes a suggestion.
- */
 export type Verdict =
 	| { accepted: true; profile: SocialProfile; evidence: Evidence[] }
 	| { accepted: false; reason: string };
@@ -77,12 +37,6 @@ const X_HOSTS = new Set([
 
 const GITHUB_HOSTS = new Set(["github.com", "www.github.com"]);
 
-/**
- * First-segment paths that look like a profile and are not one.
- *
- * `x.com/settings` and `github.com/pricing` parse identically to a username,
- * and both turn up in search results about a person.
- */
 const X_RESERVED = new Set([
 	"i",
 	"home",
@@ -130,19 +84,9 @@ const GITHUB_RESERVED = new Set([
 	"notifications",
 ]);
 
-/** X's own rule: up to 15 word characters. */
 const X_HANDLE = /^[A-Za-z0-9_]{1,15}$/;
-/** GitHub's own rule: alphanumerics and single inner hyphens, up to 39. */
 const GITHUB_HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 
-/**
- * A profile URL, or null for anything that is not one.
- *
- * Rejects deep links on purpose: `x.com/someone/status/123` and
- * `github.com/someone/repo` both contain a real handle, and both arrive as
- * citations constantly. Taking the first segment out of them would be right
- * about the handle and wrong about what the page proves.
- */
 export function parseSocialUrl(raw: string): SocialProfile | null {
 	const trimmed = raw.trim();
 	if (!trimmed) return null;
@@ -185,7 +129,6 @@ export function parseSocialUrl(raw: string): SocialProfile | null {
 	return null;
 }
 
-/** Every profile URL in a blob of text and citations, deduplicated. */
 export function extractSocialUrls(haystack: string[]): SocialProfile[] {
 	const found: SocialProfile[] = [];
 
@@ -193,9 +136,6 @@ export function extractSocialUrls(haystack: string[]): SocialProfile[] {
 		for (const match of chunk.matchAll(
 			/https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com|github\.com)\/[^\s"'<>)\]},]+/gi,
 		)) {
-			// Prose ends in punctuation and URLs do not: a link at the end of a
-			// sentence arrives as `x.com/lewiscarhart.`, which is not a handle
-			// either network could issue and would otherwise be dropped silently.
 			const profile = parseSocialUrl(match[0].replace(/[.,;:!?]+$/, ""));
 			if (profile && !found.some((f) => f.url === profile.url)) {
 				found.push(profile);
@@ -215,12 +155,6 @@ type GithubUser = {
 	type: string;
 };
 
-/**
- * The account's own page, from GitHub's public API.
- *
- * `GITHUB_TOKEN` is read if it is set — unauthenticated calls are capped at 60
- * an hour per IP, which is fine for ten contacts but not for a backfill.
- */
 async function fetchGithubUser(
 	handle: string,
 ): Promise<{ ok: true; user: GithubUser } | { ok: false; reason: string }> {
@@ -243,8 +177,6 @@ async function fetchGithubUser(
 			return { ok: false, reason: "No such GitHub account." };
 		}
 		if (response.status === 403 || response.status === 429) {
-			// Rate limited is not "unverified" — it is "we do not know", and the two
-			// must not collapse into a write.
 			return {
 				ok: false,
 				reason: "GitHub rate-limited the check. Try this contact again later.",
@@ -275,16 +207,6 @@ async function fetchGithubUser(
 	}
 }
 
-/**
- * What GitHub's own API says about an account, as evidence.
- *
- * The account naming the person is primary — it is their page asserting who
- * they are. The employer matching while the name does not is emphatically
- * *not*: `github.com/octocat` with `company: @CompAI` is a colleague, and
- * writing it to Lewis's record because they share an employer is the same
- * mistake as writing a stranger's LinkedIn to a contact because the company
- * matched. Both are recorded; the ledger prices them differently.
- */
 export async function verifyGithub(
 	profile: SocialProfile,
 	person: Person,
@@ -314,9 +236,6 @@ export async function verifyGithub(
 		);
 
 	if (named) {
-		// One item, not one per matching field: the name and the company sit on
-		// the same page, so treating them as independent sources would multiply a
-		// single observation into false certainty.
 		const detail = employed
 			? `the account is named "${user.name}" and its company reads "${user.company}"`
 			: `the account is named "${user.name}"`;
@@ -373,17 +292,6 @@ export async function verifyGithub(
 	return { accepted: true, profile, evidence };
 }
 
-/**
- * Whether an X account is this contact's, given that nobody can read X.
- *
- * Two things, and both are checked here rather than asked of the model. The
- * handle has to be a construction of their name, which rules out the
- * pseudonymous accounts we could never confirm; and a search engine has to cite
- * that exact profile when asked about them by name and employer, which is the
- * only outside corroboration available. A handle that is really the company's
- * account is rejected before either — `x.com/trycompai` passes a name check for
- * nobody and gets filed against everybody.
- */
 export async function verifyX(
 	profile: SocialProfile,
 	person: Person,
@@ -416,8 +324,6 @@ export async function verifyX(
 		};
 	}
 
-	// The tool does its own asking. A citation handed over by the model is a
-	// citation the model can invent.
 	const answer = await ask(
 		`Is https://x.com/${profile.handle} the X (Twitter) account of ${person.fullName}` +
 			`${person.title ? `, ${person.title}` : ""}` +
@@ -447,10 +353,6 @@ export async function verifyX(
 		};
 	}
 
-	// Neither of these is primary, and that is the honest result: X cannot be
-	// read, so the strongest thing available is two indirect signals agreeing.
-	// The ledger turns that into a suggestion for a rep rather than a write,
-	// which is the right place for a link nobody can check.
 	return {
 		accepted: true,
 		profile,
@@ -469,13 +371,6 @@ export async function verifyX(
 	};
 }
 
-/**
- * Candidate profile URLs from the open web.
- *
- * Candidates, never answers — same rule as LinkedIn slugs. The URLs are taken
- * from the citations rather than the prose, because a cited URL was actually
- * retrieved and a quoted one may have been composed on the spot.
- */
 export async function findSocialCandidates(
 	person: Person,
 	network: Network,

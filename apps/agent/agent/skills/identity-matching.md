@@ -32,7 +32,10 @@ That is the shape of every match: guess where to look, never what you will find.
 1. **`resolve_linkedin_profile`** with the email and company. It decomposes the
    local part and returns candidate slugs. These are leads, not answers.
 2. **`get_linkedin_profile`** on each candidate, passing the email, company name
-   and domain. It returns the profile *and a verdict*.
+   and domain — **and the `contactId`**. It returns the profile *and a verdict*.
+   Passing the id is what lets it copy their photograph, which it does only if
+   the verdict comes back positive, in code, without asking you. Leaving it out
+   costs the contact their picture and saves nothing.
 3. **Read the verdict, not the profile.** It checks two things:
    - `employerMatches` — a current position matches the company we have.
    - `nameMatches` — the real name is consistent with the email local part
@@ -41,6 +44,10 @@ That is the shape of every match: guess where to look, never what you will find.
    different person who happens to share something.
 5. If no candidate passes, **stop**. Leaving "Pmarchetti" in the CRM is the correct
    outcome when you do not know.
+
+Somebody whose LinkedIn URL is **already on the record** has been through all of
+this before. Do not re-run it to get a picture — `fetch_contact_photo` is one
+call, and the URL sitting there is the verification.
 
 ## Reporting the match
 

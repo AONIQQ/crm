@@ -5,9 +5,13 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
+		"./blob": "./src/blob.ts",
 		"./client": "./src/client.ts",
 		"./enums": "./src/generated/prisma/enums.ts",
-		"./favicon": "./src/favicon.ts"
+		"./favicon": "./src/favicon.ts",
+		"./images": "./src/images.ts",
+		"./safe-fetch": "./src/safe-fetch.ts",
+		"./settings": "./src/settings.ts"
 	},
 	"scripts": {
 		"build": "prisma generate",
@@ -28,7 +32,8 @@
 	"dependencies": {
 		"@crm/env": "workspace:*",
 		"@prisma/adapter-pg": "^7.9.1",
-		"@prisma/client": "^7.9.1"
+		"@prisma/client": "^7.9.1",
+		"@vercel/blob": "^2.6.1"
 	},
 	"devDependencies": {
 		"@crm/typescript-config": "workspace:*",

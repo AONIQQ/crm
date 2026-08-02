@@ -14,15 +14,8 @@ export function GrantAccess() {
 	async function handleGrant() {
 		setPending(true);
 
-		// Absolute, like the sign-in button: the API owns /api/auth/*, so a
-		// relative URL would resolve against the API's origin rather than this
-		// app's. Better Auth checks it against the origins in APP_URL.
 		const origin = window.location.origin;
 
-		// `linkSocial` rather than `signIn.social`: there is already a session and
-		// an account row, and this is a scope upgrade on the existing grant.
-		// Google's incremental authorisation means the resulting token covers the
-		// union, so sign-in keeps working either way.
 		const { error } = await authClient.linkSocial({
 			provider: "google",
 			scopes: [...SYNC_SCOPES],
@@ -30,7 +23,6 @@ export function GrantAccess() {
 			errorCallbackURL: `${origin}/grant-access`,
 		});
 
-		// On success the browser has already navigated to Google.
 		if (error) {
 			toast.error(error.message ?? "Could not reach Google.");
 			setPending(false);
@@ -64,10 +56,6 @@ export function GrantAccess() {
 				Grant access
 			</Button>
 
-			{/*
-			 * Somebody who does not want to grant this needs a way out that is not
-			 * the back button into a redirect loop.
-			 */}
 			<Button
 				className="w-full"
 				onClick={() => {

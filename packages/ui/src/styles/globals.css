@@ -2,35 +2,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/*
- * Scan this package's own source so Tailwind generates classes used by the
- * shared components. The path resolves the same whether this file is read in
- * place (packages/ui/src/styles) or through the workspace symlink
- * (node_modules/@crm/ui/src/styles). Consuming apps scan their own files
- * via Tailwind's automatic content detection.
- */
 @source "../../**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	/*
-	 * Comp's palette: flat white, neutral greys, one brand green.
-	 *
-	 * The greys are deliberately untinted. There is no scene to tint them
-	 * toward — the brand is "flat white and #006B4F" — and a tinted grey
-	 * without a reason reads as indecision rather than as a choice.
-	 */
 	--background: #ffffff;
 	--foreground: #171717;
 	--card: #ffffff;
 	--card-foreground: #171717;
 	--popover: #ffffff;
 	--popover-foreground: #171717;
-	/*
-	 * The brand green, spent on the most-pressed control in the product.
-	 * White on it measures 6.4:1, so a 13px label clears AA comfortably.
-	 */
 	--primary: #006b4f;
 	--primary-foreground: #ffffff;
 	--secondary: #f4f4f4;
@@ -39,10 +21,6 @@
 	--muted-foreground: #6b6b6b;
 	--accent: #f4f4f4;
 	--accent-foreground: #171717;
-	/*
-	 * Bricked back from a pure red so it does not read as a holiday pairing
-	 * next to the green. Still 6.2:1 against white.
-	 */
 	--destructive: #ae2e24;
 	--destructive-foreground: #ffffff;
 	--success: oklch(0.55 0.13 150);
@@ -53,32 +31,8 @@
 	--info-foreground: #ffffff;
 	--border: #e2e2e2;
 	--input: #e2e2e2;
-	/*
-	 * The scrim behind a modal. A token rather than `bg-black/10` because the
-	 * two themes need different strengths: 10% black over a near-black page is
-	 * almost nothing, so a dialog in dark had no separation from the page
-	 * underneath it.
-	 */
 	--overlay: rgb(0 0 0 / 0.18);
-	/*
-	 * Focus is green. It is drawn as a ring outside the control's own border
-	 * rather than replacing it — a ring that swaps the border out changes the
-	 * control's apparent size the moment it is focused.
-	 */
 	--ring: #006b4f;
-	/*
-	 * Categorical, not a ramp. Deal stages appear as segments of the overview
-	 * donut with a legend beside it, so adjacent stages have to be told apart —
-	 * a single-hue green ramp measured ΔE 8.3 between neighbours, which is below
-	 * the 15 floor at which full-colour vision can separate them.
-	 *
-	 * Validated: lightness band, chroma floor, CVD separation, normal-vision
-	 * floor and contrast all pass against the light surface. Assign in order,
-	 * never cycle — a stage keeps its hue when the others are filtered out.
-	 *
-	 * Slot 1 is a brighter step of the brand green; #006b4f itself measures
-	 * C 0.096, under the 0.10 chroma floor, so it reads grey in a chart.
-	 */
 	--chart-1: #00915f;
 	--chart-2: #2563eb;
 	--chart-3: #b45309;
@@ -100,11 +54,6 @@
 	--sidebar-ring: #006b4f;
 	--font-sans: var(--font-geist-sans, "Geist", sans-serif);
 	--font-mono: var(--font-geist-mono, "Geist Mono", monospace);
-	/*
-	 * 5px, down from 10px. Enough to read as deliberately rounded next to the
-	 * square controls this replaced, tight enough that a dense table does not
-	 * start looking like a consumer app.
-	 */
 	--radius: 5px;
 	--shadow-x: 0px;
 	--shadow-y: 1px;
@@ -131,15 +80,6 @@
 	--card-foreground: #f5f5f5;
 	--popover: #171717;
 	--popover-foreground: #f5f5f5;
-	/*
-	 * The same green as light, deliberately. A brand colour that changes value
-	 * per theme is not one colour, it is two — and both then need maintaining.
-	 * #006b4f still reads clearly green against near-black, and white on it is
-	 * unchanged at 6.4:1.
-	 *
-	 * This replaces a near-white primary, so a primary button in dark now
-	 * carries the brand rather than being a light slab.
-	 */
 	--primary: #006b4f;
 	--primary-foreground: #ffffff;
 	--secondary: #1f1f1f;
@@ -156,33 +96,10 @@
 	--warning-foreground: oklch(0.205 0 0);
 	--info: oklch(0.7 0.15 250);
 	--info-foreground: oklch(0.205 0 0);
-	/* Lighter than the background: on near-black there is nothing darker to
-	 * draw a line with, so a border sits above its surface rather than below. */
 	--border: #2a2a2a;
-	/*
-	 * The same value as `--border`. A control in dark is a #1f1f1f fill with a
-	 * #2a2a2a edge — the fill is what separates it from the page, and the edge
-	 * only has to define where it stops.
-	 *
-	 * This is deliberately below the 3:1 non-text contrast guideline. A lighter
-	 * edge reads as a bright grey outline on every input and filter at once,
-	 * which is louder than the controls themselves. The fill difference against
-	 * the page carries the affordance instead.
-	 */
 	--input: #2a2a2a;
-	/* Much stronger than light: the page it covers is already dark. */
 	--overlay: rgb(0 0 0 / 0.55);
-	/*
-	 * The one value that does NOT match its light counterpart. #006b4f is too
-	 * close to near-black to register as a ring at all. A fill carries the
-	 * brand; a ring only has to be seen, so this one lightens.
-	 */
 	--ring: #40be96;
-	/*
-	 * Selected against the dark surface, not flipped from light. The dark
-	 * lightness band is L 0.48–0.67 — narrower *and* darker than light's
-	 * 0.43–0.77 — so the light steps do not simply carry over.
-	 */
 	--chart-1: #0fa871;
 	--chart-2: #4b87f0;
 	--chart-3: #c07e22;
@@ -204,8 +121,6 @@
 	--sidebar-ring: #40be96;
 	--font-sans: var(--font-geist-sans, "Geist", sans-serif);
 	--font-mono: var(--font-geist-mono, "Geist Mono", monospace);
-	/* Matches light. The themes disagreed before — 10px against 12px — which
-	 * meant a control quietly changed shape when the theme was switched. */
 	--radius: 5px;
 	--shadow-x: 0px;
 	--shadow-y: 1px;
@@ -299,13 +214,6 @@
 		@apply bg-background text-foreground font-sans;
 	}
 
-	/*
-	 * Modern, theme-aware scrollbars. Thin, transparent track, with a thumb
-	 * drawn from the design tokens so it follows light/dark automatically.
-	 * Firefox uses the standard properties; WebKit/Chromium uses the
-	 * ::-webkit-scrollbar pseudo-elements. `.no-scrollbar` still wins because
-	 * it sets `display: none` on the pseudo-element.
-	 */
 	* {
 		scrollbar-width: thin;
 		scrollbar-color: var(--border) transparent;
@@ -331,14 +239,6 @@
 	}
 }
 
-/*
- * Bloom — the chart aesthetic (see dashboard-chart.tsx), ported to plain HTML
- * surfaces (status/severity indicators, meters, progress bars).
- *
- * `.bloom-*` adds a soft colored halo via box-shadow; set `--bloom-color` on
- * the element (it defaults to currentColor). Theme-independent, so a meter
- * beside a row matches the plot above it.
- */
 @layer utilities {
 	.bloom-low {
 		box-shadow: 0 0 4px var(--bloom-color, currentColor);
@@ -353,16 +253,6 @@
 	}
 }
 
-/*
- * Icon motion — expressive, per-icon hover animation for our Carbon glyphs
- * (see components/icon.tsx). The transform lands on the <svg> itself, so the
- * actual icon geometry moves rather than a wrapping box. A glyph animates when
- * hovered directly or when its nearest interactive ancestor (button, link, menu
- * item) or an opt-in `.icon-hover` container is hovered. Settle motions read
- * from `--cds-hover`; looping/keyframe motions override it while hovered. All of
- * it is gated behind `prefers-reduced-motion` so it disappears for users who ask
- * for less movement.
- */
 @layer utilities {
 	.cds-icon {
 		transform-origin: center;
@@ -506,13 +396,6 @@
 	}
 }
 
-/*
- * View transitions. Opt-in: the old snapshot is always hidden (so nothing
- * ghosts or doubles), and the new view appears instantly unless a transition
- * type opts into motion. Persistent chrome (header, icon rail) and the page
- * background never move. Hierarchical navigation (list -> detail) slides
- * forward/back; lateral navigation (rail menus) fades the new content in.
- */
 :root {
 	--duration-exit: 150ms;
 	--duration-enter: 210ms;
@@ -597,10 +480,6 @@
 	}
 }
 
-/*
- * Underline-on-hover links. Used by <LineHoverLink>, which picks a variant via
- * the `link-hover--*` modifier; the base class carries the shared geometry.
- */
 .link-hover {
 	cursor: pointer;
 	position: relative;
@@ -962,25 +841,11 @@
 	.link-hover *,
 	.link-hover::before,
 	.link-hover::after {
-		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion reset must override animation declarations */
 		animation: none !important;
-		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion reset must override transition declarations */
 		transition-duration: 0.01ms !important;
 	}
 }
 
-/*
- * "It is still here."
- *
- * Re-running a check that fails the same way changes nothing on screen, so the
- * button reads as broken rather than the connection. This replays whenever a
- * check lands on an error that is still the same one — a short nudge plus a
- * ring that fades out, which is enough to say the page did respond without
- * announcing a new problem that has not happened.
- *
- * The ring is the part that carries the message; the nudge is the part that
- * carries the urgency, so only the nudge is dropped under reduced motion.
- */
 @keyframes alert-attention-nudge {
 	0%,
 	100% {

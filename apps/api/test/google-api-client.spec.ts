@@ -7,7 +7,6 @@ afterEach(() => {
 	globalThis.fetch = realFetch;
 });
 
-/** Stubs `fetch` with one canned response. */
 function stub(
 	status: number,
 	body: unknown,
@@ -29,11 +28,6 @@ describe("GoogleApiClient", () => {
 		expect(await call()).toEqual({ outcome: "ok", data: { ok: true } });
 	});
 
-	/**
-	 * The two cursor invalidations the whole sync design turns on. Both mean
-	 * "fall back to a bounded resync", not "something broke" — getting either
-	 * wrong stalls a mailbox silently.
-	 */
 	it("maps Gmail's 404 to cursor-invalid", async () => {
 		stub(404, { error: { message: "Requested entity was not found." } });
 		const result = await call();
@@ -62,8 +56,6 @@ describe("GoogleApiClient", () => {
 	});
 
 	it("treats a permission 403 as terminal", async () => {
-		// The overloaded status: same code, opposite handling. A permission
-		// failure retried every five minutes forever is a bug.
 		stub(403, { error: { message: "Insufficient Permission" } });
 		const result = await call();
 

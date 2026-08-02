@@ -16,14 +16,6 @@ import { GoogleTokenService } from "./google-token.service";
 import { SyncController } from "./sync.controller";
 import { SyncStateService } from "./sync-state.service";
 
-/**
- * Gmail and Calendar.
- *
- * Depends on `CompaniesModule` for `companyForEmail` — turning a work address
- * into a found-or-created company — and on `AgentModule` to say that a contact
- * arrived with nothing but an address. Neither of those is enrichment: this
- * module reports what the sync saw and lets the agent decide what it means.
- */
 @Module({
 	imports: [TrpcModule, AgentModule, CompaniesModule],
 	controllers: [SyncController],

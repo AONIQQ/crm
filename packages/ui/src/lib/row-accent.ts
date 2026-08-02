@@ -1,7 +1,3 @@
-// NOTE: every class below must be written out as a literal string. Tailwind's
-// scanner only generates CSS for class names it finds verbatim in source — it
-// cannot see dynamically built/interpolated ones, so no template helpers here.
-
 const BAR = [
 	"[&>td:first-child]:relative",
 	"[&>td:first-child]:before:pointer-events-none [&>td:first-child]:before:absolute",
@@ -10,7 +6,6 @@ const BAR = [
 	"[&:hover>td:first-child]:before:opacity-100",
 ].join(" ");
 
-// Content-first rows: slide the first cell's text right on hover.
 export const ROW_ACCENT = [
 	"cursor-pointer",
 	BAR,
@@ -18,8 +13,6 @@ export const ROW_ACCENT = [
 	"[&:hover>td:first-child]:pl-5",
 ].join(" ");
 
-// Rows with a leading icon/expand column (a chevron isn't "the text"): keep the
-// bar on the first cell but slide the second cell — the first real content.
 export const ROW_ACCENT_EXPANDABLE = [
 	"cursor-pointer",
 	BAR,

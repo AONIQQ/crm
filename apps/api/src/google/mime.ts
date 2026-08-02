@@ -1,11 +1,3 @@
-/**
- * Turning a Gmail payload into something readable.
- *
- * All pure: the awkward cases here (nested multiparts, quoted-printable, a
- * forty-message quote trail) are exactly what wants table-driven tests without
- * a network or a database.
- */
-
 export type GmailHeader = { name?: string; value?: string };
 
 export type GmailPart = {
@@ -16,7 +8,6 @@ export type GmailPart = {
 	parts?: GmailPart[];
 };
 
-/** Case-insensitive header lookup — Gmail is inconsistent about casing. */
 export function header(
 	headers: readonly GmailHeader[] | undefined,
 	name: string,
@@ -26,7 +17,6 @@ export function header(
 	return found?.value?.trim() ?? null;
 }
 
-/** Gmail encodes every body as base64url, which `atob` will not accept. */
 export function decodeBase64Url(data: string): string {
 	const normalised = data.replace(/-/g, "+").replace(/_/g, "/");
 	const padded = normalised.padEnd(
@@ -41,13 +31,6 @@ export function decodeBase64Url(data: string): string {
 	}
 }
 
-/**
- * The plain-text body.
- *
- * Prefers `text/plain`; falls back to stripping tags out of `text/html`,
- * because plenty of senders ship HTML only and "(no body)" on the timeline is
- * useless. Attachments are skipped — v1 stores no bytes.
- */
 export function plainTextBody(payload: GmailPart | undefined): string {
 	if (!payload) return "";
 
@@ -64,7 +47,6 @@ export function plainTextBody(payload: GmailPart | undefined): string {
 	return "";
 }
 
-/** Depth-first search for a mime type, skipping attachment parts. */
 function findPart(part: GmailPart, mimeType: string): GmailPart | null {
 	if (part.mimeType === mimeType && !part.filename && part.body?.data) {
 		return part;
@@ -95,24 +77,12 @@ export function stripHtml(html: string): string {
 		.trim();
 }
 
-/**
- * Where the quoted history starts.
- *
- * A reply carries the entire conversation beneath it, so storing the raw body
- * would mean the same text N times over a thread and a timeline entry that is
- * mostly `>`. Each pattern is a line that begins the quote; everything from the
- * first match is dropped.
- */
 const QUOTE_MARKERS: RegExp[] = [
-	// "On Tue, 5 Aug 2025 at 14:02, Jane <jane@acme.com> wrote:"
 	/^\s*On .+ wrote:\s*$/m,
-	// Outlook and most corporate clients.
 	/^\s*-{2,}\s*Original Message\s*-{2,}\s*$/im,
 	/^\s*_{5,}\s*$/m,
 	/^\s*From:\s.+$/m,
-	// Apple Mail.
 	/^\s*Begin forwarded message:\s*$/im,
-	// Gmail's own divider when the client collapses history.
 	/^\s*-{3,}\s*Forwarded message\s*-{3,}\s*$/im,
 ];
 
@@ -126,8 +96,6 @@ export function stripQuotedHistory(body: string): string {
 
 	let trimmed = body.slice(0, cut);
 
-	// Whatever survives, drop trailing lines that are pure quote — some clients
-	// interleave rather than appending.
 	const lines = trimmed.split("\n");
 	while (lines.length > 0 && /^\s*>/.test(lines[lines.length - 1] ?? "")) {
 		lines.pop();
@@ -137,17 +105,6 @@ export function stripQuotedHistory(body: string): string {
 	return trimmed.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/**
- * The id of the conversation root, from the reply chain.
- *
- * `References` lists the ancestry oldest-first, so its first entry is the root.
- * Falling back to `In-Reply-To` handles clients that omit `References`, and
- * finally a message that starts a thread is its own root.
- *
- * This is what makes a thread global. Gmail's `threadId` is scoped to one
- * mailbox, so two reps on the same conversation report different ids for it —
- * keying on those would put one conversation on a company's timeline twice.
- */
 export function rootMessageId(
 	headers: readonly GmailHeader[] | undefined,
 ): string | null {
@@ -166,12 +123,10 @@ export function rootMessageId(
 	return own ? normaliseMessageId(own) : null;
 }
 
-/** Strips the angle brackets so `<a@b>` and `a@b` are the same identity. */
 export function normaliseMessageId(value: string): string {
 	return value.trim().replace(/^</, "").replace(/>$/, "").toLowerCase();
 }
 
-/** A short preview for the timeline row. Never the whole body. */
 export function snippetOf(body: string, limit = 200): string | null {
 	const flat = body.replace(/\s+/g, " ").trim();
 	if (!flat) return null;

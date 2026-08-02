@@ -5,21 +5,8 @@ import { WEIGHTS } from "../lib/evidence";
 import { writeBrief } from "../lib/facts";
 import { focusOn } from "../lib/focus";
 
-/** Three sentences of prose, and the length is the constraint that keeps it honest. */
 const MAX_NARRATIVE = 400;
 
-/**
- * The background a rep reads before they dial.
- *
- * Length-capped rather than merely asked to be brief: at three sentences there
- * is only room for what a source says, and the padding a model reaches for when
- * it has nothing left to report — "a seasoned leader passionate about
- * innovation" — does not fit alongside two real facts.
- *
- * The structured `sections` are separate from the prose because the sheet
- * renders them as fields. Prose is what a person reads; fields are what they
- * scan.
- */
 export default defineTool({
 	description:
 		"Write the Background panel on a contact: a short narrative plus the structured lines under it. Replaces the previous one. Every claim must come from something you read.",
@@ -65,9 +52,6 @@ export default defineTool({
 
 		const narrative = input.narrative.trim();
 
-		// A one-liner that restates the title already on the record is worse than
-		// an empty panel: it fills the space where a rep looks for something they
-		// did not already know.
 		if (narrative.length < 40) {
 			return {
 				written: false as const,

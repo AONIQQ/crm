@@ -8,8 +8,6 @@ import type { BaseTrpcContext } from "./context.types";
 export class TrpcContext implements TRPCContext {
 	async create(opts: ContextOptions): Promise<BaseTrpcContext> {
 		const req = "req" in opts ? opts.req : undefined;
-		// A missing or expired cookie is an anonymous request, not an error —
-		// `AuthMiddleware` is what turns that into UNAUTHORIZED.
 		const session = req
 			? await auth.api
 					.getSession({ headers: fromNodeHeaders(req.headers) })

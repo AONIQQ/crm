@@ -2,20 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { ActivityType, DealStage, db, EmailDirection } from "@crm/db";
 import { readCompanyHistory, readDealHistory } from "../agent/lib/accounts";
 
-/**
- * The account reads, against a real database.
- *
- * These exist because of one sentence the agent said to a rep: "I don't have a
- * tool that lists contacts by company." The assertion that matters in here is
- * not the shape of the payload — it is that a company read comes back holding
- * the **ids** of the people at it, because that is the difference between the
- * agent answering and the agent asking the human to do a join.
- *
- * A real Postgres rather than a mock, for the same reason `facts` is: the
- * joins are the behaviour. A stubbed Prisma would happily return contacts for
- * a thread filter that matches nothing in practice.
- */
-
 const suffix = process.env.TEST_RUN_ID ?? "accounts-spec";
 const domain = `fernhill-${suffix}.test`;
 
@@ -31,7 +17,6 @@ const daysAhead = (days: number) => new Date(Date.now() + days * 86_400_000);
 beforeAll(async () => {
 	await cleanup();
 
-	// Better Auth mints user ids, so the column has no database default.
 	const user = await db.user.create({
 		data: {
 			id: `user-${suffix}`,
@@ -67,7 +52,6 @@ beforeAll(async () => {
 	});
 	paulaId = paula.id;
 
-	// Named after their own address, which is what `needsIdentity` reports.
 	const placeholder = await db.contact.create({
 		data: {
 			firstName: "Tsomerville",
@@ -126,7 +110,6 @@ beforeAll(async () => {
 				dealId,
 				createdById: userId,
 			},
-			// A projection of an email. It must not come back as a note as well.
 			{
 				type: ActivityType.EMAIL,
 				subject: "Re: Contract",
@@ -219,8 +202,6 @@ describe("readCompanyHistory", () => {
 	it("names every contact at the company, with their id", async () => {
 		const history = await readCompanyHistory(companyId);
 
-		// The whole reason this function exists: the ids are in the payload, so
-		// the agent never has to ask a rep for one.
 		expect(history?.people.map((person) => person.id).sort()).toEqual(
 			[paulaId, placeholderId].sort(),
 		);
@@ -260,8 +241,6 @@ describe("readCompanyHistory", () => {
 
 		expect(history?.threads[0]?.subject).toBe("Re: Contract");
 		expect(history?.threads[0]?.contact?.id).toBe(paulaId);
-		// Bodies, not snippets — a signature block is the best title evidence
-		// there is, and it only exists in the body.
 		expect(history?.threads[0]?.messages[0]?.body).toContain(
 			"Growth Specialist",
 		);
@@ -289,8 +268,6 @@ describe("readDealHistory", () => {
 
 		expect(history?.deal.stage).toBe("CONTRACT_SENT");
 		expect(history?.deal.open).toBe(true);
-		// Six weeks in contract-sent is the answer to "where does this stand",
-		// and the stage field alone cannot say it.
 		expect(history?.deal.daysInStage).toBeGreaterThanOrEqual(41);
 	});
 

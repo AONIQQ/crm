@@ -1,37 +1,12 @@
 import "@crm/env/load";
 
-/**
- * What this install can actually do.
- *
- * Every outside source the agent can reach is optional, and most self-hosted
- * copies of this repo will have none of them. That has to be an ordinary
- * operating condition rather than a degraded one, because the best evidence
- * here was never bought: a reply from someone's own address, their signature
- * block, a meeting they turned up to. `read_crm_history` needs no key at all
- * and beats every vendor in this list.
- *
- * So a missing key is not an error anywhere. It removes a place to look, the
- * agent is told which places it has before it plans, and the tools that need
- * one say so plainly and cost nothing. The failure this design exists to
- * prevent is an agent that burns its budget rediscovering that a key is
- * absent, then writes a confident summary from the little it managed to read.
- */
-
 export type Capability = {
-	/** The variable to set to turn it on. */
 	readonly env: string;
 	readonly label: string;
-	/** What it adds, in the agent's terms. */
 	readonly gives: string;
 	readonly enabled: boolean;
 };
 
-/**
- * Read on every call rather than captured at import.
- *
- * These are cheap, and a value that was snapshotted at module load is a value
- * that lies in tests and in any process that configures itself late.
- */
 export function capabilities(): readonly Capability[] {
 	const set = (key: string) => Boolean(process.env[key]?.trim());
 
@@ -56,23 +31,22 @@ export function capabilities(): readonly Capability[] {
 			gives: "a company's logo, industry, location and socials from its domain",
 			enabled: set("CONTEXT_DEV_API_KEY"),
 		},
+		{
+			env: "BLOB_READ_WRITE_TOKEN",
+			label: "Picture storage",
+			gives:
+				"somewhere to keep a logo or a profile photo. Without it a record has no picture at all, because the URLs these sources hand back expire and are never stored as they are",
+			enabled: set("BLOB_READ_WRITE_TOKEN"),
+		},
 	];
 }
 
-/** Whether one source is available, by its variable name. */
 export function enabled(env: string): boolean {
 	return capabilities().some(
 		(capability) => capability.env === env && capability.enabled,
 	);
 }
 
-/**
- * The result a tool returns when its source is not configured.
- *
- * Deliberately shaped like every other "we could not find out" answer, and
- * deliberately explicit that retrying is pointless — an agent told only
- * "failed" will reasonably try again, and there is nothing on the other end.
- */
 export function unavailable(env: string): {
 	ok: false;
 	configured: false;
@@ -87,13 +61,6 @@ export function unavailable(env: string): {
 	};
 }
 
-/**
- * The capability list, as a section for the session instructions.
- *
- * Both halves are stated. An agent told only what it has will keep proposing
- * the tool it does not, and one told only what it lacks reads it as a fault to
- * work around.
- */
 export function capabilitiesMarkdown(): string {
 	const all = capabilities();
 	const on = all.filter((capability) => capability.enabled);

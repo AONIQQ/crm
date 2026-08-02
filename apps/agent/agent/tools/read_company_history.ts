@@ -3,20 +3,6 @@ import { z } from "zod";
 import { readCompanyHistory } from "../lib/accounts";
 import { focusOn } from "../lib/focus";
 
-/**
- * The account, and everyone in it.
- *
- * The company equivalent of `read_crm_history`, and it exists because a
- * session opened on a company could count its contacts and not name one. The
- * agent's own words: "I don't have a tool that lists contacts by company, only
- * ones that look up a specific contact by ID or email" — so it asked the rep
- * to paste an id that the CRM had already joined for them.
- *
- * Free, like every read of our own database. It should be the first call in a
- * company session, and it is usually the last one needed: the people, the
- * deals, the correspondence and the notes come back together, each with the id
- * a follow-up tool wants.
- */
 export default defineTool({
 	description:
 		"Read everything the CRM has on a company: every contact there with their id, title and whether we have heard from them; every deal with stage and value; recent email threads with full bodies; meetings; and notes. Free and fast — call it first in a company session, and whenever you need to find a person at a company you already know.",

@@ -5,7 +5,6 @@ import {
 } from "../agent/lib/brand-mapping";
 import type { Brand } from "../agent/lib/context-dev";
 
-/** A company with nothing filled in — every gap open. */
 function emptyCompany(
 	overrides: Partial<CompanySnapshot> = {},
 ): CompanySnapshot {
@@ -115,7 +114,6 @@ describe("brandToUpdate", () => {
 		expect(update.description).toBeUndefined();
 		expect(update.city).toBeUndefined();
 		expect(update.phone).toBeUndefined();
-		// The gaps are still filled.
 		expect(update.country).toBe("United States");
 	});
 
@@ -133,7 +131,6 @@ describe("brandToUpdate", () => {
 	});
 
 	it("writes nothing when the lookup found nothing", () => {
-		// Every field on a brand is nullable, so the all-null case is real.
 		expect(brandToUpdate({}, emptyCompany())).toEqual({});
 	});
 
@@ -145,5 +142,3 @@ describe("brandToUpdate", () => {
 		expect(update.description).toBe("Payments, simplified.");
 	});
 });
-
-/** The real queue, with the five-second backoff wound down. */

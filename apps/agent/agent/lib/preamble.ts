@@ -1,30 +1,7 @@
 import { db } from "@crm/db";
 import { capabilitiesMarkdown } from "./capabilities";
 
-/**
- * What a session is told before it says anything.
- *
- * Two things vary, and both were getting the agent into trouble.
- *
- * **Which record.** A person, a company and a deal are three different
- * conversations. The company preamble used to say "we know 6 contact(s) here"
- * and could not name one of them, so the agent — knowing people existed and
- * having no way to address any of them — asked the rep to paste a contact id
- * off the screen they were looking at. Every neighbouring record is now named
- * **with its id**, because an id in the preamble is a tool call and a count is
- * a dead end.
- *
- * **Who opened it.** A dispatched task is a research pass with a budget. A rep
- * in the contact sheet is a conversation. Told neither, the agent assumed the
- * first, which is how a question got a work plan back.
- *
- * Pure apart from reading the database: the focus to seed is *returned* rather
- * than set, so `instructions/task.ts` owns that one side effect and these are
- * testable outside an eve turn.
- */
-
 export type Opened = {
-	/** Started by `schedules/dispatch.ts` rather than by a person. */
 	dispatched: boolean;
 	kind?: string | null;
 	reason?: string | null;
@@ -33,11 +10,9 @@ export type Opened = {
 
 export type Preamble = {
 	markdown: string;
-	/** What the audit hook should file this session's events against. */
 	focus: { contactId?: string | null; companyId?: string | null };
 };
 
-/** The record the session was opened on, whichever it is. */
 export async function sessionPreamble(
 	record: {
 		contactId?: string | null;
@@ -52,13 +27,6 @@ export async function sessionPreamble(
 	return noRecordPreamble();
 }
 
-/**
- * What kind of exchange this is, said in one line.
- *
- * The same record supports both, and they want opposite behaviour: a
- * dispatched pass should go and find things, a rep with the sheet open wants
- * the question in front of them answered from what we already have.
- */
 function opening(opened: Opened, questions: string): string {
 	if (opened.dispatched) {
 		return [
@@ -76,14 +44,6 @@ function opening(opened: Opened, questions: string): string {
 	].join(" ");
 }
 
-/**
- * A session opened from a person's record.
- *
- * Their company id is stated outright. Its absence was a dead end with a
- * confusing symptom: the agent could see where somebody worked, had no id to
- * pass to any company tool, and reported that no company was available — about
- * a contact who plainly had one.
- */
 export async function contactPreamble(
 	contactId: string,
 	opened: Opened,
@@ -169,13 +129,6 @@ export async function contactPreamble(
 	};
 }
 
-/**
- * A session opened from a company's record.
- *
- * The people are **named, with their ids**, which is the whole fix: a count
- * told the agent that contacts existed without letting it address one, so it
- * handed the CRM's own join back to the person using it.
- */
 export async function companyPreamble(
 	companyId: string,
 	opened: Opened,
@@ -254,14 +207,6 @@ export async function companyPreamble(
 	return { markdown, focus: { companyId } };
 }
 
-/**
- * A session opened from a deal's record.
- *
- * A deal is the one record where the *state* matters as much as the facts:
- * which stage, how much, who is on it, and when it was last touched. Those are
- * the questions a rep opens a deal to ask, so they are what the session starts
- * knowing.
- */
 export async function dealPreamble(
 	dealId: string,
 	opened: Opened,
@@ -334,17 +279,9 @@ export async function dealPreamble(
 		capabilitiesMarkdown(),
 	].join("\n");
 
-	// Focused on the company, because that is the record every fact the agent
-	// can write hangs off — a deal has no fields of its own to enrich.
 	return { markdown, focus: { companyId: deal.company?.id ?? null } };
 }
 
-/**
- * No record at all — the dev TUI, or a dispatched pass over the queue.
- *
- * Worth saying rather than falling through to bare capabilities: without it
- * the agent has no idea the CRM is searchable, and waits to be handed an id.
- */
 export function noRecordPreamble(): Preamble {
 	return {
 		markdown: [

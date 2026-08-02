@@ -23,11 +23,6 @@ export type ContactLinks = {
 	githubUrl: string | null;
 };
 
-/**
- * The website is not in this list — it is the domain in the sheet header,
- * which is a link, because that is what a domain should be. What is left are
- * the places the agent found this company that its name does not give you.
- */
 const COMPANY_LINKS: Link<CompanyLinks>[] = [
 	{ key: "linkedinUrl", label: "LinkedIn", icon: LogoLinkedin },
 	{ key: "twitterUrl", label: "X", icon: LogoX },
@@ -36,12 +31,6 @@ const COMPANY_LINKS: Link<CompanyLinks>[] = [
 	{ key: "careersUrl", label: "Careers", icon: UserMultiple },
 ];
 
-/**
- * The same row for a person, minus the two that only a company has.
- *
- * Email and phone are not here either: they are in the stats strip at the top
- * of the sheet, where the answer to "how do I reach them" belongs.
- */
 const CONTACT_LINKS: Link<ContactLinks>[] = [
 	{ key: "linkedinUrl", label: "LinkedIn", icon: LogoLinkedin },
 	{ key: "twitterUrl", label: "X", icon: LogoX },
@@ -63,14 +52,6 @@ export function hasContactLinks(contact: ContactLinks): boolean {
 	return present(contact, CONTACT_LINKS).length > 0;
 }
 
-/**
- * Every link says where it goes.
- *
- * A bare row of glyphs works for LinkedIn and GitHub, whose marks people know,
- * and fails for "pricing" and "careers", which have no mark — so the row comes
- * out half legible and reads as clip art. Labels cost one line and remove the
- * guessing.
- */
 function SocialLinks<T>({ record, links }: { record: T; links: Link<T>[] }) {
 	const rows = present(record, links);
 

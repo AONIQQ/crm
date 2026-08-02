@@ -72,7 +72,6 @@ describe("plainTextBody", () => {
 			body: { data: encode("<p>Hello</p><p>World</p>") },
 		};
 
-		// One newline per closing tag, not a blank line between paragraphs.
 		expect(plainTextBody(payload)).toBe("Hello\nWorld");
 	});
 
@@ -175,8 +174,6 @@ describe("rootMessageId", () => {
 	});
 
 	it("gives two mailboxes' copies of one conversation the same root", () => {
-		// The whole point of keying on RFC headers rather than Gmail's threadId,
-		// which differs per mailbox. Same conversation, two reps, one CRM thread.
 		const repA = [
 			{ name: "References", value: "<root@acme.com>" },
 			{ name: "Message-ID", value: "<reply-a@trycomp.ai>" },

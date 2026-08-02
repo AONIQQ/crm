@@ -37,7 +37,6 @@ export class CompaniesRouter {
 		return this.companies.byId(id);
 	}
 
-	/** Company pickers and facet labels. */
 	@Query({ input: companyOptionsInput })
 	async options(@Input("q") q: string) {
 		return this.companies.options(q);
@@ -53,13 +52,11 @@ export class CompaniesRouter {
 		return this.companies.update(input.id, input.data);
 	}
 
-	/** Re-runs the brand lookup, ignoring Context.dev's cache. */
 	@Mutation({ input: companyIdInput })
 	async enrich(@Input("id") id: string) {
 		return this.companies.enrich(id);
 	}
 
-	/** Reads the company's site and posts a brief to its timeline. */
 	@Mutation({ input: companyIdInput })
 	async research(@Ctx() ctx: AuthedTrpcContext, @Input("id") id: string) {
 		return this.companies.research(id, ctx.user.id);

@@ -5,8 +5,6 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
-// Mirrors `sheetTitleVariants` — a drawer is the small-screen form of a sheet,
-// so a record title has to read the same weight in both.
 const drawerTitleVariants = cva("font-heading font-medium text-foreground", {
 	variants: {
 		size: {

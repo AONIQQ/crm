@@ -17,11 +17,6 @@ const DEVELOPMENT_LEVELS: LogLevel[] = [
 	"verbose",
 ];
 
-/**
- * Format and level follow `NODE_ENV` rather than having env vars of their own:
- * JSON at `log` and above in production, colourised with `debug`/`verbose`
- * locally. Read live, not captured at import, so tests can flip it.
- */
 function consoleLoggerOptions(): ConsoleLoggerOptions {
 	const isProduction = process.env.NODE_ENV === "production";
 
@@ -33,17 +28,8 @@ function consoleLoggerOptions(): ConsoleLoggerOptions {
 	};
 }
 
-/**
- * A log line with fields attached: `logger.log({ message: "Cache miss", userId })`.
- *
- * Nest treats extra arguments as separate messages and prints one line each, so
- * structured data has to arrive as a single object rather than a second
- * argument. Fields are hoisted to the top level in JSON and rendered after the
- * text in development.
- */
 type StructuredMessage = { message: string } & Record<string, unknown>;
 
-/** What `ConsoleLogger` emits in JSON mode, plus our correlation fields. */
 interface JsonLogRecord {
 	level: LogLevel;
 	pid: number;
@@ -55,15 +41,6 @@ interface JsonLogRecord {
 	userId?: string;
 }
 
-/**
- * The application logger: `ConsoleLogger` with the current request stitched in,
- * so a line logged deep inside a service can still be traced back to the call
- * that caused it.
- *
- * Singleton, not request-scoped — the request data comes from
- * `AsyncLocalStorage`, so there is no reason to pay for a logger instance, and
- * a fresh dependency graph, per request.
- */
 @Injectable()
 export class ContextLogger extends ConsoleLogger {
 	constructor() {
@@ -82,8 +59,6 @@ export class ContextLogger extends ConsoleLogger {
 		const base = super.getJsonLogObject(message, options);
 		const request = getRequestContext();
 
-		// Base keys win over caller-supplied fields: a stray `level` in a log
-		// payload must not be able to relabel the line.
 		const record: JsonLogRecord = isStructuredMessage(message)
 			? { ...withoutMessage(message), ...base, message: message.message }
 			: base;
@@ -99,7 +74,6 @@ export class ContextLogger extends ConsoleLogger {
 		};
 	}
 
-	/** Renders `{ message, ...fields }` as `text { fields }` instead of Nest's `Object(n) {…}`. */
 	protected override stringifyMessage(
 		message: unknown,
 		logLevel: LogLevel,
@@ -116,10 +90,6 @@ export class ContextLogger extends ConsoleLogger {
 			: `${text} ${inspect(fields, this.inspectOptions)}`;
 	}
 
-	/**
-	 * The pretty path has no field to put a request id in, so it rides along
-	 * inside the context bracket: `[AuthService 3f9c1a2b]`.
-	 */
 	protected override formatContext(context: string): string {
 		const request = getRequestContext();
 
@@ -131,7 +101,6 @@ export class ContextLogger extends ConsoleLogger {
 	}
 }
 
-/** Enough of a UUID to eyeball-match lines in a local terminal. */
 function shortId(requestId: string): string {
 	return requestId.slice(0, 8);
 }

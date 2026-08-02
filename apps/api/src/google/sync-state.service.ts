@@ -7,13 +7,6 @@ import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import type { SyncSource } from "./google.constants";
 
-/**
- * The cursor store.
- *
- * Every mutation a sync makes to its own bookkeeping goes through here, so
- * "what state can a sync row be in" is answerable by reading one file rather
- * than by grepping two sync services for `update`.
- */
 @Injectable()
 export class SyncStateService {
 	private readonly logger = new Logger(SyncStateService.name);
@@ -30,26 +23,16 @@ export class SyncStateService {
 		return this.db.mailboxSync.findMany({ where: { userId } });
 	}
 
-	/**
-	 * The rows a cron tick should attempt.
-	 *
-	 * Excludes `NEEDS_RECONNECT` — that state is terminal until a human acts, and
-	 * retrying it every five minutes would be a pointless call to Google forever.
-	 * Also excludes anything inside its rate-limit backoff.
-	 */
 	async due(now: Date): Promise<MailboxSync[]> {
 		return this.db.mailboxSync.findMany({
 			where: {
 				status: { notIn: [GoogleSyncStatus.NEEDS_RECONNECT] },
 				OR: [{ retryAfter: null }, { retryAfter: { lte: now } }],
 			},
-			// Least-recently-synced first, so one busy mailbox cannot starve the
-			// rest when a tick runs out of budget. A never-synced row sorts first.
 			orderBy: [{ lastSyncedAt: { sort: "asc", nulls: "first" } }],
 		});
 	}
 
-	/** Creates the row when a source is first connected. Idempotent. */
 	async ensure(
 		userId: string,
 		source: SyncSource,
@@ -60,14 +43,9 @@ export class SyncStateService {
 			create: {
 				userId,
 				source,
-				// No cursor yet. The first pass records where "now" is and imports
-				// nothing — sync is forward-only.
 				status: GoogleSyncStatus.IDLE,
 				autoCreate: options.autoCreate,
 			},
-			// Reconnecting keeps the cursor: re-consenting must not rewind a
-			// mailbox. It *does* clear the error and lift a NEEDS_RECONNECT, which
-			// is the whole point of reconnecting.
 			update: {
 				status: GoogleSyncStatus.IDLE,
 				lastError: null,
@@ -83,7 +61,6 @@ export class SyncStateService {
 		});
 	}
 
-	/** A clean pass: advance the cursor, clear the error, stamp the time. */
 	async settle(
 		id: string,
 		update: {
@@ -102,13 +79,6 @@ export class SyncStateService {
 		});
 	}
 
-	/**
-	 * The cursor is gone (Gmail 404 / Calendar 410).
-	 *
-	 * Drops it so the next pass starts from now. Forward-only means the gap is
-	 * not fetched — reaching here at all takes roughly a week of the sync not
-	 * running, so it is warned about rather than quietly healed.
-	 */
 	async clearCursor(id: string, reason: string): Promise<void> {
 		this.logger.warn({
 			message: "Sync cursor invalidated — resuming from now",

@@ -26,14 +26,6 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
 	minute: "2-digit",
 });
 
-/**
- * Which conversation you are in, and the ones before it.
- *
- * A record accumulates these — "is he still at Fleetio" on Monday, "what did
- * they announce" on Thursday — and the answers are worth keeping. Without this
- * the panel is a scratchpad that forgets, and a rep learns not to bother
- * typing into it.
- */
 export function ConversationPicker({
 	conversations,
 	current,
@@ -133,12 +125,6 @@ function Forget({
 	);
 }
 
-/**
- * The conversation list for one record.
- *
- * Read through the API's Redis-backed cache, so reopening a contact does not
- * pay for a query that changes only when somebody sends a message.
- */
 export function useConversations(recordId: {
 	contactId?: string;
 	companyId?: string;
@@ -147,10 +133,6 @@ export function useConversations(recordId: {
 	return useQuery(trpc.conversations.list.queryOptions(recordId));
 }
 
-/**
- * `pathKey()`, not `queryKey()` — the rule from `api.md`. The former carries no
- * query type, so it matches however the list is read.
- */
 function useConversationCache() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();

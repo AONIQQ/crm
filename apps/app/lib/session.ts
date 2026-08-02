@@ -19,12 +19,6 @@ export async function requireSession(): Promise<Session> {
 	return session;
 }
 
-/**
- * The scopes Google has actually granted this user.
- *
- * `cache()`d, so the gate below costs one query per request no matter how many
- * layouts and pages ask.
- */
 const grantedScope = cache(async (userId: string): Promise<string | null> => {
 	const account = await db.account.findFirst({
 		where: { userId, providerId: "google" },
@@ -34,19 +28,6 @@ const grantedScope = cache(async (userId: string): Promise<string | null> => {
 	return account?.scope ?? null;
 });
 
-/**
- * A session that has granted Gmail and Calendar.
- *
- * Requesting the scopes at sign-in is not the same as having them: Google's
- * granular consent lets someone untick one and complete sign-in anyway, and an
- * account created before those scopes were required still carries the old
- * grant. Either way the CRM would look signed-in and quietly sync nothing, so
- * this is the check that makes mailbox access a real condition of using the
- * tool rather than an intention.
- *
- * Sends them to `/grant-access`, which is outside the app shell — gating inside
- * it would redirect the page that does the gating.
- */
 export async function requireGoogleAccess(): Promise<Session> {
 	const session = await requireSession();
 

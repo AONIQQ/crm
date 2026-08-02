@@ -21,13 +21,6 @@ const dayOnly = new Intl.DateTimeFormat(undefined, {
 	day: "numeric",
 });
 
-/**
- * A synced calendar event on the timeline.
- *
- * The attendee list is fetched lazily for the same reason the thread is: the
- * timeline row carries a count, and pulling every attendee of every meeting on
- * a busy company would be a join per row for information most rows never show.
- */
 export function MeetingEntry({
 	eventId,
 	startsAt,
@@ -45,7 +38,6 @@ export function MeetingEntry({
 }) {
 	const trpc = useTRPC();
 
-	// Only worth a request when there is somebody to show.
 	const event = useQuery({
 		...trpc.google.event.queryOptions({ eventId }),
 		enabled: attendeeCount > 0,
@@ -75,10 +67,6 @@ export function MeetingEntry({
 	);
 }
 
-/**
- * "5 Aug, 14:00 – 15:00", collapsing the second date when it is the same day —
- * which it almost always is, and repeating it reads like a two-day meeting.
- */
 function formatRange(
 	startsAt: string,
 	endsAt: string,
