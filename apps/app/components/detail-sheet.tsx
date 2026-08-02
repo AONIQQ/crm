@@ -209,7 +209,11 @@ export function DetailSheetHeader({
  * of furniture, not information.
  */
 export function DetailSheetStats({ children }: { children: ReactNode }) {
-	return <dl className="flex shrink-0 divide-x border-b">{children}</dl>;
+	// A filled shelf rather than a bare band: the stats sit above the tabs and
+	// below the identity, and the fill is what separates the three.
+	return (
+		<dl className="flex shrink-0 divide-x border-b bg-muted/40">{children}</dl>
+	);
 }
 
 export function DetailSheetStat({
@@ -220,9 +224,13 @@ export function DetailSheetStat({
 	children: ReactNode;
 }) {
 	return (
-		<div className={cn("flex min-w-0 flex-1 flex-col gap-0.5 py-2", GUTTER)}>
+		<div className={cn("flex min-w-0 flex-1 flex-col gap-1 py-2.5", GUTTER)}>
 			<dt className="truncate text-muted-foreground text-xs/5">{label}</dt>
-			<dd className="min-w-0 truncate text-xs/5">{children}</dd>
+			{/* The value outranks its label — it is the thing you opened the sheet
+			 * to read, and at the same size the two competed. */}
+			<dd className="min-w-0 truncate font-medium text-foreground text-sm/5">
+				{children}
+			</dd>
 		</div>
 	);
 }
