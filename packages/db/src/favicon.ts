@@ -24,62 +24,100 @@ const MAX_REDIRECTS = 3;
  * at one of those turns "resolve a favicon" into a request forgery primitive,
  * so every hop is checked rather than only the domain we started from.
  */
-function isBlockedAddress(ip: string): boolean {
-	const v4 = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+export function isBlockedAddress(ip: string): boolean {
+	const groups = ip.includes(":") ? expandIPv6(ip) : null;
 
-	if (net.isIPv4(v4)) {
-		const [a = 0, b = 0] = v4.split(".").map(Number);
+	if (groups) {
+		// An IPv4 address reachable through IPv6 is still that IPv4 address, and
+		// the notation hides it: `::ffff:7f00:1` is loopback written in hex, and
+		// a string comparison against "::ffff:127.0.0.1" never sees it. Both
+		// mapped (`::ffff:0:0/96`) and compatible (`::/96`) forms carry the
+		// address in the last 32 bits, so both are graded as IPv4.
+		const marker = groups[5];
+		if (
+			groups.slice(0, 5).every((group) => group === 0) &&
+			(marker === 0xffff || marker === 0)
+		) {
+			const high = groups[6] ?? 0;
+			return isBlockedIPv4(high >> 8, high & 0xff);
+		}
+
+		const first = groups[0] ?? 0;
 		return (
-			a === 0 || // this network
-			a === 10 || // private
-			a === 127 || // loopback
-			(a === 169 && b === 254) || // link-local, incl. cloud metadata
-			(a === 172 && b >= 16 && b <= 31) || // private
-			(a === 192 && b === 168) || // private
-			(a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
-			(a === 198 && (b === 18 || b === 19)) || // benchmarking
-			a >= 224 // multicast and reserved
+			(first & 0xfe00) === 0xfc00 || // unique local, fc00::/7
+			(first & 0xffc0) === 0xfe80 || // link-local, fe80::/10
+			(first & 0xff00) === 0xff00 // multicast, ff00::/8
 		);
 	}
 
-	const v6 = ip.toLowerCase();
+	if (net.isIPv4(ip)) {
+		const [a = 0, b = 0] = ip.split(".").map(Number);
+		return isBlockedIPv4(a, b);
+	}
+
+	// Neither notation parsed, so we cannot say it is safe.
+	return true;
+}
+
+/** Every range this blocks is decided by the first two octets. */
+function isBlockedIPv4(a: number, b: number): boolean {
 	return (
-		v6 === "::" ||
-		v6 === "::1" || // loopback
-		v6.startsWith("fc") ||
-		v6.startsWith("fd") || // unique local
-		v6.startsWith("fe8") ||
-		v6.startsWith("fe9") ||
-		v6.startsWith("fea") ||
-		v6.startsWith("feb") // link-local
+		a === 0 || // this network
+		a === 10 || // private
+		a === 127 || // loopback
+		(a === 169 && b === 254) || // link-local, incl. cloud metadata
+		(a === 172 && b >= 16 && b <= 31) || // private
+		(a === 192 && b === 168) || // private
+		(a === 100 && b >= 64 && b <= 127) || // carrier-grade NAT
+		(a === 198 && (b === 18 || b === 19)) || // benchmarking
+		a >= 224 // multicast and reserved
 	);
 }
 
 /**
- * Whether every address a hostname resolves to is publicly routable.
+ * An IPv6 address as its eight 16-bit groups, or `null` if it is not one.
  *
- * Checked before each request rather than once up front, because a redirect
- * can send us somewhere else entirely.
- *
- * This does not close the DNS-rebinding window: the name is resolved here and
- * again by `fetch`, and a hostile server can answer differently the second
- * time. Closing it properly means pinning the connection to the address we
- * validated, which needs a custom agent. This blocks the whole practical
- * attack — an icon link pointing straight at an internal host — and the
- * remaining hole needs an attacker who controls authoritative DNS.
+ * Written out rather than compared as text because every abbreviation is a way
+ * to write loopback that a prefix check misses: `::1`, `0:0:0:0:0:0:0:1`,
+ * `::ffff:127.0.0.1` and `::ffff:7f00:1` are the same address.
  */
-async function resolvesToPublicHost(hostname: string): Promise<boolean> {
-	if (net.isIP(hostname)) return !isBlockedAddress(hostname);
+function expandIPv6(ip: string): number[] | null {
+	// A zone index (`fe80::1%eth0`) names an interface, not a different address.
+	let text = (ip.split("%")[0] ?? "").toLowerCase();
 
-	try {
-		const addresses = await dns.lookup(hostname, { all: true });
-		return (
-			addresses.length > 0 &&
-			addresses.every((address) => !isBlockedAddress(address.address))
-		);
-	} catch {
-		return false;
+	// A trailing dotted quad is the last two groups written in decimal.
+	const embedded: number[] = [];
+	const lastColon = text.lastIndexOf(":");
+	const tail = text.slice(lastColon + 1);
+	if (tail.includes(".")) {
+		if (!net.isIPv4(tail)) return null;
+		const [a = 0, b = 0, c = 0, d = 0] = tail.split(".").map(Number);
+		embedded.push((a << 8) | b, (c << 8) | d);
+		text = text.slice(0, lastColon + 1);
 	}
+
+	const [headText = "", runText, extra] = text.split("::");
+	if (extra !== undefined) return null;
+
+	const parse = (part: string) =>
+		part
+			.split(":")
+			.filter((group) => group !== "")
+			.map((group) =>
+				/^[0-9a-f]{1,4}$/.test(group) ? Number.parseInt(group, 16) : Number.NaN,
+			);
+
+	const head = parse(headText);
+	const run = runText === undefined ? [] : parse(runText);
+	const missing = 8 - head.length - run.length - embedded.length;
+	if (runText !== undefined && missing < 0) return null;
+
+	const fill = runText === undefined ? [] : Array<number>(missing).fill(0);
+	const groups = [...head, ...fill, ...run, ...embedded];
+	if (groups.length !== 8 || groups.some((group) => Number.isNaN(group)))
+		return null;
+
+	return groups;
 }
 
 const ICON_REL = /^(shortcut )?icon$|^apple-touch-icon(-precomposed)?$/i;
@@ -110,6 +148,61 @@ function iconsFromHtml(html: string, base: URL): string[] {
 	}
 
 	return found.sort((a, b) => b.size - a.size).map((icon) => icon.href);
+}
+
+/**
+ * Whether every address a hostname resolves to is publicly routable.
+ *
+ * Checked before each request rather than once up front, because a redirect
+ * can send us somewhere else entirely.
+ *
+ * This does not close the DNS-rebinding window: the name is resolved here and
+ * again by `fetch`, and an attacker who runs the authority for their own
+ * company domain can answer differently the second time. Closing it means
+ * connecting to the address that was checked, and **that is not available in
+ * this runtime** — the API runs on Bun, whose `node:http` client ignores both
+ * a custom `lookup` and `createConnection`, and whose `fetch` has no
+ * dispatcher. Verified, not assumed: pinning through `lookup` works under Node
+ * and under Bun drops SNI, fails certificate validation against the bare
+ * address, and then silently re-resolves the name. The alternative is an
+ * HTTP/1.1 client written by hand over `tls.connect`, which is a larger risk
+ * than the one it removes.
+ *
+ * What is left needs an authenticated colleague — `ALLOWED_SIGN_IN` is the
+ * whole door — who also controls authoritative DNS and wins a race. The
+ * practical attack, an icon link pointing straight at an internal host, is
+ * blocked on every hop.
+ */
+async function resolvesToPublicHost(hostname: string): Promise<boolean> {
+	// A URL keeps the brackets on an IPv6 literal; `net.isIP` will not take them.
+	const literal = hostname.replace(/^\[|\]$/g, "");
+	if (net.isIP(literal)) return !isBlockedAddress(literal);
+
+	// The lookup carries the same deadline as the request it precedes. An abort
+	// signal on the fetch covers neither this nor the fetch's own resolution, so
+	// without it a resolver hanging under a network partition holds a
+	// fire-and-forget backfill open indefinitely rather than degrading to null.
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const addresses = await Promise.race([
+			dns.lookup(hostname, { all: true }),
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`${hostname} did not resolve in time`)),
+					TIMEOUT_MS,
+				);
+			}),
+		]);
+
+		return (
+			addresses.length > 0 &&
+			addresses.every((address) => !isBlockedAddress(address.address))
+		);
+	} catch {
+		return false;
+	} finally {
+		clearTimeout(timer);
+	}
 }
 
 /**
