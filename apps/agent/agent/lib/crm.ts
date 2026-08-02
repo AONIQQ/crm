@@ -2,18 +2,6 @@ import { db, EnrichmentStatus } from "@crm/db";
 import { domainOf, isDerivedName } from "./names";
 import type { Person } from "./socials";
 
-/**
- * The CRM, as far as this agent is concerned.
- *
- * Straight to Postgres through the workspace package rather than through a new
- * internal HTTP API: `@crm/db` is already shared by the API and the app, and a
- * third caller does not justify inventing a service boundary.
- *
- * Everything that *writes a claim* lives in `facts.ts` instead. This file reads,
- * and does the two bookkeeping writes that are not claims about a person: the
- * "we looked" stamp and the enrichment status the sheet polls.
- */
-
 export type WorkItem = {
 	id: string;
 	fullName: string;
@@ -22,7 +10,6 @@ export type WorkItem = {
 	companyName: string | null;
 	companyDomain: string | null;
 	linkedinUrl: string | null;
-	/** What is missing, so the agent does not redo the parts that are done. */
 	needs: {
 		identity: boolean;
 		brief: boolean;
@@ -30,15 +17,6 @@ export type WorkItem = {
 	};
 };
 
-/**
- * Everything the agent could usefully do to a contact right now.
- *
- * One query instead of the two "list contacts that need X" tools this replaced.
- * Those encoded the *order* of the work in their names, which is exactly the
- * decision the agent is supposed to be making: whether an unnamed contact on a
- * live deal matters more than a named one with no background is a judgement,
- * not a schedule.
- */
 export async function contactsNeedingWork(limit: number): Promise<WorkItem[]> {
 	const rows = await db.contact.findMany({
 		where: {
@@ -80,14 +58,6 @@ export async function contactsNeedingWork(limit: number): Promise<WorkItem[]> {
 	}));
 }
 
-/**
- * Who the CRM says this person is — the only input the verification checks are
- * allowed to measure a candidate against.
- *
- * Loaded here rather than taken from tool arguments: a check run against a name
- * and employer the model supplied is a check the model can pass by supplying
- * different ones.
- */
 export async function personForVerification(
 	contactId: string,
 ): Promise<Person | null> {
@@ -116,7 +86,6 @@ export async function personForVerification(
 	};
 }
 
-/** The LinkedIn slug on a contact, or null if they have no profile on file. */
 export async function contactProfileSlug(
 	contactId: string,
 ): Promise<{ slug: string; profileUrl: string } | null> {
@@ -131,7 +100,6 @@ export async function contactProfileSlug(
 		: null;
 }
 
-/** `https://www.linkedin.com/in/lewiscarhart/` → `lewiscarhart`. */
 export function linkedinSlug(url: string | null): string | null {
 	if (!url) return null;
 	const match = /linkedin\.com\/in\/([A-Za-z0-9\-_%]+)/.exec(url);
@@ -144,14 +112,6 @@ export type CrmHistory = {
 		email: string | null;
 		title: string | null;
 		companyName: string | null;
-		/**
-		 * The company **id**, not just its name.
-		 *
-		 * Its absence was a real dead end: every company tool takes an id, this
-		 * was the only place a contact session could have learned one, and it
-		 * returned a display string. So an agent sitting on a contact who plainly
-		 * works somewhere reported that it had no company to look at.
-		 */
 		company: {
 			id: string;
 			name: string;
@@ -159,7 +119,6 @@ export type CrmHistory = {
 			industry: string | null;
 		} | null;
 	};
-	/** The deals this person is attached to — the other way out of a contact. */
 	deals: {
 		id: string;
 		name: string;
@@ -178,7 +137,6 @@ export type CrmHistory = {
 			from: string;
 			fromName: string | null;
 			sentAt: string;
-			/** The whole message. See the note on this function. */
 			body: string | null;
 		}[];
 	}[];
@@ -198,21 +156,6 @@ export type CrmHistory = {
 	colleagues: { id: string; name: string; title: string | null }[];
 };
 
-/**
- * Everything we already know about this person from our own mailbox and
- * calendar — **including full message bodies**.
- *
- * This is the single biggest advantage we have over a data vendor, and it is
- * not close. A reply on a thread is proof of identity nobody can sell us. A
- * signature block settles a job title outright, and it settles it more
- * reliably than LinkedIn, because people update their signature when they get
- * promoted and update LinkedIn when they change jobs.
- *
- * Bodies are included deliberately: this is a single-tenant internal tool and
- * the data is already ours. The boundary is egress, not access — see the
- * `data-boundaries` skill. Nothing returned here may be pasted into a web
- * search, written to the sandbox, or logged.
- */
 export async function readCrmHistory(
 	contactId: string,
 	options: { threads?: number; messagesPerThread?: number } = {},
@@ -369,7 +312,6 @@ export async function readCrmHistory(
 	};
 }
 
-/** Records that we went looking, so nobody looks again next hour. */
 export async function stampSocialsChecked(contactId: string): Promise<void> {
 	await db.contact.update({
 		where: { id: contactId },
@@ -377,13 +319,6 @@ export async function stampSocialsChecked(contactId: string): Promise<void> {
 	});
 }
 
-/**
- * The status the contact sheet polls on, mirroring `Company`.
- *
- * Background writes are not invalidations — no client action caused them — so
- * the browser can only find out by asking, and it only knows to stop asking
- * when this settles.
- */
 export async function setEnrichmentStatus(
 	contactId: string,
 	status: EnrichmentStatus,
@@ -401,7 +336,6 @@ export async function setEnrichmentStatus(
 	});
 }
 
-/** Writes a note onto the contact's timeline, stamped as agent-written. */
 export async function writeTimelineNote(
 	contactId: string,
 	subject: string,
@@ -414,9 +348,6 @@ export async function writeTimelineNote(
 	});
 	if (!contact) return null;
 
-	// Activity.createdById is required. Attribute to the contact's owner, or to
-	// any user if the contact is unowned — the meta marks it as agent-written so
-	// the UI never claims a person typed it.
 	const author =
 		contact.ownerId ??
 		(await db.user.findFirst({ select: { id: true } }))?.id ??

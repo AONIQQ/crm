@@ -5,18 +5,6 @@ import { WEIGHTS } from "../lib/evidence";
 import { FACT_FIELDS, type FactField, recordFact } from "../lib/facts";
 import { focusOn } from "../lib/focus";
 
-/**
- * One claim, with what backs it. The only write to a contact's fields.
- *
- * It takes evidence and never a score. That is the whole design: the model
- * reports what it *saw* — "their signature block says Head of Security" — and
- * the ledger decides what that is worth. A `confidence` argument would be the
- * model grading its own homework, and a `sourceUrl` accepted as proof would be
- * the same thing with extra steps.
- *
- * Whether this writes the record or offers a suggestion is decided by the
- * arithmetic, not by the caller. A rejection is a correct outcome.
- */
 export default defineTool({
 	description:
 		"Record one claim about a contact — title, employer, a profile URL, seniority — together with the evidence for it. The evidence decides whether it is written to the record or offered to a rep as a suggestion. Never invent evidence you did not observe.",

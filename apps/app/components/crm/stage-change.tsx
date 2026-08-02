@@ -34,19 +34,11 @@ import {
 	LOSING_STAGES,
 } from "./deal-stage";
 
-/**
- * Which deal is being closed out, and to what.
- *
- * In the URL rather than component state so one dialog can serve every row of
- * the table as well as the detail page — and so a half-finished "why did we
- * lose this?" survives a refresh instead of silently discarding the answer.
- */
 const closeReasonParams = {
 	closing: parseAsString,
 	closingStage: parseAsString,
 };
 
-/** Invalidates everywhere a stage is visible. */
 function useStageMutation(onDone?: () => void) {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
@@ -62,18 +54,6 @@ function useStageMutation(onDone?: () => void) {
 	);
 }
 
-/**
- * The one place a deal's stage is set — a table cell, a board card, or the
- * header of the deal's own sheet.
- *
- * `inline` is for a cell in a list, where a bordered control in every row
- * would out-shout the rows. `control` is for a sheet header, where it sits
- * beside real buttons and has to look like one.
- *
- * Losing stages divert through `CloseReasonDialog`: the API refuses them
- * without a reason, so asking here is friendlier than a toast full of the
- * rejection.
- */
 export function DealStageMenu({
 	dealId,
 	stage,
@@ -89,7 +69,6 @@ export function DealStageMenu({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				{/* The row underneath opens a record on click; this control does not. */}
 				{variant === "control" ? (
 					<Button
 						variant="outline"
@@ -112,9 +91,6 @@ export function DealStageMenu({
 				)}
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
-				// The header control sits at the right edge of the sheet, so its menu
-				// hangs from that edge rather than being pushed back by collision
-				// detection a beat after it opens.
 				align={variant === "control" ? "end" : "start"}
 				className="min-w-52"
 				onClick={(event) => event.stopPropagation()}
@@ -145,12 +121,6 @@ export function DealStageMenu({
 	);
 }
 
-/**
- * Asks why a deal was lost or disqualified.
- *
- * Rendered once per page; which deal it is about comes from the URL, so every
- * row can open it without each one carrying a dialog of its own.
- */
 export function CloseReasonDialog() {
 	const reasonId = useId();
 	const [{ closing, closingStage }, setCloseParams] =

@@ -10,6 +10,7 @@ const KEYS = [
 	"RAPIDAPI_KEY",
 	"PERPLEXITY_API_KEY",
 	"CONTEXT_DEV_API_KEY",
+	"BLOB_READ_WRITE_TOKEN",
 ] as const;
 
 const saved: Record<string, string | undefined> = {};
@@ -42,8 +43,6 @@ describe("capabilities", () => {
 	});
 
 	it("treats blank and whitespace as unset", () => {
-		// `.env.example` ships these commented out, but a self-hoster who
-		// uncomments one and leaves it empty must not get a tool that tries.
 		process.env.RAPIDAPI_KEY = "   ";
 		expect(enabled("RAPIDAPI_KEY")).toBe(false);
 	});
@@ -67,7 +66,6 @@ describe("the unavailable result", () => {
 
 		expect(result.ok).toBe(false);
 		expect(result.configured).toBe(false);
-		// An agent told only "failed" will reasonably try again.
 		expect(result.reason).toContain("retrying will not help");
 		expect(result.reason).toContain("RAPIDAPI_KEY");
 	});

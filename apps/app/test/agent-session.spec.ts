@@ -4,15 +4,6 @@ import type { MessageStreamEvent, SessionState } from "eve/client";
 import { recordCopy, recordFilter, recordHeader } from "../lib/agent-record";
 import { classify, composerState, eventsOf } from "../lib/agent-session";
 
-/**
- * Picking a conversation back up.
- *
- * The state of a thread comes from one `session.snapshot()` — events, cursor,
- * and a continuation token if and only if eve will accept another turn. What
- * is left to decide is what a snapshot with *no* token means, and that is the
- * whole of `classify`.
- */
-
 const NOW = Date.parse("2026-08-01T12:00:00.000Z");
 
 const event = (
@@ -31,9 +22,6 @@ const unparked: SessionState = { sessionId: "wrun_1", streamIndex: 3 };
 
 describe("classify", () => {
 	it("trusts the token over any reading of the events", () => {
-		// eve returns one only when the captured prefix ends parked, which is
-		// exactly the condition under which the next send is accepted. Nothing we
-		// could infer from the event list is a better answer than that.
 		expect(classify(parked, [event("message.appended")], NOW)).toBe("ready");
 	});
 
@@ -49,9 +37,6 @@ describe("classify", () => {
 	});
 
 	it("retires a turn that stopped mid-sentence", () => {
-		// A restarted agent leaves sessions with no closing boundary. They never
-		// park, so without this they read as working forever and that thread can
-		// never be typed into again.
 		const stalled = event("message.appended", "2026-08-01T11:50:00.000Z");
 
 		expect(classify(unparked, [stalled], NOW)).toBe("ended");
@@ -82,8 +67,6 @@ describe("the composer", () => {
 	});
 
 	it("holds input while a turn is in flight, from either side", () => {
-		// `busy` is this panel's own send; `working` is a turn somebody else
-		// started. eve rejects input in both cases.
 		expect(
 			composerState({ status: "ready", session: parked, events: [] }, true)
 				.locked,
@@ -97,17 +80,12 @@ describe("the composer", () => {
 	});
 
 	it("says an ended thread is ended rather than merely busy", () => {
-		// The bug this exists for: an answered question sat above a composer
-		// disabled with "still working on the last question", forever, and the
-		// only way on — a new thread — was never offered.
 		expect(
 			composerState({ status: "ended", session: unparked, events: [] }, false),
 		).toEqual({ locked: true, ended: true });
 	});
 
 	it("lets somebody type when the agent could not be reached", () => {
-		// Not locked: that read fails the same way every time, so locking on it
-		// is permanent. A send either works or raises a visible error.
 		expect(composerState({ status: "offline", events: [] }, false)).toEqual({
 			locked: false,
 			ended: false,
@@ -136,7 +114,6 @@ describe("record context", () => {
 	});
 
 	it("offers questions that suit the record", () => {
-		// The tell of a bolted-on chat box is "Who is this person?" on a company.
 		expect(recordCopy("company").suggestions.join(" ")).not.toContain("person");
 		expect(recordCopy("deal").suggestions.join(" ")).not.toContain("person");
 		expect(recordCopy("contact").suggestions[0]).toBe("Who is this person?");
@@ -169,15 +146,6 @@ describe("the panel", () => {
 			"utf8",
 		);
 
-	/**
-	 * A source-level check, deliberately.
-	 *
-	 * This bug shipped twice: the suggestions were wired to the record while the
-	 * heading above them stayed a literal, so a deal offered "Where does this
-	 * stand?" under "Ask about this person". There is no DOM here to render
-	 * against, and the defect is precisely "a string that should have come from
-	 * `recordCopy` did not" — which is visible in the file.
-	 */
 	it("takes its copy from the record, never from a literal", () => {
 		for (const kind of ["contact", "company", "deal"] as const) {
 			const copy = recordCopy(kind);
@@ -188,20 +156,12 @@ describe("the panel", () => {
 	});
 
 	it("offers a way out of a thread that has ended", () => {
-		// A finished thread locks its composer. Without this button there is
-		// nothing at all the reader can do with the sheet in front of them.
 		expect(source()).toContain("Start a new conversation");
 		expect(source()).toContain("onClick={onNewThread}");
 	});
 });
 
 describe("the record sheet", () => {
-	/**
-	 * The panel holds a live stream. Radix unmounts an inactive tab by default,
-	 * which aborts it mid-answer — the reply then lands in the durable session
-	 * with nothing attached to receive it, and coming back to the tab showed a
-	 * question with no answer under it.
-	 */
 	it("keeps the agent tab mounted behind the others", () => {
 		for (const sheet of ["contact", "company", "deal"]) {
 			const source = readFileSync(
@@ -220,10 +180,7 @@ describe("the record sheet", () => {
 			"utf8",
 		);
 
-		// Kept alive once opened, and not rendered at all before that.
 		expect(sheet).toContain("tab.keepMounted && opened.has(tab.value)");
-		// Without this the kept-alive panel renders on top of the visible tab:
-		// `display:flex` on the same element beats the `hidden` attribute.
 		expect(sheet).toContain("data-[state=inactive]:hidden");
 	});
 });

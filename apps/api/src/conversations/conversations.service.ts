@@ -15,24 +15,6 @@ import type {
 	ConversationSaveInput,
 } from "./conversations.contracts";
 
-/**
- * A record's conversations with the agent.
- *
- * The transcript itself lives in `AgentEvent`, written by the agent's audit
- * hook. This is the handle: which durable eve session belongs to which record,
- * and enough to list them without touching an event.
- *
- * **This is not the API doing intelligence** (`api.md`). Nothing here
- * researches, scores or decides anything — it is a list of a record's history,
- * which is exactly the sort of thing the data surface is for. The agent still
- * owns every judgement; this owns the filing.
- *
- * Cached deliberately, per value, the way `AuthService.getProfile` is: read
- * through, write on miss, explicit invalidation when something changes. The
- * list is read on every open of a contact sheet and changes only when somebody
- * sends a message, which is the shape a cache is actually for.
- */
-
 export interface ConversationSummary {
 	id: string;
 	sessionId: string;
@@ -40,17 +22,9 @@ export interface ConversationSummary {
 	streamIndex: number;
 	title: string | null;
 	messageCount: number;
-	/** ISO-8601: a `Date` comes back from Redis as a string anyway. */
 	lastMessageAt: string;
 }
 
-/**
- * Long, because every write invalidates.
- *
- * A TTL is the backstop for a missed invalidation, not the freshness
- * mechanism — five minutes of staleness on a list nobody changed is not worth
- * the round trips.
- */
 const LIST_TTL_MS = 10 * 60_000;
 
 const listKey = (userId: string, recordId: string) =>
@@ -65,13 +39,6 @@ export class ConversationsService {
 		@Inject(CACHE_MANAGER) private readonly cache: Cache,
 	) {}
 
-	/**
-	 * Every conversation this rep has had about this record, newest first.
-	 *
-	 * Scoped to the caller. Two reps asking about the same contact are having
-	 * two different conversations, and half of one appearing in the other's
-	 * panel would be both confusing and a small privacy surprise.
-	 */
 	async list(
 		input: ConversationListInput,
 		userId: string,
@@ -114,14 +81,6 @@ export class ConversationsService {
 		return summaries;
 	}
 
-	/**
-	 * Records where a conversation got to.
-	 *
-	 * Upserted on the session id, because the client calls this every time the
-	 * cursor moves and the first call is the one that creates the row. `title`
-	 * is written once — it is the opening question, and a thread renaming itself
-	 * as it goes is a thread nobody can find again.
-	 */
 	async save(
 		input: ConversationSaveInput,
 		userId: string,
@@ -150,8 +109,6 @@ export class ConversationsService {
 			select: { id: true, userId: true },
 		});
 
-		// A session belongs to whoever started it. Nothing in the UI can produce
-		// this, but a session id is guessable-ish and the check is one comparison.
 		if (conversation.userId !== userId) {
 			throw new BadRequestException(
 				"That conversation belongs to someone else.",
@@ -163,17 +120,6 @@ export class ConversationsService {
 		return { id: conversation.id };
 	}
 
-	/**
-	 * The transcript of one conversation, in the shape the panel's reducer eats.
-	 *
-	 * Why this exists rather than replaying eve's own stream: these events are
-	 * already ours. The audit hook wrote them as they happened, they outlive
-	 * eve's 30-day session retention, and reading them costs the agent nothing —
-	 * a rep scrolling last month's thread should not wake the research runtime.
-	 *
-	 * An ordered prefix, oldest first, because that is what rehydrating a
-	 * projection means: the reducer replays it in order to rebuild the messages.
-	 */
 	async events(input: ConversationEventsInput, userId: string) {
 		const conversation = await this.db.agentConversation.findUnique({
 			where: { id: input.id },
@@ -194,12 +140,10 @@ export class ConversationsService {
 		return events.map((event) => ({
 			type: event.type,
 			data: event.data,
-			// The envelope the client dedupes and orders on.
 			meta: { id: event.id, at: event.emittedAt.toISOString() },
 		}));
 	}
 
-	/** Forgets a conversation, and the events behind it. */
 	async remove(id: string, userId: string): Promise<{ id: string }> {
 		const conversation = await this.db.agentConversation.findUnique({
 			where: { id },
@@ -239,7 +183,6 @@ export class ConversationsService {
 		return { id };
 	}
 
-	/** One record per conversation, and it has to be said which. */
 	private recordId(input: {
 		contactId?: string;
 		companyId?: string;

@@ -37,8 +37,6 @@ const ENTRY_SELECT = {
 	contact: { select: { id: true, firstName: true, lastName: true } },
 	deal: { select: { id: true, name: true } },
 
-	// Summaries only. An email body never rides on a list payload — the row
-	// carries a snippet, and the accordion fetches `google.thread` on expand.
 	emailThread: {
 		select: {
 			id: true,
@@ -59,7 +57,6 @@ const ENTRY_SELECT = {
 	},
 } as const;
 
-/** Entries a `NOTE`-ish filter should keep — what someone wrote down. */
 const NOTE_TYPES = [
 	ActivityType.NOTE,
 	ActivityType.CALL,
@@ -76,29 +73,14 @@ export class ActivitiesService {
 		private readonly stamp: ActivityStampService,
 	) {}
 
-	/**
-	 * A record's timeline, newest first, paged by cursor.
-	 *
-	 * Cursor rather than offset because entries are added at the top while
-	 * someone is reading: page two of an offset query would repeat whatever the
-	 * new entry pushed down.
-	 */
 	async timeline(input: TimelineInput) {
 		const where = this.anchor(input);
 		Object.assign(where, filterClause(input.filter));
 
 		const rows = await this.db.activity.findMany({
 			where,
-			// One more than asked for, so we know whether there is another page
-			// without a second count query.
 			take: input.limit + 1,
 			...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-			// By when it *happened*, not when the row was written. Those were the
-			// same thing while a human logged everything by hand, and stopped being
-			// the same thing the moment a sync started writing: a first sync stamps
-			// every thread and meeting with roughly one `createdAt`, so ordering by
-			// it would jumble a year of history into one arbitrary block. `id` breaks
-			// ties so the cursor stays deterministic.
 			orderBy: [
 				{ occurredAt: { sort: "desc", nulls: "last" } },
 				{ id: "desc" },
@@ -115,11 +97,6 @@ export class ActivitiesService {
 		};
 	}
 
-	/**
-	 * Counts for the timeline's filter tabs, over the same anchor.
-	 *
-	 * Separate from `timeline` so paging does not re-count on every scroll.
-	 */
 	async timelineCounts(
 		input: Pick<TimelineInput, "companyId" | "contactId" | "dealId">,
 	) {
@@ -146,8 +123,6 @@ export class ActivitiesService {
 	}
 
 	async create(input: ActivityCreateInput, actingUserId: string) {
-		// A deal or contact activity is stamped with its company too, so a company
-		// timeline is one indexed range scan instead of three joins.
 		const companyId = await this.resolveCompanyId(input);
 
 		const isTask = input.type === ActivityType.TASK;
@@ -157,15 +132,6 @@ export class ActivitiesService {
 				type: input.type,
 				subject: blankToNull(input.subject ?? ""),
 				body: blankToNull(input.body ?? ""),
-				// Every entry is stamped with where it belongs on the timeline,
-				// tasks included.
-				//
-				// A task is scheduled rather than logged, so this used to be null for
-				// them — and `orderBy` sorts nulls last, so every task sank beneath
-				// the whole history and stayed there. The one you added a second ago
-				// appeared at the bottom of today, under things from this morning.
-				// `dueAt` is when it is *for*; this is when it was written down, which
-				// is what a reverse-chronological list is ordered by.
 				occurredAt: parseDate(input.occurredAt) ?? new Date(),
 				dueAt: isTask ? parseDate(input.dueAt) : null,
 				companyId,
@@ -190,7 +156,6 @@ export class ActivitiesService {
 		return serializeEntry(activity);
 	}
 
-	/** Ticks a task off, or puts it back. */
 	async complete(id: string, completed: boolean) {
 		const activity = await this.db.activity.findUnique({
 			where: { id },
@@ -214,7 +179,6 @@ export class ActivitiesService {
 		return serializeEntry(updated);
 	}
 
-	/** Open tasks assigned to whoever is asking. */
 	async myTasks(input: MyTasksInput, actingUserId: string) {
 		const now = new Date();
 		const where: Prisma.ActivityWhereInput = {
@@ -229,8 +193,6 @@ export class ActivitiesService {
 		const tasks = await this.db.activity.findMany({
 			where,
 			take: input.limit,
-			// Undated tasks last: a task with no due date is a someday, and it
-			// should not sit above something due this afternoon.
 			orderBy: [
 				{ dueAt: { sort: "asc", nulls: "last" } },
 				{ createdAt: "desc" },
@@ -241,7 +203,6 @@ export class ActivitiesService {
 		return tasks.map(serializeEntry);
 	}
 
-	/** Exactly one of company/contact/deal, as the contract promises. */
 	private anchor(
 		input: Pick<TimelineInput, "companyId" | "contactId" | "dealId">,
 	): Prisma.ActivityWhereInput {
@@ -253,13 +214,6 @@ export class ActivitiesService {
 		);
 	}
 
-	/**
-	 * The company an activity belongs to.
-	 *
-	 * Taken from the deal or contact when the caller did not say, which is what
-	 * makes the company timeline work without joins. A contact with no company
-	 * simply has no company stamp.
-	 */
 	private async resolveCompanyId(
 		input: ActivityCreateInput,
 	): Promise<string | null> {
@@ -296,17 +250,11 @@ function filterClause(filter: TimelineFilter): Prisma.ActivityWhereInput {
 		case "notes":
 			return { type: { in: NOTE_TYPES } };
 		case "upcoming":
-			// Everything still outstanding, overdue included — "upcoming" on a
-			// timeline means "not done yet", and hiding the overdue ones is how
-			// they get forgotten.
 			return { type: ActivityType.TASK, completedAt: null };
 		case "done":
 			return { type: ActivityType.TASK, completedAt: { not: null } };
 		case "history":
 			return { NOT: { type: ActivityType.TASK, completedAt: null } };
-		// Both cover what a rep logged by hand *and* what the Google sync
-		// projected — from the timeline's point of view they are the same event,
-		// and splitting them would make "did we email them?" two questions.
 		case "email":
 			return { type: ActivityType.EMAIL };
 		case "meetings":
@@ -318,7 +266,6 @@ function filterClause(filter: TimelineFilter): Prisma.ActivityWhereInput {
 
 type Entry = Prisma.ActivityGetPayload<{ select: typeof ENTRY_SELECT }>;
 
-/** Dates as ISO strings so they survive JSON, and `meta` narrowed for the UI. */
 function serializeEntry(entry: Entry) {
 	return {
 		...entry,

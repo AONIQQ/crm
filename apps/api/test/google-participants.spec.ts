@@ -36,8 +36,6 @@ describe("parseAddress", () => {
 
 describe("parseAddressList", () => {
 	it("does not split on a comma inside a quoted display name", () => {
-		// The whole reason this is not `header.split(",")`: naive splitting turns
-		// one person into two broken addresses.
 		const parsed = parseAddressList(
 			'"Doe, Jane" <jane@acme.com>, bob@acme.com',
 		);
@@ -72,8 +70,6 @@ describe("isAutomatedAddress", () => {
 	});
 
 	it("does not catch people whose names start with a marker", () => {
-		// `bounce` must not swallow `bouncer@`, and a prefix rule that matched
-		// substrings would.
 		for (const email of [
 			"robert@acme.com",
 			"bouncer@acme.com",
@@ -148,8 +144,6 @@ describe("dominantDomain", () => {
 	});
 
 	it("breaks a tie towards a company we already have", () => {
-		// A customer plus their lawyer, one each. Without the tiebreak the lawyer
-		// could take the thread.
 		const domain = dominantDomain(
 			[person("a@acme.com"), person("lawyer@legal.com")],
 			new Set(["acme.com"]),
@@ -177,10 +171,8 @@ describe("splitName", () => {
 			{ firstName: "Jane", lastName: "van der Berg" },
 		],
 		["Jane", "jane@acme.com", { firstName: "Jane", lastName: null }],
-		// No display name: the local part is tidied rather than used raw.
 		[null, "jane.doe@acme.com", { firstName: "Jane", lastName: "Doe" }],
 		[null, "jane@acme.com", { firstName: "Jane", lastName: null }],
-		// Some clients put the address in the display name slot.
 		["jane@acme.com", "jane@acme.com", { firstName: "Jane", lastName: null }],
 	];
 
@@ -193,9 +185,6 @@ describe("splitName", () => {
 
 describe("isAutomatedAddress — scheduling tools", () => {
 	it("catches the addresses invites are sent from", () => {
-		// The bug this came from: a Luma invite created a contact called
-		// "Grand Ventures" whose email was calendar-invite@lu.ma, because the
-		// tool puts the organiser's name in the display name of its own address.
 		for (const email of [
 			"calendar-invite@lu.ma",
 			"invites@calendly.com",
@@ -231,8 +220,6 @@ describe("isAutomatedAddress — scheduling tools", () => {
 
 describe("isDerivedName", () => {
 	it("recognises a name that came from the address alone", () => {
-		// "Pmarchetti" is what splitName produces from pmarchetti@…, so it is a
-		// placeholder a real display name is allowed to replace.
 		expect(isDerivedName("pmarchetti@fernhill.com", "Pmarchetti", null)).toBe(
 			true,
 		);

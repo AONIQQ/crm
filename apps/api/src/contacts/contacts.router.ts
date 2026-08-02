@@ -46,7 +46,11 @@ export class ContactsRouter {
 		return this.contacts.update(input.id, input.data);
 	}
 
-	/** A rep accepting or dismissing something the agent suggested. */
+	@Mutation({ input: contactIdInput })
+	async enrich(@Input("id") id: string) {
+		return this.contacts.enrich(id);
+	}
+
 	@Mutation({ input: factDecisionInput })
 	async decideFact(
 		@Ctx() ctx: AuthedTrpcContext,

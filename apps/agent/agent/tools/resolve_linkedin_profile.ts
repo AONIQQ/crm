@@ -5,12 +5,6 @@ import { spend } from "../lib/focus";
 import { searchTerms } from "../lib/names";
 import { findProfileUrls } from "../lib/perplexity";
 
-/**
- * Candidates, never an answer.
- *
- * The name is never taken from here — only the slug, which `get_linkedin_profile`
- * then verifies. A search for "Paula Marchetti" has returned Brightwater's CEO.
- */
 export default defineTool({
 	description:
 		"Find candidate LinkedIn profile slugs for a work email address. Returns CANDIDATES ONLY — you must verify each with get_linkedin_profile before believing any of them.",
@@ -19,10 +13,6 @@ export default defineTool({
 		companyName: z.string().describe("The company the CRM has them at."),
 	}),
 	async execute({ email, companyName }) {
-		// Finding the slug is Perplexity's job — see `lib/linkdapi.ts` for why
-		// LinkDAPI is never asked to search. Without it there is no way in to a
-		// profile, so this stops here rather than charging for a lookup that has
-		// nowhere to look.
 		if (!enabled("PERPLEXITY_API_KEY")) {
 			return { candidateSlugs: [], ...unavailable("PERPLEXITY_API_KEY") };
 		}

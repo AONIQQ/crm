@@ -13,16 +13,11 @@ export class UsersRouter {
 		@Inject(AuthService) private readonly auth: AuthService,
 	) {}
 
-	/**
-	 * The signed-in user, read from the row rather than the session snapshot, so
-	 * a name or avatar change shows up without signing out.
-	 */
 	@Query()
 	async me(@Ctx() ctx: AuthedTrpcContext) {
 		return this.auth.getProfile(ctx.user.id);
 	}
 
-	/** Owner pickers. */
 	@Query()
 	async list() {
 		return this.users.list();

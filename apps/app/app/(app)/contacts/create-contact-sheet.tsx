@@ -33,17 +33,11 @@ import { useTRPC } from "@/lib/trpc/client";
 
 const NONE = "none";
 
-export function CreateContactSheet({
-	/** Pre-selects a company when opened from that company's page. */
-	companyId,
-}: {
-	companyId?: string;
-}) {
+export function CreateContactSheet({ companyId }: { companyId?: string }) {
 	const openRecord = useOpenRecord();
 	const trpc = useTRPC();
 	const cache = useCrmCache();
 
-	// URL state, like every other view state here — see CreateCompanySheet.
 	const [open, setOpen] = useQueryState(
 		"new",
 		parseAsBoolean.withDefault(false),

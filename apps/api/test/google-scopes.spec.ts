@@ -30,11 +30,6 @@ describe("hasSyncScopes", () => {
 		expect(hasSyncScopes(BOTH)).toBe(true);
 	});
 
-	/**
-	 * The case that makes the gate necessary. Google's granular consent lets
-	 * someone untick one scope and still complete sign-in, so "they signed in"
-	 * never implies "they granted it".
-	 */
 	it("is false when granular consent dropped one of them", () => {
 		expect(hasSyncScopes(`openid,email,profile,${GMAIL_SCOPE}`)).toBe(false);
 		expect(hasSyncScopes(`openid,email,profile,${CALENDAR_SCOPE}`)).toBe(false);
@@ -49,16 +44,12 @@ describe("hasSyncScopes", () => {
 	});
 
 	it("does not match on a prefix", () => {
-		// A scope string that merely starts the same must not pass — set
-		// membership, not `includes()`.
 		expect(hasSyncScopes(`${GMAIL_SCOPE}.metadata,${CALENDAR_SCOPE}`)).toBe(
 			false,
 		);
 	});
 
 	it("covers exactly the scopes the provider requests", () => {
-		// Guards the two lists drifting: whatever sign-in asks for is what the
-		// gate insists on.
 		expect(hasSyncScopes(SYNC_SCOPES.join(","))).toBe(true);
 	});
 });

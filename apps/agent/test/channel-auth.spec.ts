@@ -6,20 +6,9 @@ import {
 } from "../agent/channels/eve";
 import { isAutomated } from "../agent/lib/approval";
 
-/**
- * Who the agent thinks is calling.
- *
- * Two things are being protected here. The obvious one is that a forged or
- * expired token cannot reach an agent that can read every email in the CRM.
- * The subtler one is that a *valid* token has to resolve to a **person**:
- * `lib/approval.ts` pauses for a human only when it can tell one is there, and
- * eve's own `jwtHmac()` helper would have labelled this a service principal.
- */
-
 const SECRET = "test-secret-at-least-long-enough-to-be-a-secret";
 const auth = repFromCrm(SECRET);
 
-/** Mirrors `apps/app/lib/agent-bridge.ts`; the app-side test proves the pair. */
 async function mint(
 	claims: Record<string, unknown>,
 	secret = SECRET,
@@ -78,8 +67,6 @@ describe("repFromCrm", () => {
 	});
 
 	it("produces a principal the approval policy reads as human", async () => {
-		// The assertion the whole panel rests on: a rep asking is not the cron
-		// principal, so a sensitive write prompts them instead of being refused.
 		const session = await auth(request(await mint(claims())));
 
 		expect(isAutomated({ auth: { current: session } })).toBe(false);
@@ -103,8 +90,6 @@ describe("repFromCrm", () => {
 	});
 
 	it("skips a token whose payload was swapped for another user", async () => {
-		// The attack that matters: take your own valid token, rewrite `sub`, keep
-		// the signature. Nothing else in the system re-checks who the caller is.
 		const token = await mint(claims());
 		const [header, , signature] = token.split(".");
 		const impersonated = Buffer.from(
@@ -120,11 +105,6 @@ describe("repFromCrm", () => {
 		const token = await mint(claims());
 		const [header, payload, signature] = token.split(".");
 
-		// Flipped in the middle, deliberately. The *last* base64url character of
-		// a 43-character signature carries only two significant bits — 32 bytes is
-		// 256 bits and 43 characters hold 258 — so changing it can decode to the
-		// same MAC and pass. A tamper test that only touches the final character
-		// is a test that passes for the wrong reason.
 		const middle = Math.floor((signature as string).length / 2);
 		const swapped = (signature as string)[middle] === "A" ? "B" : "A";
 		const altered = `${(signature as string).slice(0, middle)}${swapped}${(

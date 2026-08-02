@@ -2,14 +2,6 @@ import { cn } from "@crm/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
 
-/**
- * `field-sizing-content` means the box is already the height of what is in it —
- * the only question a size answers is how tall it is when empty.
- *
- * `sm` is one line, for a field that is always on screen waiting to be typed
- * into. A four-line box sitting empty at the top of a panel is a form; a single
- * line is a place to start.
- */
 const textareaVariants = cva(
 	"flex field-sizing-content w-full rounded-md border border-input bg-background px-2.5 py-2 text-xs transition-colors outline-none placeholder:text-muted-foreground hover:border-ring/40 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/25 md:text-xs dark:bg-muted dark:shadow-[inset_0_1px_1px_rgb(0_0_0/0.30)] dark:disabled:bg-muted",
 	{

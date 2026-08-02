@@ -23,9 +23,6 @@ model User {
   sessions      Session[]
   accounts      Account[]
 
-  // CRM ownership. Better Auth owns every field above and `bun run
-  // auth:generate` rewrites them; these back-relations are ours and have to be
-  // put back if that ever wipes them.
   ownedCompanies Company[]     @relation("CompanyOwner")
   ownedContacts  Contact[]     @relation("ContactOwner")
   ownedDeals     Deal[]        @relation("DealOwner")
@@ -96,17 +93,9 @@ model RateLimit {
   @@map("rateLimit")
 }
 
-// ---------------------------------------------------------------------------
-// CRM
-//
-// Companies are the top-level object; contacts and deals hang off them, and
-// everything that happens is an Activity on a timeline.
-// ---------------------------------------------------------------------------
-
 enum DealStage {
   DEMO_BOOKED
   QUALIFIED_TO_BUY
-  /// Terminal, not a step forward — disqualified, and excluded from pipeline value.
   UNQUALIFIED_TO_BUY
   DECISION_MAKER_BOUGHT_IN
   CONTRACT_SENT
@@ -120,9 +109,7 @@ enum ActivityType {
   EMAIL
   MEETING
   TASK
-  /// Written by the system when Deal.stage changes.
   STAGE_CHANGE
-  /// Written by the enrichment agent.
   ENRICHMENT
 }
 
@@ -130,15 +117,10 @@ enum EnrichmentStatus {
   PENDING
   RUNNING
   COMPLETE
-  /// The lookup failed and is worth retrying — see Company.enrichmentError.
   FAILED
-  /// There is nothing to find (unknown domain, free email host). Not an error.
   SKIPPED
 }
 
-/// Where a record came from. Auto-created rows are tagged so a bad matching
-/// rule is visible and reversible in bulk, rather than silently indistinguishable
-/// from something a rep typed.
 enum RecordSource {
   MANUAL
   IMPORT
@@ -149,33 +131,17 @@ enum RecordSource {
 model Company {
   id          String  @id @default(cuid())
   name        String
-  /// Bare and normalised ("stripe.com"). Unique because two records for one
-  /// domain is the fastest way to rot a CRM, and it is the enrichment key.
   domain      String? @unique
   website     String?
   description String?
 
-  // Brand, from Context.dev.
   logoUrl     String?
   logoDarkUrl String?
-  /// Square mark, used in table rows.
   iconUrl     String?
-  /// The dark-mode square mark, when the brand publishes one. Rare — most
-  /// brands ship a light-mode logo only, which is what `iconTone` is for.
   iconDarkUrl String?
-  /// How `iconUrl` behaves against a background, from Context.dev's `mode` plus
-  /// the artwork's own dominant colour:
-  ///
-  /// - `opaque`  — the icon is composed on its own background; never put a
-  ///               surface behind it.
-  /// - `dark`    — dark artwork on transparency; invisible in dark mode without
-  ///               a light surface behind it.
-  /// - `light`   — light artwork on transparency; the same problem in reverse.
   iconTone    String?
-  /// Hex. An accent only — brand colours would fight the design tokens.
   brandColor  String?
 
-  // Firmographics.
   industry    String?
   subIndustry String?
   city        String?
@@ -183,7 +149,6 @@ model Company {
   country     String?
   countryCode String?
 
-  // Contact details and socials.
   phone       String?
   email       String?
   linkedinUrl String?
@@ -202,16 +167,8 @@ model Company {
   enrichmentError  String?
   enrichment       CompanyEnrichment?
 
-  /// MANUAL unless a sync created it. Filterable, so a bad auto-create rule can
-  /// be undone in bulk.
   source RecordSource @default(MANUAL)
 
-  /// Denormalised max(activity.createdAt), written with the activity.
-  ///
-  /// A real column because it is a sortable column on every list, and ordering
-  /// by an aggregate over a relation is something Prisma cannot express — the
-  /// alternative is a correlated subquery per row, which would be the slowest
-  /// thing on the page. Maintained through `ActivityStampService`.
   lastActivityAt DateTime?
 
   contacts       Contact[]       @relation("CompanyContacts")
@@ -229,8 +186,6 @@ model Company {
   @@map("company")
 }
 
-/// The raw Context.dev payload, kept so re-deriving a field costs nothing and
-/// no credits.
 model CompanyEnrichment {
   companyId String   @id
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -245,36 +200,20 @@ model Contact {
   id          String   @id @default(cuid())
   firstName   String
   lastName    String?
-  /// Unique, matching HubSpot, so a CSV import can be re-run safely. The cost:
-  /// two people behind one info@ address need one email between them.
   email       String?  @unique
   phone       String?
   title       String?
   linkedinUrl String?
   twitterUrl  String?
   githubUrl   String?
-  /// The contact's photo, mirrored into Vercel Blob.
-  ///
-  /// Never LinkedIn's own CDN URL: those carry an `e=` expiry parameter and go
-  /// dead within weeks, so a hotlinked avatar silently becomes a broken image.
   imageUrl    String?
 
-  /// When the agent last went looking for this person's X and GitHub accounts.
-  ///
-  /// Stamped whether or not it found any, which is the point: most people have
-  /// neither, and without it the hourly run would search the same fruitless
-  /// contacts forever. Null means never looked; a date with both URLs still
-  /// null means looked and found nothing it could stand behind.
   socialsCheckedAt DateTime?
 
-  /// Mirrors `Company`, so the sheet reuses `isEnriching()` and the existing
-  /// poll rather than inventing a second freshness mechanism.
   enrichmentStatus EnrichmentStatus @default(PENDING)
   enrichedAt       DateTime?
   enrichmentError  String?
 
-  /// Who this person is (§3 of the contact-intelligence plan) and every claim
-  /// behind the fields above.
   brief         ContactBrief?
   facts         ContactFact[]
   conversations AgentConversation[]
@@ -287,12 +226,6 @@ model Contact {
 
   source RecordSource @default(MANUAL)
 
-  /// Denormalised max(activity.createdAt), written with the activity.
-  ///
-  /// A real column because it is a sortable column on every list, and ordering
-  /// by an aggregate over a relation is something Prisma cannot express — the
-  /// alternative is a correlated subquery per row, which would be the slowest
-  /// thing on the page. Maintained through `ActivityStampService`.
   lastActivityAt DateTime?
 
   deals           DealContact[]
@@ -309,12 +242,6 @@ model Contact {
   @@map("contact")
 }
 
-/// How much of a claim we believe, and what that licenses.
-///
-/// The bands are the behaviour, not a label: `VERIFIED` is written to the
-/// record, `PROBABLE` is offered to a human, `POSSIBLE` is kept but never shown
-/// as a value. The numeric `score` beside them exists so the thresholds can be
-/// re-calibrated against evals without re-running the research.
 enum FactBand {
   VERIFIED
   PROBABLE
@@ -328,36 +255,22 @@ enum FactStatus {
   SUPERSEDED
 }
 
-/// One claim about one field of one contact, with everything behind it.
-///
-/// The point of a separate table: `Contact.title` can only hold the answer,
-/// and the answer is the least interesting part. This holds where it came
-/// from, how sure we are, what else was considered, and what it replaced —
-/// which is what makes an enriched field auditable rather than merely present.
-///
-/// It is deliberately *not* the read path. Current values stay denormalised on
-/// `Contact` so a list is one query; this is the reasoning behind them.
 model ContactFact {
   id        String  @id @default(cuid())
   contactId String
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  /// The `Contact` column this is about — "title", "linkedinUrl", "employer".
   field String
   value String
 
   score Float
   band  FactBand
 
-  /// The full ledger: `[{ kind, weight, detail, sourceUrl }]`. Kept so the
-  /// score can be explained to a rep and recomputed after a re-calibration.
   evidence Json
 
   method    String
   sourceUrl String?
 
-  /// The eve session that produced it, joining to `AgentEvent` for "show your
-  /// work".
   sessionId String?
 
   status      FactStatus @default(PROPOSED)
@@ -373,16 +286,11 @@ model ContactFact {
   @@map("contactFact")
 }
 
-/// The background panel on a contact: who they are, in prose and in fields.
 model ContactBrief {
   contactId String  @id
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  /// Two or three sentences. Present tense, their name first.
   narrative String
-  /// `{ currentRole, tenure, previousRoles[], seniority, function, location }`
-  /// — shaped by the agent, rendered by the sheet, so adding a line does not
-  /// need a migration.
   sections Json
 
   score     Float
@@ -394,12 +302,6 @@ model ContactBrief {
   @@map("contactBrief")
 }
 
-/// What the agent has decided to do, and why.
-///
-/// The work queue *and* the audit trail. A cron expression can only say "every
-/// hour for everybody"; a row here says "this person, in fourteen days,
-/// because a job change would move a live deal" — and the reason is shown to
-/// the rep rather than buried in a prompt.
 model AgentTask {
   id        String  @id @default(cuid())
   contactId String?
@@ -409,21 +311,10 @@ model AgentTask {
   reason String
 
   priority Int @default(0)
-  /// Research units this task may spend. Depth is a decision, and this is
-  /// what the agent decides it against.
   budget Int @default(4)
-  /// How many times this row has been handed to a session.
-  ///
-  /// The lease is a deadline rather than a flag so a crashed run frees its
-  /// row — but a deadline alone cannot tell "died, retry me" from "cannot
-  /// ever finish". Without a count the second case is re-leased every ten
-  /// minutes forever, resuming the same durable session and paying for a
-  /// model turn each time. Two rows did exactly that for an hour and a half.
   attempts Int @default(0)
 
   dueAt DateTime
-  /// Held by a dispatcher tick. An expired lease is free to reclaim, which is
-  /// what makes a crashed run recoverable rather than stuck.
   leasedUntil DateTime?
 
   sessionId  String?
@@ -438,15 +329,6 @@ model AgentTask {
   @@map("agentTask")
 }
 
-/// Every runtime event the agent emits, written by a hook.
-///
-/// The id is eve's own `meta.id` (a ULID), so an `on conflict do nothing`
-/// insert is replay-safe: reconnecting to a stream, rewinding it, or restoring
-/// a saved log cannot duplicate a row. Leading with a timestamp also keeps the
-/// primary key roughly append-ordered.
-///
-/// This is what "show your work" reads. Without it the agent's reasoning lives
-/// only in a log nobody can query and nobody can show a rep.
 model AgentEvent {
   id        String @id
   sessionId String
@@ -461,20 +343,9 @@ model AgentEvent {
   @@map("agentEvent")
 }
 
-/// A conversation between a rep and the agent, about one record.
-///
-/// The transcript itself is already in `AgentEvent` — this is the *handle*: the
-/// durable eve session to resume, and enough metadata to list a record's
-/// history without reading a single event. Reopening a contact should show what
-/// you asked last week rather than an empty box.
-///
-/// `sessionId` is unique because one eve session is one conversation. The
-/// cursor beside it (`continuationToken`, `streamIndex`) is what `useEveAgent`
-/// needs to pick the thread back up instead of starting a new one.
 model AgentConversation {
   id String @id @default(cuid())
 
-  /// Which record it is about. Exactly one of these is set.
   contactId String?
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
   companyId String?
@@ -482,18 +353,13 @@ model AgentConversation {
   dealId    String?
   deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
-  /// Whose conversation. Two reps asking about the same contact are having two
-  /// different conversations, and neither should see the other's half-finished
-  /// question.
   userId String
   user   User   @relation("ConversationOwner", fields: [userId], references: [id], onDelete: Cascade)
 
   sessionId         String  @unique
   continuationToken String?
-  /// How far the client had read, so a reopened thread does not replay.
   streamIndex Int @default(0)
 
-  /// The first thing the rep asked, trimmed. Written once.
   title        String?
   messageCount Int     @default(0)
 
@@ -512,7 +378,6 @@ model Deal {
   name          String
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  /// Required: every deal has a name against it.
   ownerId   String
   owner     User    @relation("DealOwner", fields: [ownerId], references: [id])
 
@@ -524,12 +389,6 @@ model Deal {
   closedAt          DateTime?
   closedReason      String?
 
-  /// Denormalised max(activity.createdAt), written with the activity.
-  ///
-  /// A real column because it is a sortable column on every list, and ordering
-  /// by an aggregate over a relation is something Prisma cannot express — the
-  /// alternative is a correlated subquery per row, which would be the slowest
-  /// thing on the page. Maintained through `ActivityStampService`.
   lastActivityAt DateTime?
 
   contacts   DealContact[]
@@ -563,15 +422,10 @@ model Activity {
   subject String?
   body    String?
 
-  /// Set when the thing already happened.
   occurredAt  DateTime?
-  /// Set when it is scheduled. Overdue is dueAt in the past with no completedAt.
   dueAt       DateTime?
   completedAt DateTime?
 
-  /// Always stamped when it can be resolved, even for deal and contact
-  /// activity, so a company timeline is one indexed range scan rather than
-  /// three joins.
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contactId String?
@@ -581,13 +435,8 @@ model Activity {
 
   createdById String
   createdBy   User   @relation("ActivityAuthor", fields: [createdById], references: [id])
-  /// { from, to } for STAGE_CHANGE; the credit cost for ENRICHMENT; `{ synced:
-  /// true }` for anything a Google sync projected.
   meta        Json?
 
-  /// The projection links. Unique because a thread and an event each get exactly
-  /// one timeline entry, updated in place as the thread grows or the event moves
-  /// — the timeline stays one indexed range scan instead of a three-table union.
   emailThreadId   String?        @unique
   emailThread     EmailThread?   @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
   calendarEventId String?        @unique
@@ -604,18 +453,9 @@ model Activity {
   @@map("activity")
 }
 
-// ---------------------------------------------------------------------------
-// Google sync
-//
-// Gmail threads and Calendar events get real tables; the timeline gets one
-// projected Activity per thread and per event. Identity is deliberately global
-// rather than Google's per-mailbox ids — see docs/plan/gmail-calendar-plan.md §4.2.
-// ---------------------------------------------------------------------------
-
 enum GoogleSyncStatus {
   IDLE
   RUNNING
-  /// The refresh token is gone. Stop trying; the rep has to reconnect.
   NEEDS_RECONNECT
   FAILED
 }
@@ -625,30 +465,17 @@ enum EmailDirection {
   OUTBOUND
 }
 
-/// Per-user, per-source cursor.
-///
-/// In Postgres because the API is a serverless function with no memory between
-/// invocations, and because the in-process EnrichmentQueue deliberately drops
-/// queued work on shutdown — fine for enrichment, fatal for a resumable sync.
 model MailboxSync {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// "gmail" | "calendar".
   source String
 
   status GoogleSyncStatus @default(IDLE)
-  /// Gmail: the last processed historyId. Calendar: nextSyncToken.
-  ///
-  /// Stamped with "now" the first time a mailbox is seen, which is what makes
-  /// this forward-only: there is no backfill, so the cursor starts at the
-  /// moment of connection and nothing before it is ever read.
   cursor String?
   lastSyncedAt DateTime?
   lastError    String?
-  /// Set by the 429/403 handler; the cron skips this row until it passes.
   retryAfter   DateTime?
-  /// Auto-creation is opt-in per source — on for calendar, off for Gmail.
   autoCreate   Boolean   @default(false)
 
   createdAt DateTime @default(now())
@@ -659,12 +486,8 @@ model MailboxSync {
   @@map("mailboxSync")
 }
 
-/// One conversation, whoever's mailbox it came from.
 model EmailThread {
   id String @id @default(cuid())
-  /// The RFC 822 Message-ID of the thread root — global, unlike Gmail's
-  /// mailbox-scoped threadId. This is what stops two reps on one thread
-  /// producing two CRM threads.
   rootMessageId String  @unique
   subject       String?
 
@@ -693,21 +516,16 @@ model EmailMessage {
   threadId String
   thread   EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  /// Global message identity. Unique, so account B's sync skips what account A
-  /// already ingested.
   rfcMessageId String @unique
-  /// Whose mailbox produced this copy, and its id there — for deep links.
   syncedByUserId String?
   gmailMessageId String?
 
   direction EmailDirection
   fromEmail String
   fromName  String?
-  /// [{ email, name, kind: "to" | "cc" }]. Not a table: nothing queries it.
   recipients Json
   subject    String?
   snippet    String?
-  /// Plain text, quoted history stripped. Never logged; never in list payloads.
   body   String?
   sentAt DateTime
 
@@ -719,11 +537,8 @@ model EmailMessage {
 
 model CalendarEvent {
   id String @id @default(cuid())
-  /// Shared by every attendee's copy of the event, and by every instance of a
-  /// recurrence — which is why the start time is part of the key.
   iCalUid           String
   originalStartTime DateTime
-  /// Set on an instance of a recurring series.
   recurringEventId String?
 
   title          String?
@@ -763,7 +578,6 @@ model CalendarAttendee {
 
   email String
   name  String?
-  /// needsAction | declined | tentative | accepted
   responseStatus String?
   isOrganizer    Boolean  @default(false)
   contactId      String?
@@ -774,12 +588,22 @@ model CalendarAttendee {
   @@map("calendarAttendee")
 }
 
-/// Domains we never match on and never create from — vendors, ATSs, newsletters.
-/// Grows by hand and by a "not a customer" action in the UI.
 model SuppressedDomain {
   domain    String   @id
   reason    String?
   createdAt DateTime @default(now())
 
   @@map("suppressedDomain")
+}
+
+model AppSetting {
+  id String @id
+
+  agentModelId String?
+
+  agentModelContextWindow Int?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("appSetting")
 }

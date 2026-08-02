@@ -49,8 +49,6 @@ const COLUMNS: DataTableColumn<DealRow>[] = [
 		header: "Stage",
 		sortable: true,
 		width: "w-[18%]",
-		// Editable in place: moving a deal along is the single most common thing
-		// anyone does here, and it should not need a page load.
 		cell: (row) => <DealStageMenu dealId={row.id} stage={row.stage} />,
 	},
 	{
@@ -93,9 +91,6 @@ const COLUMNS: DataTableColumn<DealRow>[] = [
 			),
 	},
 	{
-		// Hidden by default, but present: it is the table's default sort, and a
-		// default you cannot see or return to after sorting by something else is
-		// just an unexplained row order.
 		id: "createdAt",
 		header: "Created",
 		label: "Created date",
@@ -186,8 +181,6 @@ export function DealsTable() {
 			onRowClick={(row) => openRecord({ kind: "deal", id: row.id })}
 			empty="No deals match this view."
 			meta={
-				// The open pipeline for everything the filters match, not just the
-				// page — summed in Postgres.
 				openValueCents === null || openValueCents === undefined ? undefined : (
 					<span>
 						{deals.data?.total ?? 0} deals ·{" "}

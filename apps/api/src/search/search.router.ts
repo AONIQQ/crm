@@ -11,7 +11,6 @@ const quickInput = z.object({ q: z.string().default("") });
 export class SearchRouter {
 	constructor(@Inject(SearchService) private readonly search: SearchService) {}
 
-	/** Backs the ⌘K switcher. */
 	@Query({ input: quickInput })
 	async quick(@Input("q") q: string) {
 		return this.search.quick(q);

@@ -1,13 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-/**
- * The identity helpers, tested where they now live.
- *
- * These moved here with the rest of enrichment. They were written against the
- * API's copy of `looksLikeSameCompany`/`nameMatchesLocalPart`/`searchTerms`,
- * which had silently drifted from the agent's — the whole argument for there
- * being one copy. Same assertions, one implementation.
- */
 import {
 	looksLikeSameCompany,
 	nameMatchesLocalPart,
@@ -16,8 +8,6 @@ import {
 
 describe("searchTerms", () => {
 	it("strips the initial off a run-together handle", () => {
-		// The case that forced this: searching "pmarchetti" finds nothing, searching
-		// "marchetti" returns linkedin.com/in/paulamarchetti as the first result.
 		expect(searchTerms("pmarchetti")).toContain("marchetti");
 		expect(searchTerms("tokonkwo")).toContain("okonkwo");
 	});
@@ -40,7 +30,6 @@ describe("searchTerms", () => {
 
 describe("looksLikeSameCompany", () => {
 	it("matches an employer to the shorter name the CRM holds", () => {
-		// Tomi Okonkwo's employer reads "Northwind Bank"; the CRM knows "Northwind".
 		expect(
 			looksLikeSameCompany("Northwind Bank", "Northwind", "northwind.com"),
 		).toBe(true);
@@ -50,8 +39,6 @@ describe("looksLikeSameCompany", () => {
 	});
 
 	it("rejects an unrelated employer", () => {
-		// The failure this exists to prevent: search handed back Brightwater's CEO for
-		// a Fernhill query, and something has to stop them being written down.
 		expect(
 			looksLikeSameCompany("Brightwater Group", "Fernhill", "fernhill.com"),
 		).toBe(false);
@@ -80,9 +67,6 @@ describe("nameMatchesLocalPart", () => {
 	});
 
 	it("rejects a stranger who merely turned up in the results", () => {
-		// This is the guard that keeps Dario Fontana from being filed as
-		// Paula Marchetti. The name is checked against the address, never derived
-		// from it.
 		expect(
 			nameMatchesLocalPart(person("Antonio", "Fontana"), "pmarchetti"),
 		).toBe(false);

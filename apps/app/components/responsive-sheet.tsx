@@ -20,14 +20,6 @@ import { cn } from "@crm/ui/lib/utils";
 import type * as React from "react";
 import { createContext, useContext } from "react";
 
-/**
- * A sheet on a desktop, a drawer on a phone, one set of imports either way.
- *
- * Everything in this app that would have been a sub-page is a sheet, and a
- * 5xl panel sliding in from the right of a 390px screen is not a sheet, it is
- * a broken page. Swapping the primitive here rather than at each call site
- * means no screen has to know which one it got.
- */
 const ResponsiveContext = createContext(false);
 const useResponsive = () => useContext(ResponsiveContext);
 
@@ -63,14 +55,9 @@ function SheetContent({
 	side?: "top" | "right" | "bottom" | "left";
 	size?: SheetSize;
 	showCloseButton?: boolean;
-	/** Radix's "where does focus land" hook — both branches forward it. */
 	onOpenAutoFocus?: (event: Event) => void;
 }) {
 	if (useResponsive()) {
-		// A bottom drawer is otherwise content-height, so a short body (or a tab
-		// switch to a near-empty panel) collapses it and shifts the page. Pin a
-		// stable default height for every drawer app-wide; callers can still
-		// override via `className` since it merges last.
 		return (
 			<DrawerContent
 				className={cn(

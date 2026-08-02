@@ -1,20 +1,6 @@
 const ENDPOINT = "https://api.perplexity.ai/chat/completions";
 const TIMEOUT_MS = 45_000;
 
-/**
- * Perplexity, for the two things it is better at than anything else here:
- * finding where a person lives on the web, and saying what has happened
- * recently that a rep should know before a call.
- *
- * It is **not** the source of truth for identity. Asked for Paula Marchetti's job
- * title it answered "Account Executive L3" while their own LinkedIn profile says
- * "Growth Specialist at Fernhill" — an aggregator reconciling stale sources.
- * LinkedIn is self-reported and wins on identity; Perplexity wins on context.
- *
- * Every answer carries its citations, and a claim without one does not get
- * written to a record.
- */
-
 export type Answer = {
 	text: string;
 	citations: string[];
@@ -27,14 +13,11 @@ export function perplexityEnabled(): boolean {
 }
 
 export type AskOptions = {
-	/** `sonar` is fast and cited; `sonar-pro` reasons harder over more sources. */
 	model?: "sonar" | "sonar-pro";
-	/** Narrow the search, e.g. `["linkedin.com"]`. */
 	domains?: string[];
 	system?: string;
 };
 
-/** One grounded question. */
 export async function ask(
 	question: string,
 	options: AskOptions = {},
@@ -78,8 +61,6 @@ export async function ask(
 		const text = body.choices?.[0]?.message?.content?.trim() ?? "";
 		if (!text) return { ok: false, reason: "Empty answer." };
 
-		// The field moved between API versions; read whichever is present rather
-		// than dropping citations on a version bump.
 		const citations =
 			body.citations ??
 			(body.search_results ?? []).flatMap((r) => (r.url ? [r.url] : []));
@@ -100,13 +81,6 @@ export async function ask(
 	}
 }
 
-/**
- * LinkedIn profile URLs for a person, from their email and employer.
- *
- * Restricted to linkedin.com so the answer is a set of URLs rather than prose,
- * and the slugs are pulled out of the citations rather than out of the model's
- * text — a cited URL was actually retrieved, a quoted one may not have been.
- */
 export async function findProfileUrls(
 	terms: string[],
 	companyName: string,
@@ -129,7 +103,6 @@ export async function findProfileUrls(
 			if (slug && !slugs.includes(slug)) slugs.push(slug);
 		}
 
-		// The first term that produces anything is the most specific one.
 		if (slugs.length > 0) break;
 	}
 

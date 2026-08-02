@@ -1,19 +1,6 @@
 const HOST = "linkdapi-best-unofficial-linkedin-api.p.rapidapi.com";
 const TIMEOUT_MS = 20_000;
 
-/**
- * LinkedIn data via LinkDAPI on RapidAPI.
- *
- * **There is deliberately no search function here.** LinkDAPI publishes no
- * people-search endpoint, and the undocumented `/search/people?keywords=` path
- * answers `HTTP 200` with entirely unrelated people — a query for "Paula Marchetti"
- * returned Brightwater's CEO, and a different random set on the next call. Anything
- * that looked like search here would be a well-typed way to file a stranger
- * against a real customer. Finding the slug is Perplexity's job.
- *
- * Given a slug this API is excellent, so that is all it is asked to do.
- */
-
 export type Profile = {
 	slug: string;
 	profileUrl: string;
@@ -22,11 +9,10 @@ export type Profile = {
 	lastName: string | null;
 	headline: string | null;
 	location: string | null;
-	/** Needed by every detail endpoint — they take `urn`, not `username`. */
 	urn: string | null;
 	followerCount: number | null;
 	connectionsCount: number | null;
-	/** Current employers. The job-change signal lives here. */
+	photoUrl: string | null;
 	positions: { name: string; url: string | null }[];
 };
 
@@ -59,7 +45,24 @@ export function linkedinEnabled(): boolean {
 	return key() !== null;
 }
 
-/** A profile by its `linkedin.com/in/<slug>` handle. */
+export function slugFromProfileUrl(raw: string | null): string | null {
+	if (!raw) return null;
+
+	try {
+		const url = new URL(raw.trim());
+
+		const host = url.hostname.toLowerCase();
+		if (host !== "linkedin.com" && !host.endsWith(".linkedin.com")) return null;
+
+		const [section, slug] = url.pathname.split("/").filter(Boolean);
+		if (section !== "in" || !slug) return null;
+
+		return decodeURIComponent(slug);
+	} catch {
+		return null;
+	}
+}
+
 export async function getProfile(slug: string): Promise<Outcome<Profile>> {
 	const result = await call<RawProfile>("/api/v1/profile/overview", {
 		username: slug,
@@ -80,6 +83,7 @@ export async function getProfile(slug: string): Promise<Outcome<Profile>> {
 			urn: str(d.urn),
 			followerCount: int(d.followerCount),
 			connectionsCount: int(d.connectionsCount),
+			photoUrl: profilePhotoUrl(d),
 			positions: (d.CurrentPositions ?? []).flatMap((p) =>
 				p?.name ? [{ name: p.name, url: str(p.url) }] : [],
 			),
@@ -87,7 +91,6 @@ export async function getProfile(slug: string): Promise<Outcome<Profile>> {
 	};
 }
 
-/** Full work history. Takes the `urn` from a profile, not the slug. */
 export async function getExperience(
 	urn: string,
 ): Promise<Outcome<Experience[]>> {
@@ -96,8 +99,6 @@ export async function getExperience(
 	});
 	if (!result.ok) return result;
 
-	// The endpoint has been seen returning both a bare array and an object
-	// wrapping one, so both are accepted rather than trusting either.
 	const payload = result.data;
 	const rows: RawExperienceRow[] = Array.isArray(payload)
 		? payload
@@ -116,7 +117,6 @@ export async function getExperience(
 	};
 }
 
-/** Resolves a company name to LinkedIn's id. */
 export async function lookupCompany(
 	query: string,
 ): Promise<Outcome<{ id: string; displayName: string }[]>> {
@@ -133,7 +133,6 @@ export async function lookupCompany(
 	};
 }
 
-/** Company detail. Takes `name` (the universal name) or `id`. */
 export async function getCompany(nameOrId: string): Promise<Outcome<Company>> {
 	const numeric = /^\d+$/.test(nameOrId);
 	const result = await call<RawCompany>("/api/v1/companies/company/info", {
@@ -155,12 +154,6 @@ export async function getCompany(nameOrId: string): Promise<Outcome<Company>> {
 	};
 }
 
-/**
- * One call.
- *
- * LinkDAPI reports a failed lookup as `200 { success: false }` rather than a
- * status code, so the envelope is what has to be read.
- */
 async function call<T>(
 	path: string,
 	params: Record<string, string>,
@@ -189,7 +182,6 @@ async function call<T>(
 			data?: T | null;
 		};
 
-		// "no such profile" is an ordinary answer, not something to retry.
 		if (body.success !== true || body.data == null) {
 			return { ok: false, missing: true };
 		}
@@ -221,7 +213,65 @@ type RawProfile = {
 	followerCount?: unknown;
 	connectionsCount?: unknown;
 	CurrentPositions?: { name?: string; url?: unknown }[] | null;
-};
+} & Record<string, unknown>;
+
+const PHOTO_KEYS = [
+	"profilePictureURL",
+	"profilePicture",
+	"profilePictureUrl",
+	"profilePicUrl",
+	"profilePic",
+	"profilePicHighQuality",
+	"profilePhotoUrl",
+	"profilePhoto",
+	"pictureUrl",
+	"avatarUrl",
+	"avatar",
+];
+
+export function profilePhotoUrl(raw: Record<string, unknown>): string | null {
+	const byLowerKey = new Map<string, unknown>();
+	for (const [key, value] of Object.entries(raw)) {
+		byLowerKey.set(key.toLowerCase(), value);
+	}
+
+	for (const key of PHOTO_KEYS) {
+		const url = firstUrl(byLowerKey.get(key.toLowerCase()));
+		if (!url) continue;
+
+		try {
+			const { protocol, hostname } = new URL(url);
+			if (protocol !== "https:") continue;
+			if (hostname !== "licdn.com" && !hostname.endsWith(".licdn.com"))
+				continue;
+			return url;
+		} catch {}
+	}
+
+	return null;
+}
+
+function firstUrl(value: unknown): string | null {
+	if (typeof value === "string") return str(value);
+
+	if (Array.isArray(value)) {
+		for (const entry of [...value].reverse()) {
+			const found = firstUrl(entry);
+			if (found) return found;
+		}
+		return null;
+	}
+
+	if (value && typeof value === "object") {
+		const record = value as Record<string, unknown>;
+		for (const key of ["url", "displayUrl", "src", "large", "original"]) {
+			const found = firstUrl(record[key]);
+			if (found) return found;
+		}
+	}
+
+	return null;
+}
 
 type RawExperienceRow = {
 	title?: unknown;

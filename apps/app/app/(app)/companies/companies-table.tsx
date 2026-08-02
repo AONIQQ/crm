@@ -100,9 +100,6 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 		cell: (row) => <span className="tabular-nums">{row.openDealCount}</span>,
 	},
 	{
-		// Hidden by default, but present: it is the table's default sort, and a
-		// default you cannot see or return to after sorting by something else is
-		// just an unexplained row order.
 		id: "createdAt",
 		header: "Created",
 		label: "Created date",
@@ -130,9 +127,6 @@ const COLUMNS: DataTableColumn<CompanyRow>[] = [
 		),
 	},
 	{
-		// Off by default: while the agent is working through a backlog every row
-		// says the same thing. The facet is the useful way in; this column is for
-		// when you are looking at enrichment specifically.
 		id: "enrichment",
 		header: "Enrichment",
 		label: "Enrichment status",
@@ -152,13 +146,7 @@ export function CompaniesTable() {
 
 	const companies = useQuery({
 		...trpc.companies.list.queryOptions(input),
-		// Keeps the previous page on screen while the next one loads, so paging
-		// and typing never blank the table.
 		placeholderData: (previous) => previous,
-		// A company added here is enriched in the background, and the agent
-		// filling in its logo and industry is not a client action anyone can
-		// invalidate on. Ask while any row on this page is still working — a new
-		// company's logo then lands in the table rather than waiting for a reload.
 		refetchInterval: (query) =>
 			query.state.data?.rows.some((row) =>
 				isEnriching(row.enrichmentStatus, row.queued),
@@ -180,15 +168,11 @@ export function CompaniesTable() {
 					value: user.id,
 					label: user.name,
 				})),
-				// An owner with nothing assigned is a dropdown entry that can only
-				// ever produce an empty table.
 			].filter((option) => (facetCounts?.owner?.[option.value] ?? 0) > 0),
 		},
 		{
 			id: "industry",
 			label: "Industry",
-			// The industries that exist, not a fixed list: they come from the
-			// agent, so nobody here gets to decide what the set is.
 			options: Object.keys(facetCounts?.industry ?? {})
 				.sort()
 				.map((value) => ({ value, label: value })),

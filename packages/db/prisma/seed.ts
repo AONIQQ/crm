@@ -1,27 +1,8 @@
+import { mirror } from "../src/blob";
 import { db } from "../src/client";
 import { resolveFavicon } from "../src/favicon";
 import { ActivityType, DealStage } from "../src/generated/prisma/enums";
 
-/**
- * A believable pipeline to develop against: real domains so the enrichment
- * agent has something to look up, deals spread across every stage, and tasks
- * that are genuinely overdue.
- *
- * Idempotent — companies key off `domain`, contacts off `email`, and deals off
- * a deterministic id — so re-running tops the data up rather than duplicating
- * it. Randomness comes from a seeded generator for the same reason: two runs
- * produce the same pipeline.
- *
- * Users are the exception. Better Auth owns them, and a row written here has no
- * Google account attached — but account linking is enabled for Google, so
- * signing in with a matching address adopts the row rather than creating a
- * second one. Real users are used when they exist; the placeholders below are
- * only created when the table is empty.
- */
-
-// --- deterministic randomness -----------------------------------------------
-
-/** mulberry32 — small, fast, and identical across runs. */
 function makeRandom(seed: number): () => number {
 	let a = seed;
 	return () => {
@@ -51,15 +32,12 @@ function integer(min: number, max: number): number {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = Date.now();
 
-/** Negative is the past. */
 function daysFromNow(days: number, jitterHours = 0): Date {
 	const jitter = jitterHours
 		? (random() - 0.5) * jitterHours * 60 * 60 * 1000
 		: 0;
 	return new Date(NOW + days * DAY_MS + jitter);
 }
-
-// --- source data ------------------------------------------------------------
 
 const OWNERS = [
 	{ name: "Ada Okafor", email: "ada@trycomp.ai" },
@@ -322,9 +300,6 @@ const EMAIL_SUBJECTS = [
 	"Intro to your implementation lead",
 ] as const;
 
-// --- helpers ----------------------------------------------------------------
-
-/** Letters NFD cannot decompose into base + accent — they are their own letter. */
 const TRANSLITERATIONS: Record<string, string> = {
 	ø: "o",
 	æ: "ae",
@@ -337,19 +312,14 @@ const TRANSLITERATIONS: Record<string, string> = {
 };
 
 function slug(value: string): string {
-	return (
-		value
-			.toLowerCase()
-			.replace(/[øæœåßđłþ]/g, (char) => TRANSLITERATIONS[char] ?? char)
-			.normalize("NFD")
-			// Combining marks left behind by NFD (é → e + ́ ).
-			.replace(/\p{Mn}/gu, "")
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-|-$/g, "")
-	);
+	return value
+		.toLowerCase()
+		.replace(/[øæœåßđłþ]/g, (char) => TRANSLITERATIONS[char] ?? char)
+		.normalize("NFD")
+		.replace(/\p{Mn}/gu, "")
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "");
 }
-
-// --- seed -------------------------------------------------------------------
 
 async function seedOwners(): Promise<string[]> {
 	const existing = await db.user.findMany({ select: { id: true } });
@@ -397,8 +367,6 @@ async function seedCompanies(
 				country: company.country,
 				countryCode: company.countryCode,
 				ownerId: pick(ownerIds),
-				// Left PENDING on purpose: the logo, description and socials are the
-				// agent's job, and this gives it real work on first run.
 				createdAt: daysFromNow(-integer(30, 400), 12),
 			},
 			update: {},
@@ -412,16 +380,6 @@ async function seedCompanies(
 	return companies.map(({ iconUrl: _, ...company }) => company);
 }
 
-/**
- * The favicon each seeded company serves, so a fresh clone is a list of real
- * companies rather than a column of grey squares.
- *
- * Resolved here rather than hard-coded because these URLs rot — half of them
- * carry a deploy hash — and a dead `<img>` is worse than the initials it
- * replaced. Icons the agent has since found are left alone, and a machine with
- * no network simply seeds without them: every failure is a `null`, so the seed
- * cannot be broken by somebody else's origin being down.
- */
 async function seedIcons(
 	companies: { id: string; domain: string | null; iconUrl: string | null }[],
 ): Promise<void> {
@@ -430,12 +388,13 @@ async function seedIcons(
 	);
 	if (missing.length === 0) return;
 
-	// Sequential: this walks fifteen origins that did not ask to be walked, and
-	// all at once is a burst that looks like a scan.
 	let resolved = 0;
 	for (const company of missing) {
-		const iconUrl = await resolveFavicon(company.domain);
-		if (!iconUrl) continue;
+		const source = await resolveFavicon(company.domain);
+		if (!source) continue;
+
+		const iconUrl =
+			(await mirror(source, `companies/${company.id}/icon`)) ?? source;
 
 		await db.company.updateMany({
 			where: { id: company.id, iconUrl: null },
@@ -456,8 +415,6 @@ async function seedContacts(
 	const contacts: SeededContact[] = [];
 	const used = new Set<string>();
 
-	// A handful per company: a primary contact plus the stakeholders a real deal
-	// drags in.
 	for (const company of companies) {
 		for (let index = 0; index < integer(2, 4); index++) {
 			const firstName = pick(FIRST_NAMES);
@@ -486,7 +443,6 @@ async function seedContacts(
 		}
 	}
 
-	// The first contact at each company is the one to call.
 	for (const company of companies) {
 		const first = contacts.find((contact) => contact.companyId === company.id);
 		if (!first) continue;
@@ -514,7 +470,6 @@ async function seedDeals(
 	const deals: SeededDeal[] = [];
 
 	for (const [index, company] of companies.entries()) {
-		// Every company has a deal; about half also have an expansion.
 		const count = index % 2 === 0 ? 2 : 1;
 
 		for (let n = 0; n < count; n++) {
@@ -524,11 +479,6 @@ async function seedDeals(
 			const ownerId = pick(ownerIds);
 			const createdDaysAgo = integer(20, 210);
 			const createdAt = daysFromNow(-createdDaysAgo, 12);
-			// A closed deal closes somewhere between a fortnight after it opened and
-			// today, so the overview's six-month trend and its rolling win rate have
-			// something in every bucket. Closing them all inside the last fortnight —
-			// which is what a flat `integer(1, 20)` did — made every chart a spike
-			// against five empty months.
 			const closedDaysAgo = closed
 				? integer(0, Math.max(createdDaysAgo - 14, 0))
 				: null;
@@ -551,8 +501,6 @@ async function seedDeals(
 					stageChangedAt,
 					amount: integer(6, 90) * 1000,
 					currency: "USD",
-					// A closed deal landed near the date it was forecast for; an open one
-					// is still forecast, and some are already late.
 					expectedCloseDate: daysFromNow(
 						closedDaysAgo === null
 							? integer(-10, 75)
@@ -569,7 +517,6 @@ async function seedDeals(
 				update: {},
 			});
 
-			// One or two people from the company are on the deal.
 			const companyContacts = contacts.filter(
 				(contact) => contact.companyId === company.id,
 			);
@@ -598,7 +545,6 @@ async function seedActivities(
 	deals: SeededDeal[],
 	ownerIds: string[],
 ): Promise<number> {
-	// Re-running should not stack another 150 rows on top.
 	const existing = await db.activity.count();
 	if (existing > 0) {
 		console.log(`Activities already seeded (${existing}) — skipping.`);
@@ -635,7 +581,6 @@ async function seedActivities(
 		createdAt,
 	});
 
-	// History on every deal: the calls, notes and emails that got it here.
 	for (const deal of deals) {
 		const dealContacts = contacts.filter((c) => c.companyId === deal.companyId);
 
@@ -651,8 +596,6 @@ async function seedActivities(
 			rows.push({
 				...base(deal.companyId, deal.ownerId, at),
 				type,
-				// The company id is stamped above so this shows on the company
-				// timeline as well as the deal's.
 				dealId: deal.id,
 				contactId: dealContacts.length > 0 ? pick(dealContacts).id : null,
 				subject:
@@ -668,7 +611,6 @@ async function seedActivities(
 			});
 		}
 
-		// The stage change that landed it where it is.
 		rows.push({
 			...base(deal.companyId, deal.ownerId, daysFromNow(-integer(1, 20), 12)),
 			type: ActivityType.STAGE_CHANGE,
@@ -681,8 +623,6 @@ async function seedActivities(
 		});
 	}
 
-	// Tasks: a spread of done, upcoming and overdue, so the dashboard has all
-	// three to show on the first run.
 	for (const deal of deals) {
 		if (deal.closed) continue;
 
@@ -705,7 +645,6 @@ async function seedActivities(
 		}
 	}
 
-	// A few notes that belong to the company rather than any one deal.
 	for (const company of companies) {
 		if (!chance(0.6)) continue;
 		rows.push({

@@ -1,13 +1,13 @@
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@crm/ui/components/avatar";
 import {
 	DataTable,
 	type DataTableColumn,
 	type DataTableFacet,
 } from "@crm/ui/components/data-table";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
-import { initialsFromName, relativeTimeFromIso } from "@crm/ui/lib/format";
+import { PersonAvatar } from "@crm/ui/components/person-avatar";
+import { relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { CompanyCell } from "@/components/crm/company-cell";
 import { contactName } from "@/components/crm/contact-name";
@@ -30,10 +30,12 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 		width: "w-[22%]",
 		cell: (row) => (
 			<span className="flex min-w-0 items-center gap-2">
-				<Avatar size="sm">
-					{row.imageUrl ? <AvatarImage alt="" src={row.imageUrl} /> : null}
-					<AvatarFallback>{initialsFromName(contactName(row))}</AvatarFallback>
-				</Avatar>
+				<PersonAvatar
+					src={row.imageUrl}
+					name={contactName(row)}
+					email={row.email}
+					size="sm"
+				/>
 				<span className="truncate font-medium">{contactName(row)}</span>
 			</span>
 		),
@@ -80,9 +82,6 @@ const COLUMNS: DataTableColumn<ContactRow>[] = [
 		cell: (row) => <OwnerCell owner={row.owner} />,
 	},
 	{
-		// Hidden by default, but present: it is the table's default sort, and a
-		// default you cannot see or return to after sorting by something else is
-		// just an unexplained row order.
 		id: "createdAt",
 		header: "Created",
 		label: "Created date",

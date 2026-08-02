@@ -24,40 +24,18 @@ const timeFormat = new Intl.DateTimeFormat(undefined, {
 	minute: "2-digit",
 });
 
-/** `{ from, to }` on a STAGE_CHANGE, read back defensively — it is `Json`. */
 function stageChange(meta: Record<string, unknown> | null) {
 	const from = typeof meta?.from === "string" ? meta.from : null;
 	const to = typeof meta?.to === "string" ? meta.to : null;
 	return from && to ? { from, to } : null;
 }
 
-/** The record this timeline is already about, whichever kind it is. */
 function anchorId(anchor: TimelineAnchor): string {
 	if ("companyId" in anchor) return anchor.companyId;
 	if ("contactId" in anchor) return anchor.contactId;
 	return anchor.dealId;
 }
 
-/**
- * One thing that happened.
- *
- * Two rules decide the layout, and both came from the same mistake — treating
- * the *type* of an entry as its headline.
- *
- * **The content is whatever there is.** A synced meeting has a title and no
- * body; a logged note has a body and no title; an enrichment has both. When
- * there was a title it was set in medium foreground and the body underneath in
- * muted grey, which was right — and when there was not, the word "Email" got
- * promoted into the title slot and the thing you actually wrote was demoted to
- * grey small print beneath it. The row read "Email / Test" with the wrong half
- * emphasised. Now the first line of real content is the headline, and the type
- * is carried by the icon in the gutter, which was already there saying it.
- *
- * **Who and when go right, and cross-references only point elsewhere.** Every
- * row on a contact's timeline used to end with a link to that contact — six
- * copies of the name at the top of the panel. A chip is worth a line only when
- * it goes somewhere you are not.
- */
 export function TimelineEntry({
 	entry,
 	anchor,
@@ -86,8 +64,6 @@ export function TimelineEntry({
 	const change = entry.type === "STAGE_CHANGE" ? stageChange(entry.meta) : null;
 	const when = entry.occurredAt ?? entry.createdAt;
 
-	// A synced entry was not written by the person whose mailbox it came from,
-	// so it is attributed to the source rather than to them.
 	const synced = entry.meta?.synced === true;
 	const author = synced
 		? entry.emailThread
@@ -99,8 +75,6 @@ export function TimelineEntry({
 		? `${dealStageLabel(change.from as never)} → ${dealStageLabel(change.to as never)}`
 		: entry.subject;
 
-	// Only when they are somewhere else. On a deal's timeline the deal is the
-	// page; on a contact's, the contact is.
 	const here = anchorId(anchor);
 	const deal = entry.deal && entry.deal.id !== here ? entry.deal : null;
 	const contact =
@@ -154,8 +128,6 @@ export function TimelineEntry({
 							</p>
 						) : null}
 
-						{/* Something has to be on the line. A stage change and a bare
-						    logged call both arrive with nothing written on them. */}
 						{!headline && !entry.body ? (
 							<p className="text-muted-foreground">
 								{activityLabel(entry.type)}
@@ -163,12 +135,6 @@ export function TimelineEntry({
 						) : null}
 					</div>
 
-					{/*
-					 * Who and when, together, on the right. A line of their own would
-					 * cost every note in the panel a second row to carry one short
-					 * grey string — most entries are a sentence and a signature, and
-					 * they should be one line.
-					 */}
 					<span className="shrink-0 text-muted-foreground">
 						<span className="hidden sm:inline">{author} · </span>
 						<span className="tabular-nums">
@@ -195,11 +161,6 @@ export function TimelineEntry({
 					/>
 				) : null}
 
-				{/*
-				 * The footnotes: when it is due, and where else it belongs. Rendered
-				 * only when there is one — an entry with neither should not pay a
-				 * line for the possibility.
-				 */}
 				{footnotes ? (
 					<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
 						{overdue ? (

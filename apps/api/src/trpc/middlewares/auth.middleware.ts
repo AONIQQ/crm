@@ -8,10 +8,6 @@ import type {
 import { setRequestUserId } from "../../logging/request-context";
 import type { AuthedTrpcContext, BaseTrpcContext } from "../context.types";
 
-/**
- * Google sign-in is the only door, so "signed in" is the whole authorisation
- * model — there are no organizations, roles or permissions in this CRM.
- */
 @Injectable()
 export class AuthMiddleware implements TRPCMiddleware {
 	async use(opts: MiddlewareOptions): Promise<MiddlewareResponse> {
@@ -22,8 +18,6 @@ export class AuthMiddleware implements TRPCMiddleware {
 			throw new TRPCError({ code: "UNAUTHORIZED" });
 		}
 
-		// tRPC calls arrive as one HTTP request per batch, so the interceptor that
-		// stamps `userId` for REST routes never runs. Stamp it here instead.
 		setRequestUserId(user.id);
 
 		const nextCtx: AuthedTrpcContext = { ...ctx, user };

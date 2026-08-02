@@ -41,7 +41,6 @@ const OWNER_SELECT = {
 	image: true,
 } as const;
 
-/** One row of the companies table. */
 export type CompanyRow = {
 	id: string;
 	name: string;
@@ -53,12 +52,6 @@ export type CompanyRow = {
 	brandColor: string | null;
 	industry: string | null;
 	enrichmentStatus: EnrichmentStatus;
-	/**
-	 * Whether the agent actually has this company on its list.
-	 *
-	 * Separate from `enrichmentStatus` because that column defaults to PENDING
-	 * and so cannot tell "waiting its turn" from "nobody ever asked".
-	 */
 	queued: boolean;
 	source: RecordSource;
 	owner: {
@@ -69,18 +62,10 @@ export type CompanyRow = {
 	} | null;
 	contactCount: number;
 	openDealCount: number;
-	/** ISO-8601, or null when nothing has happened yet. */
 	lastActivityAt: string | null;
 	createdAt: string;
 };
 
-/**
- * Columns `?sort=` may name, and the Prisma ordering each one means.
- *
- * Spelled out rather than derived from the column id so `?sort=` can never
- * reach Prisma as an arbitrary field name — and because ordering by a relation
- * count is not a flat `{ [id]: dir }`.
- */
 const SORTABLE: Record<
 	string,
 	(dir: Prisma.SortOrder) => Prisma.CompanyOrderByWithRelationInput
@@ -91,11 +76,7 @@ const SORTABLE: Record<
 	createdAt: (dir) => ({ createdAt: dir }),
 	contacts: (dir) => ({ contacts: { _count: dir } }),
 	deals: (dir) => ({ deals: { _count: dir } }),
-	// By the owner's name, not their id — nobody scans a list of cuids.
-	// Unassigned rows sort last either way: they are the least interesting.
 	owner: (dir) => ({ owner: { name: dir } }),
-	// A real column, so this is an index scan. Never-touched rows sort last in
-	// both directions, because "no activity" is not "the oldest activity".
 	lastActivity: (dir) => ({ lastActivityAt: { sort: dir, nulls: "last" } }),
 };
 
@@ -149,8 +130,6 @@ export class CompaniesService {
 			this.facetCounts(input),
 		]);
 
-		// After the page is known, so it is one query for the rows on screen
-		// rather than a join that would have to be repeated for the facet counts.
 		const queued = await this.queue.queuedCompanies(rows.map((row) => row.id));
 
 		return {
@@ -230,6 +209,7 @@ export class CompaniesService {
 						lastName: true,
 						email: true,
 						title: true,
+						imageUrl: true,
 						owner: { select: OWNER_SELECT },
 					},
 				},
@@ -270,13 +250,6 @@ export class CompaniesService {
 		};
 	}
 
-	/**
-	 * Companies for a picker or a facet label — id, name and enough to draw the
-	 * logo, nothing else.
-	 *
-	 * Capped at 100 and searchable, so the "which company?" dropdown on a contact
-	 * or a deal stays a dropdown rather than becoming a second list view.
-	 */
 	async options(q: string) {
 		return this.db.company.findMany({
 			where: this.searchFilter(q),
@@ -317,15 +290,8 @@ export class CompaniesService {
 			domain: company.domain,
 		});
 
-		// Fire-and-forget: the create form should not wait on research, and the
-		// detail page polls until it settles. All this says is that a company now
-		// exists with nothing on it but a domain — what to do about that is the
-		// agent's call.
 		await this.agent.companyCreated(company.id);
 
-		// Not awaited, for the same reason: the icon is worth a second or two of
-		// somebody else's origin being slow, and the form is not. The list polls
-		// while the row is enriching, so it lands without a reload.
 		void this.favicon.backfill(company.id, company.domain);
 
 		return company;
@@ -365,8 +331,6 @@ export class CompaniesService {
 				);
 			}
 			data.domain = domain;
-			// A new domain means the enrichment we have is for the wrong company.
-			// Phase 6 picks PENDING rows up; until then this is honest bookkeeping.
 			const current = await this.db.company.findUnique({
 				where: { id },
 				select: { domain: true },
@@ -374,15 +338,6 @@ export class CompaniesService {
 			if (current && current.domain !== domain) {
 				data.enrichmentStatus = "PENDING";
 				data.enrichmentError = null;
-				// The icon is one of the things that was about a different company,
-				// and it is the one a rep can see. Cleared so the row shows a
-				// placeholder until the new domain answers, rather than confidently
-				// showing the old company's mark.
-				//
-				// All three variants, not just `iconUrl`: the agent's `brandToUpdate`
-				// only fills fields that are null, so a stale `iconDarkUrl` would
-				// survive re-enrichment and keep showing the previous company's mark
-				// to anyone in dark mode.
 				data.iconUrl = null;
 				data.iconDarkUrl = null;
 				data.iconTone = null;
@@ -410,15 +365,6 @@ export class CompaniesService {
 		}
 	}
 
-	/**
-	 * The "Look this up again" button.
-	 *
-	 * Queues the work at the front and returns immediately. It no longer forces
-	 * a vendor cache bypass, because the API no longer knows there is a vendor:
-	 * a rep asking for a fresh look is an event, and how to honour it — which
-	 * sources, how deep, whether the cached answer is still good — belongs to
-	 * the agent.
-	 */
 	async enrich(id: string): Promise<{ id: string; queued: boolean }> {
 		const company = await this.db.company.findUnique({
 			where: { id },
@@ -438,7 +384,6 @@ export class CompaniesService {
 		return { id, queued: true };
 	}
 
-	/** Asks the agent for a written brief on the company's timeline. */
 	async research(id: string, actingUserId: string) {
 		const company = await this.db.company.findUnique({
 			where: { id },
@@ -463,12 +408,6 @@ export class CompaniesService {
 		return { ok: true as const, queued: true as const };
 	}
 
-	/**
-	 * Points a company at the person to call.
-	 *
-	 * The contact has to already belong to the company: a "primary contact" who
-	 * works somewhere else is a data-entry accident, not a relationship.
-	 */
 	async setPrimaryContact(companyId: string, contactId: string | null) {
 		if (contactId) {
 			const contact = await this.db.contact.findUnique({
@@ -496,7 +435,6 @@ export class CompaniesService {
 		}
 	}
 
-	/** `q` matches the name or the domain — the two things a rep would type. */
 	private searchFilter(q: string): Prisma.CompanyWhereInput {
 		const term = q.trim();
 		if (!term) return {};
@@ -530,13 +468,6 @@ export class CompaniesService {
 		return where;
 	}
 
-	/**
-	 * Counts for the facet dropdowns.
-	 *
-	 * Computed against the search term only, not the other facets: counts that
-	 * shift every time you touch a different dropdown are hard to read, and
-	 * options that vanish are worse.
-	 */
 	private async facetCounts(input: CompanyListInput) {
 		const where = this.searchFilter(input.q);
 
@@ -571,7 +502,6 @@ export class CompaniesService {
 		};
 	}
 
-	/** Prisma's constraint errors, said in a way a rep can act on. */
 	private translate(error: unknown, id: string): unknown {
 		if (error instanceof PrismaNamespace.PrismaClientKnownRequestError) {
 			if (error.code === "P2025") {

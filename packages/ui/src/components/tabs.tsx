@@ -63,15 +63,7 @@ function TabsTrigger({
 			data-slot="tabs-trigger"
 			className={cn(
 				"relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-sm border border-transparent px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-foreground/60 transition-all group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start group-data-vertical/tabs:py-[calc(--spacing(1.25))] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-				// `flex-none` for line tabs: they are labels with a rule under the
-				// active one, so each is as wide as its word. Letting them share the
-				// row equally stretches four tabs across a whole sheet, and then the
-				// underline and the hover target are a quarter of the panel wide with
-				// the label marooned in the middle of them.
 				"group-data-[variant=line]/tabs-list:flex-none group-data-[variant=line]/tabs-list:px-0 group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-active:bg-transparent dark:group-data-[variant=line]/tabs-list:data-active:border-transparent dark:group-data-[variant=line]/tabs-list:data-active:bg-transparent",
-				// The raised thumb. In dark the track is the recessed thing and the
-				// thumb sits above it, so the stacking order inverts rather than the
-				// colours simply flipping.
 				"data-active:bg-background data-active:text-foreground data-active:shadow-2xs dark:data-active:border-border dark:data-active:bg-accent dark:data-active:text-foreground",
 				"after:absolute after:bg-foreground after:opacity-0 after:transition-opacity group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-5px] group-data-horizontal/tabs:after:h-0.5 group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-1 group-data-vertical/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-active:after:opacity-100",
 				className,

@@ -51,6 +51,7 @@ const COMPANY_SELECT = {
 	iconUrl: true,
 	iconDarkUrl: true,
 	iconTone: true,
+	logoUrl: true,
 } as const;
 
 const LOSING = new Set<DealStage>(LOSING_DEAL_STAGES);
@@ -61,8 +62,6 @@ const SORTABLE: Record<
 > = {
 	name: (dir) => [{ name: dir }],
 	company: (dir) => [{ company: { name: dir } }, { name: "asc" }],
-	// Enum order is declaration order in Postgres, which is pipeline order — so
-	// sorting by stage reads as "how far along", not alphabetically.
 	stage: (dir) => [{ stage: dir }, { expectedCloseDate: "asc" }],
 	amount: (dir) => [{ amount: dir }],
 	expectedCloseDate: (dir) => [{ expectedCloseDate: dir }],
@@ -106,9 +105,6 @@ export class DealsService {
 			}),
 			this.db.deal.count({ where }),
 			this.facetCounts(input),
-			// Summed in Postgres over the *filtered* set, not the page: a footer
-			// that says "$1.2M" for the 25 rows you can see is worse than no
-			// number at all.
 			this.db.deal.aggregate({
 				where: { ...where, stage: { in: [...OPEN_DEAL_STAGES] } },
 				_sum: { amount: true },
@@ -135,7 +131,6 @@ export class DealsService {
 			),
 			total,
 			facetCounts,
-			/** Open pipeline value across everything matching the filters. */
 			openValueCents: toCents(openValue._sum.amount),
 		} satisfies ListResult<unknown> & { openValueCents: number | null };
 	}
@@ -166,6 +161,7 @@ export class DealsService {
 								lastName: true,
 								email: true,
 								title: true,
+								imageUrl: true,
 							},
 						},
 					},
@@ -248,13 +244,6 @@ export class DealsService {
 		}
 	}
 
-	/**
-	 * Moves a deal and records that it moved.
-	 *
-	 * One transaction, because a stage change with no timeline entry is a deal
-	 * nobody can explain a week later — and a timeline entry for a change that
-	 * did not commit is worse.
-	 */
 	async setStage(input: SetStageInput, actingUserId: string) {
 		const deal = await this.db.deal.findUnique({
 			where: { id: input.id },
@@ -296,8 +285,6 @@ export class DealsService {
 					subject: "Stage changed",
 					body: closedReason ?? null,
 					occurredAt: now,
-					// Stamped with the company as well as the deal, so this shows on
-					// the company timeline without a join.
 					companyId: deal.companyId,
 					dealId: deal.id,
 					createdById: actingUserId,
@@ -337,9 +324,6 @@ export class DealsService {
 		const where: Prisma.DealWhereInput = this.searchFilter(input.q);
 
 		if (input.owner !== FACET_ALL) {
-			// `Deal.ownerId` is required, so unlike companies and contacts there is
-			// no null to match — "unassigned" is a filter that can only ever be
-			// empty, and `in: []` says that in Prisma's own terms.
 			where.ownerId =
 				input.owner === FACET_UNASSIGNED ? { in: [] } : input.owner;
 		}
@@ -350,8 +334,6 @@ export class DealsService {
 			where.stage = { in: [...CLOSED_DEAL_STAGES] };
 		}
 
-		// An explicit stage wins over the tab: picking "Closed won" while the
-		// "Open" tab is selected should show closed-won, not nothing.
 		if (input.stage !== FACET_ALL) {
 			where.stage = input.stage as DealStage;
 		}
@@ -407,7 +389,6 @@ export class DealsService {
 		return this.translateRelations(error);
 	}
 
-	/** A missing company or owner is the caller's mistake, not a 500. */
 	private translateRelations(error: unknown): unknown {
 		if (
 			error instanceof PrismaNamespace.PrismaClientKnownRequestError &&
@@ -421,11 +402,6 @@ export class DealsService {
 	}
 }
 
-/**
- * Month boundaries are computed here rather than in SQL so the buckets follow
- * the server's calendar rather than UTC's, which matters on the last day of a
- * month for a team in New York.
- */
 function closingFilter(window: ClosingWindow): Prisma.DealWhereInput {
 	const now = new Date();
 	const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -434,7 +410,6 @@ function closingFilter(window: ClosingWindow): Prisma.DealWhereInput {
 
 	switch (window) {
 		case "overdue":
-			// Only open deals can be overdue; a closed deal's date is history.
 			return {
 				expectedCloseDate: { lt: now },
 				stage: { in: [...OPEN_DEAL_STAGES] },

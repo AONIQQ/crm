@@ -9,7 +9,6 @@ describe("parseSocialUrl", () => {
 			handle: "lewiscarhart",
 			url: "https://x.com/lewiscarhart",
 		});
-		// Canonicalised, so the same account found twice is written once.
 		expect(parseSocialUrl("https://twitter.com/LewisCarhart")?.url).toBe(
 			"https://x.com/LewisCarhart",
 		);
@@ -19,8 +18,6 @@ describe("parseSocialUrl", () => {
 	});
 
 	it("refuses a deep link, which is where most wrong handles come from", () => {
-		// A cited tweet and a cited repo both contain a real handle, and neither is
-		// evidence that the handle belongs to the person we asked about.
 		expect(parseSocialUrl("https://x.com/someone/status/1234")).toBeNull();
 		expect(parseSocialUrl("https://github.com/someone/some-repo")).toBeNull();
 	});
@@ -33,7 +30,6 @@ describe("parseSocialUrl", () => {
 	});
 
 	it("refuses handles neither network could issue", () => {
-		// X caps at 15 characters; GitHub allows no trailing or doubled hyphen.
 		expect(parseSocialUrl("https://x.com/waytoolongforanxhandle")).toBeNull();
 		expect(parseSocialUrl("https://github.com/-lewis")).toBeNull();
 		expect(parseSocialUrl("https://github.com/lewis--carhart")).toBeNull();
@@ -80,7 +76,6 @@ describe("namesMatch", () => {
 	});
 
 	it("rejects a first name on its own", () => {
-		// The GitHub account of "Lewis" is the account of every Lewis there is.
 		expect(namesMatch("Lewis", "Lewis Carhart")).toBe(false);
 		expect(namesMatch(null, "Lewis Carhart")).toBe(false);
 	});

@@ -34,14 +34,6 @@ export type Profile = {
 	historyId?: string;
 };
 
-/**
- * The Gmail query used for every backfill page.
- *
- * Narrowing here rather than after fetching is the difference between reading a
- * mailbox and reading the part of it that could possibly be work. Promotions,
- * social and chats are never customer conversations, and each excluded message
- * is a `messages.get` we do not pay for.
- */
 export const WORK_MAIL_QUERY =
 	"-in:chats -category:promotions -category:social -category:forums";
 
@@ -49,12 +41,10 @@ export const WORK_MAIL_QUERY =
 export class GmailClient {
 	constructor(private readonly api: GoogleApiClient) {}
 
-	/** The mailbox's own address and current historyId — the backfill anchor. */
 	async profile(accessToken: string): Promise<GoogleResult<Profile>> {
 		return this.api.get<Profile>(`${BASE}/profile`, accessToken);
 	}
 
-	/** Message ids in a time window, newest first. */
 	async listMessages(
 		accessToken: string,
 		options: {
@@ -64,7 +54,6 @@ export class GmailClient {
 			maxResults?: number;
 		},
 	): Promise<GoogleResult<MessageList>> {
-		// Gmail's `after`/`before` take seconds since the epoch.
 		const after = Math.floor(options.after.getTime() / 1000);
 		const before = Math.ceil(options.before.getTime() / 1000);
 
@@ -75,13 +64,6 @@ export class GmailClient {
 		});
 	}
 
-	/**
-	 * Changes since a historyId.
-	 *
-	 * A `startHistoryId` older than Gmail's retention window (documented as
-	 * "typically at least one week") comes back as 404, which
-	 * `GoogleApiClient` surfaces as `cursor-invalid`.
-	 */
 	async listHistory(
 		accessToken: string,
 		options: { startHistoryId: string; pageToken?: string },
@@ -94,7 +76,6 @@ export class GmailClient {
 		});
 	}
 
-	/** One message, with headers and body. */
 	async getMessage(
 		accessToken: string,
 		id: string,

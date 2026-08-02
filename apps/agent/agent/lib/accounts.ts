@@ -1,26 +1,10 @@
 import { ActivityType, db, EmailDirection } from "@crm/db";
 import { isDerivedName } from "./names";
 
-/**
- * The CRM's other two records: companies and deals.
- *
- * `crm.ts` reads a person. This reads what a person hangs off, and it exists
- * because the agent could not. A session opened on a company knew the count of
- * contacts there and not one of their ids, so asked the rep to paste one — the
- * CRM's own join, handed back to the human as homework. A deal was worse: the
- * agent could name the stage and had no way to see what had happened in it.
- *
- * Both reads are free — our own Postgres, no vendor, no budget — and both
- * **name the neighbouring records and give their ids**, because that is what
- * turns "I need an identifier" into a second tool call.
- */
-
-/** How much of a body to hand back. Enough to read a signature block. */
 const BODY_LIMIT = 4000;
 
 export type AccountThread = {
 	subject: string | null;
-	/** Whose thread it is, so a company-wide read is still attributable. */
 	contact: { id: string; name: string } | null;
 	messageCount: number;
 	lastMessageAt: string;
@@ -56,7 +40,6 @@ export type CompanyPerson = {
 	lastActivityAt: string | null;
 	threads: number;
 	meetings: number;
-	/** Still named after their email address — nobody has worked out who they are. */
 	needsIdentity: boolean;
 };
 
@@ -101,14 +84,6 @@ export type CompanyHistory = {
 	};
 };
 
-/**
- * Everything we know about an account: who works there, what is being sold to
- * them, and every word exchanged with any of them.
- *
- * The people list is the point. A company session that cannot name its own
- * contacts spends its first turn asking the rep for a cuid, and a rep who has
- * the record open on screen is being asked to do the join by hand.
- */
 export async function readCompanyHistory(
 	companyId: string,
 	options: {
@@ -136,10 +111,6 @@ export async function readCompanyHistory(
 
 	if (!company) return null;
 
-	// A thread or a meeting is stamped with the company when the sync can
-	// resolve one, but it is only ever stamped with the contact when the
-	// counterparty was already on file — so both paths are checked. Missing the
-	// second reads as an account nobody has ever emailed.
 	const belongsToCompany = { OR: [{ companyId }, { contact: { companyId } }] };
 
 	const [people, deals, threads, meetings, notes, lastInbound, counts] =
@@ -319,7 +290,6 @@ export type DealHistory = {
 		email: string | null;
 		role: string | null;
 	}[];
-	/** Every stage this deal has been through, oldest first. */
 	stageHistory: { from: string | null; to: string | null; at: string }[];
 	threads: AccountThread[];
 	meetings: AccountMeeting[];
@@ -331,18 +301,9 @@ export type DealHistory = {
 		nextMeetingAt: string | null;
 		daysSinceLastActivity: number | null;
 	};
-	/** Why the correspondence here is the account's and not the deal's. */
 	note: string;
 };
 
-/**
- * Where a deal actually stands, as opposed to what its stage field says.
- *
- * The two answers differ often enough to be the reason this exists: a deal
- * sitting in `CONTRACT_SENT` for six weeks with no inbound reply is not a
- * contract-sent deal, and the only way to know is to read the stage clock, the
- * last reply and the next meeting together.
- */
 export async function readDealHistory(
 	dealId: string,
 	options: { threads?: number; messagesPerThread?: number } = {},
@@ -384,11 +345,6 @@ export async function readDealHistory(
 
 	const contactIds = deal.contacts.map(({ contact }) => contact.id);
 
-	// Email and calendar are filed against a person and a company, never against
-	// a deal — Google has no idea our deals exist. So the correspondence here is
-	// the account's, narrowed to the people on the deal where there are any. The
-	// return says so rather than letting the agent infer that every thread it is
-	// reading was about this deal.
 	const relatedThreads =
 		contactIds.length > 0
 			? {
@@ -516,7 +472,6 @@ export async function readDealHistory(
 	};
 }
 
-/** The stages that are still in play. */
 function isOpen(stage: string): boolean {
 	return (
 		stage !== "CLOSED_WON" &&
@@ -525,13 +480,6 @@ function isOpen(stage: string): boolean {
 	);
 }
 
-/**
- * Typed notes on the timeline, without the email and meeting projections.
- *
- * Every thread and every event already lands on the timeline as an `Activity`,
- * so including those types here would hand the same conversation back twice —
- * once as a note saying an email happened, and once as the email.
- */
 async function recentNotes(
 	where: { companyId: string } | { dealId: string },
 ): Promise<AccountNote[]> {

@@ -2,24 +2,6 @@ import { Skeleton } from "@crm/ui/components/skeleton";
 import { cn } from "@crm/ui/lib/utils";
 import type * as React from "react";
 
-/**
- * Reusable, server-safe dashboard layout primitives. They establish their own
- * container-query context so the same grids reflow correctly regardless of
- * where the dashboard is mounted — sidebar open or not.
- *
- * Compose them as:
- *   <DashboardSection title="Overview">
- *     <StatGroup>{stats}</StatGroup>
- *     <DashboardRow>{hero}{aside}</DashboardRow>
- *   </DashboardSection>
- */
-
-/**
- * An elevated KPI strip: one bordered surface holding several {@link StatCard}s
- * separated by hairline dividers (stacked + horizontal on narrow widths, a
- * single divided row on wide). This is the premium alternative to a row of
- * standalone boxes — see the surfaces guideline.
- */
 function StatGroup({
 	className,
 	children,
@@ -66,11 +48,6 @@ function DashboardGrid({
 	);
 }
 
-/**
- * A 2-up content row that collapses to a single column on narrow widths.
- * By default the first child takes ~2/3 (the hero chart) and the second ~1/3
- * (an aside). Pass `split="even"` for a 1:1 layout.
- */
 function DashboardRow({
 	className,
 	split = "hero",
@@ -93,12 +70,6 @@ function DashboardRow({
 	);
 }
 
-/**
- * A bordered, subtly elevated surface for a single chart, with an optional
- * header (title / description / action) and footer. The body stretches so
- * sibling cards in a {@link DashboardRow} stay the same height. Pair with the
- * client chart wrappers in `dashboard-chart.tsx`.
- */
 function ChartCard({
 	className,
 	title,
@@ -205,11 +176,6 @@ function DashboardSection({
 	);
 }
 
-/**
- * A layout-matched loading state for the default dashboard composition
- * (KPI strip + hero/aside chart row). Use as a `<Suspense>` fallback so the
- * page paints instantly while server data streams in.
- */
 function DashboardSkeleton({
 	stats = 4,
 	className,

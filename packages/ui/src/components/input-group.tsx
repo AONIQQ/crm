@@ -21,15 +21,6 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 	);
 }
 
-/**
- * `cursor-text` and click-to-focus belong to the inline aligns only.
- *
- * An inline addon is the padding either side of a field — a currency symbol, a
- * search glyph — so clicking it should behave as if you clicked the field. A
- * block addon is a toolbar under a rule, and giving a row of toggle buttons an
- * I-beam cursor that focuses something else when you miss one is a small lie
- * about what the row is.
- */
 const inputGroupAddonVariants = cva(
 	"flex h-auto items-center justify-center gap-2 py-1.5 text-xs font-medium text-muted-foreground select-none group-data-[disabled=true]/input-group:opacity-50 [&>kbd]:rounded-none [&>svg:not([class*='size-'])]:size-4",
 	{
@@ -140,9 +131,6 @@ function InputGroupInput({
 
 function InputGroupTextarea({
 	className,
-	// One line until there is more than one line in it. A group exists to put
-	// controls around a field, and a field that opens four rows tall pushes its
-	// own toolbar off the bottom of whatever it sits in.
 	size = "sm",
 	...props
 }: React.ComponentProps<typeof Textarea>) {

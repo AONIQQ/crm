@@ -2,8 +2,6 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { isWorkspaceEmail } from "@crm/auth/workspace";
 import { externalParticipants } from "../src/google/participants";
 
-// The allow-list is read from the environment on demand, so a test sets it the
-// same way a deployment does. Nothing here depends on whose CRM this is.
 beforeEach(() => {
 	process.env.ALLOWED_SIGN_IN = "acme.com";
 });
@@ -33,8 +31,6 @@ describe("isWorkspaceEmail", () => {
 	});
 
 	it("is not fooled by a lookalike domain", () => {
-		// The boundary is a dot, not a substring — otherwise anyone could
-		// register acme.com.evil.com and walk into a private CRM.
 		for (const email of [
 			"a@acme.com.evil.com",
 			"a@notacme.com",
@@ -46,16 +42,11 @@ describe("isWorkspaceEmail", () => {
 	});
 
 	it("fails closed when nothing is allowed", () => {
-		// An unset list must admit nobody. The alternative — treating "no list"
-		// as "anyone" — is a CRM full of customer data behind a sign-in that
-		// accepts every Google account on earth.
 		process.env.ALLOWED_SIGN_IN = "";
 		expect(isWorkspaceEmail("lewis@acme.com")).toBe(false);
 	});
 
 	it("admits a single address, for a one-person install", () => {
-		// A solo self-hoster on a consumer mailbox has no domain to name, and
-		// listing `gmail.com` would be an open door.
 		process.env.ALLOWED_SIGN_IN = "lewis@gmail.com";
 
 		expect(isWorkspaceEmail("lewis@gmail.com")).toBe(true);
@@ -72,8 +63,6 @@ describe("isWorkspaceEmail", () => {
 });
 
 describe("internal addresses never become leads", () => {
-	// Empty sets: proves the workspace domain is excluded on its own, not
-	// because a colleague happens to be a CRM user yet.
 	const options = {
 		ourDomains: new Set(["acme.com"]),
 		ourAddresses: new Set<string>(),
@@ -94,8 +83,6 @@ describe("internal addresses never become leads", () => {
 	});
 
 	it("stores nothing for a wholly internal thread", () => {
-		// No external side means the sync drops the thread entirely — an internal
-		// conversation is never written to the CRM.
 		expect(
 			externalParticipants(
 				[

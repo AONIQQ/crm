@@ -3,14 +3,6 @@ import { db } from "@crm/db";
 import type { Evidence } from "../agent/lib/evidence";
 import { recordFact, writeBrief } from "../agent/lib/facts";
 
-/**
- * The fact store against a real database.
- *
- * Every rule in here is one that used to live in a prompt, so testing them
- * against Postgres rather than a mock is the point: "never overwrite a human"
- * is only true if the transaction says so.
- */
-
 const suffix = process.env.TEST_RUN_ID ?? "facts-spec";
 const email = `evidence.subject.${suffix}@example.test`;
 
@@ -71,7 +63,6 @@ describe("recordFact", () => {
 			where: { id: contactId },
 			select: { twitterUrl: true },
 		});
-		// The suggestion exists; the field does not have it.
 		expect(contact?.twitterUrl).toBeNull();
 	});
 

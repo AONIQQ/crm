@@ -8,16 +8,6 @@ import {
 	sessionPreamble,
 } from "../agent/lib/preamble";
 
-/**
- * What each kind of session is told before it speaks.
- *
- * Three records, three conversations — and the assertions that matter are the
- * ones about **ids**. A preamble that names a neighbouring record without its
- * id is the exact state the agent was in when it asked a rep to paste a
- * contact id off the screen in front of them, and when it reported that a
- * contact with an employer had no company available.
- */
-
 const suffix = process.env.TEST_RUN_ID ?? "preamble-spec";
 const domain = `fernhill-${suffix}.test`;
 
@@ -112,8 +102,6 @@ describe("companyPreamble", () => {
 	it("names every contact it lists, with their id", async () => {
 		const { markdown } = await companyPreamble(companyId, rep);
 
-		// The fix, stated as a test: the agent can address these people without
-		// asking anyone for anything.
 		expect(markdown).toContain(
 			`Paula Marchetti — Growth Specialist \`${paulaId}\``,
 		);
@@ -140,8 +128,6 @@ describe("contactPreamble", () => {
 	it("states the company id, not just its name", async () => {
 		const { markdown, focus } = await contactPreamble(paulaId, rep);
 
-		// Without this the agent could see where somebody worked and still
-		// report that there was no company available to look at.
 		expect(markdown).toContain(`company id \`${companyId}\``);
 		expect(focus).toEqual({ contactId: paulaId, companyId });
 	});
@@ -172,8 +158,6 @@ describe("dealPreamble", () => {
 		expect(markdown).toContain(`deal id \`${dealId}\``);
 		expect(markdown).toContain(`company id \`${companyId}\``);
 		expect(markdown).toContain(`Champion \`${paulaId}\``);
-		// A deal has no fields of its own, so anything learned is filed against
-		// the account.
 		expect(focus).toEqual({ companyId });
 	});
 });

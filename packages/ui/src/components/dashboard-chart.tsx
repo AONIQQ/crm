@@ -28,27 +28,15 @@ import {
 type Datum = Record<string, number | string | null>;
 
 type CartesianProps = {
-	/** Rows to plot, already shaped for the chart. */
 	data: Datum[];
-	/** Maps each series key to a label + color (use `color: "var(--chart-N)"`). */
 	config: ChartConfig;
-	/** The category (x-axis) key. */
 	xKey: string;
-	/** Which keys in `config` to draw as series. Defaults to all config keys. */
 	series?: string[];
 	className?: string;
-	/** Plot height in px. Default 200. */
 	height?: number;
-	/** Show the x-axis tick labels. Default true. */
 	showXAxis?: boolean;
-	/** Show a legend (useful for multi-series). Default false. */
 	showLegend?: boolean;
-	/** Format an x-axis tick (e.g. shorten a date). */
 	formatX?: (value: string) => string;
-	/**
-	 * Format a plotted value in the tooltip. Pass this whenever the series is
-	 * money or a rate — a raw `1250000` in the tooltip tells a reader nothing.
-	 */
 	formatValue?: (value: number | string) => string;
 };
 
@@ -78,12 +66,6 @@ const X_AXIS_PROPS = {
 	tickMargin: 12,
 } as const;
 
-/**
- * With a full-bleed plot (zero horizontal margin) the first and last category
- * labels sit at the very edges, where a centered label clips against the card.
- * Anchor the edge labels inward (start / end) and center the rest. Recharts
- * clones this element per tick, injecting the computed coordinates + index.
- */
 function EdgeTick({
 	x,
 	y,
@@ -333,10 +315,6 @@ function AreaTrend({
 	);
 }
 
-/**
- * Grouped/stacked bar chart for discrete buckets (per-month counts, breakdowns).
- * Same prop shape as {@link AreaTrend} for drop-in consistency.
- */
 function BarTrend({
 	data,
 	config,
@@ -461,11 +439,6 @@ function BarStat({
 	);
 }
 
-/**
- * Donut chart with an optional bold value in the middle and a faint track
- * behind the data — ideal for a single-metric breakdown (members by role,
- * findings by severity, plan usage).
- */
 function DonutStat({
 	data,
 	className,
@@ -507,7 +480,6 @@ function DonutStat({
 						/>
 					}
 				/>
-				{/* Faint track so a partial ring still reads as a full circle. */}
 				<Pie
 					data={[{ value: 1 }]}
 					dataKey="value"

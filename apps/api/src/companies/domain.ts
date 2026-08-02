@@ -1,21 +1,9 @@
-/**
- * Reduces whatever a human typed to the bare host: "https://www.Stripe.com/pricing"
- * → "stripe.com".
- *
- * `Company.domain` is unique and is the enrichment key, so the same company
- * typed three ways has to collapse to one value — otherwise the constraint
- * never fires and we pay Context.dev twice for the same lookup.
- *
- * Returns `null` for anything that is not plausibly a hostname, so a typo
- * clears the field rather than creating a junk record that blocks the real one.
- */
 export function normalizeDomain(
 	input: string | null | undefined,
 ): string | null {
 	const trimmed = input?.trim().toLowerCase();
 	if (!trimmed) return null;
 
-	// `new URL` needs a scheme, and bare "stripe.com" is the common case.
 	const withScheme = /^[a-z][a-z0-9+.-]*:\/\//.test(trimmed)
 		? trimmed
 		: `https://${trimmed}`;
@@ -29,12 +17,9 @@ export function normalizeDomain(
 
 	const bare = host.replace(/^www\./, "");
 
-	// At least one dot, and nothing but host characters — enough to reject
-	// "localhost", "my company" and a pasted email address.
 	return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(bare) ? bare : null;
 }
 
-/** The domain part of a work email, or `null` for a free or malformed address. */
 export function domainFromEmail(
 	email: string | null | undefined,
 ): string | null {
@@ -44,10 +29,6 @@ export function domainFromEmail(
 	return domain && !FREE_EMAIL_DOMAINS.has(domain) ? domain : null;
 }
 
-/**
- * Addresses that say nothing about where someone works. Creating a "Gmail"
- * company because a lead used a personal address is the classic CRM junk row.
- */
 const FREE_EMAIL_DOMAINS = new Set([
 	"gmail.com",
 	"googlemail.com",

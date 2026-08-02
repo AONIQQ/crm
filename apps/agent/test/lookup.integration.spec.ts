@@ -2,15 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { DealStage, db } from "@crm/db";
 import { searchCrm } from "../agent/lib/lookup";
 
-/**
- * Finding a record from what a person would type.
- *
- * The behaviour under test is the one whose absence was visible to a user: a
- * rep asked about "the Comp AI contact" and was told to paste an email
- * address, because every lookup the agent had took an id. Each case here is a
- * phrasing that has to resolve without help.
- */
-
 const suffix = process.env.TEST_RUN_ID ?? "lookup-spec";
 const domain = `northwind-${suffix}.test`;
 const otherDomain = `brightwater-${suffix}.test`;
@@ -46,8 +37,6 @@ beforeAll(async () => {
 	});
 	brightwaterId = brightwater.id;
 
-	// Two Marchettis at two companies: the ambiguity the tool is supposed to
-	// hand back rather than resolve.
 	const paula = await db.contact.create({
 		data: {
 			firstName: "Paula",
@@ -116,8 +105,6 @@ describe("searchCrm", () => {
 	it("finds the people at a company named in the query", async () => {
 		const result = await searchCrm(`Northwind ${suffix}`);
 
-		// "the Comp AI contact", in the shape it actually arrives in. Naming the
-		// employer has to reach the person, or the agent is back to asking.
 		expect(result.contacts.map((hit) => hit.id)).toContain(paulaId);
 	});
 
@@ -127,7 +114,6 @@ describe("searchCrm", () => {
 		expect(result.contacts.map((hit) => hit.id).sort()).toEqual(
 			[paulaId, peterId].sort(),
 		);
-		// Each carries what a rep needs to choose between them in one glance.
 		expect(result.contacts.every((hit) => hit.company !== null)).toBe(true);
 		expect(result.contacts.map((hit) => hit.title)).toContain("Controller");
 	});
@@ -171,9 +157,6 @@ describe("searchCrm", () => {
 	it("ranks a whole-phrase match above rows sharing only one word", async () => {
 		const result = await searchCrm(`Paula Marchetti`);
 
-		// The SQL is an OR across the words — it has to be, or a contact filed
-		// as "P. Marchetti" would be missed — so Peter comes back too. He must
-		// not come back first.
 		expect(result.contacts[0]?.id).toBe(paulaId);
 	});
 

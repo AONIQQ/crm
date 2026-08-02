@@ -5,16 +5,8 @@ import { type RequestContext, runInRequestContext } from "./request-context";
 
 const REQUEST_ID_HEADER = "x-request-id";
 
-/** Liveness probes are the loudest thing in the log and the least interesting. */
 const QUIET_PATHS = new Set(["/health"]);
 
-/**
- * Opens the request context and writes one access line per request.
- *
- * Deliberately logs no headers, query string or body: this is a CRM, and all
- * three routinely carry credentials and personal data. Anything worth logging
- * from a payload should be logged explicitly by the handler that understands it.
- */
 @Injectable()
 export class RequestLoggerMiddleware implements NestMiddleware {
 	private readonly logger = new Logger("HTTP");
@@ -32,8 +24,6 @@ export class RequestLoggerMiddleware implements NestMiddleware {
 
 		runInRequestContext(context, () => {
 			response.on("finish", () => {
-				// `finish` is emitted from the socket's async context rather than
-				// ours, so the context is re-entered explicitly, not inherited.
 				runInRequestContext(context, () => {
 					this.logCompleted(request, response, context, startedAt);
 				});
@@ -52,8 +42,6 @@ export class RequestLoggerMiddleware implements NestMiddleware {
 		const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
 		const { statusCode } = response;
 
-		// The auth guard resolves the session long after the context is opened,
-		// so this is the first point at which the user is reliably known.
 		const userId = sessionUserId(request);
 
 		if (userId) {
@@ -89,15 +77,9 @@ export class RequestLoggerMiddleware implements NestMiddleware {
 	}
 }
 
-/**
- * A proxy or upstream service may already have stamped the request; reusing its
- * id is what makes a trace span more than one hop.
- */
 function incomingRequestId(request: Request): string | undefined {
 	const header = request.get(REQUEST_ID_HEADER);
 
-	// Untrusted input that ends up in every log line for this request, so it is
-	// length-capped and stripped of anything that could forge a second field.
 	if (!header || header.length > 200 || !/^[\w.:-]+$/.test(header)) {
 		return undefined;
 	}
@@ -107,14 +89,6 @@ function incomingRequestId(request: Request): string | undefined {
 
 const sharedInstance = new RequestLoggerMiddleware();
 
-/**
- * Better Auth mounts its handler directly onto the HTTP adapter while its
- * module is being configured — before Nest applies anything registered through
- * `MiddlewareConsumer` — so `/api/auth/*` terminates before the class above
- * ever runs. Its `middleware` option is the supported way in, and it is only
- * invoked for requests Better Auth itself will handle, so nothing is logged
- * twice.
- */
 export function logAuthRoute(
 	request: Request,
 	response: Response,

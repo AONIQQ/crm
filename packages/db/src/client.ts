@@ -1,5 +1,3 @@
-// First, and before anything reads `process.env`: every process that talks to
-// the database gets here, so this is where the repo-root `.env` is picked up.
 import "@crm/env/load";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -13,22 +11,15 @@ if (!connectionString) {
 	);
 }
 
-/** A log line emitted by the Prisma engine, normalised for whichever sink is installed. */
 export interface PrismaLogRecord {
 	level: Prisma.LogLevel;
 	message: string;
-	/** The Prisma emitter, e.g. `quaint::connector::metrics`. */
 	target: string;
-	/** Statement timing. Present on `query` records only. */
 	durationMs?: number;
 }
 
 export type PrismaLogSink = (record: PrismaLogRecord) => void;
 
-/**
- * Seeds, one-off scripts and the Next.js app have no application logger to hand,
- * so database problems still have to surface somewhere by default.
- */
 const consoleSink: PrismaLogSink = ({ level, message, target, durationMs }) => {
 	const suffix = durationMs === undefined ? "" : ` (+${durationMs}ms)`;
 	const line = `[prisma:${level}] ${message}${suffix} [${target}]`;
@@ -44,21 +35,10 @@ const consoleSink: PrismaLogSink = ({ level, message, target, durationMs }) => {
 
 let sink: PrismaLogSink = consoleSink;
 
-/**
- * Redirect Prisma engine logs. The API points this at the Nest logger so
- * database logs are formatted and correlated like every other log line.
- * Pass `null` to restore the console sink.
- */
 export function setPrismaLogSink(next: PrismaLogSink | null): void {
 	sink = next ?? consoleSink;
 }
 
-/**
- * Prisma logs every statement it runs when `query` is enabled, which buries
- * anything worth reading under a wall of `SELECT`s — so it is opt-in rather
- * than on in development. Bound parameters are dropped even when it is on:
- * they routinely carry session tokens and personal data.
- */
 const logQueries = process.env.PRISMA_LOG_QUERIES === "true";
 
 const logDefinitions: Prisma.LogDefinition[] = [
@@ -78,8 +58,6 @@ const createPrismaClient = () => {
 		log: logDefinitions,
 	});
 
-	// Every level is subscribed; the ones missing from `logDefinitions` simply
-	// never fire, so the engine does no work for logs nobody asked for.
 	client.$on("error", ({ message, target }) => {
 		sink({ level: "error", message, target });
 	});

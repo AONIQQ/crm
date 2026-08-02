@@ -10,6 +10,7 @@ import {
 import { requireSession } from "@/lib/session";
 import { HydrateClient } from "@/lib/trpc/hydrate";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
+import { AgentModel } from "./agent-model";
 import { GoogleConnection } from "./google-connection";
 
 export const metadata: Metadata = {
@@ -22,9 +23,12 @@ export default async function SettingsPage() {
 	const trpc = getServerTrpc();
 	const queryClient = getServerQueryClient();
 
-	// Awaited: the whole page is this one query, and rendering "Not connected"
-	// for a beat before flipping to "Connected" is worse than waiting for it.
-	await queryClient.prefetchQuery(trpc.google.status.queryOptions());
+	await Promise.all([
+		queryClient.prefetchQuery(trpc.google.status.queryOptions()),
+		queryClient.prefetchQuery(trpc.settings.agentModel.queryOptions()),
+	]);
+
+	void queryClient.prefetchQuery(trpc.settings.modelCatalog.queryOptions());
 
 	return (
 		<PageShell>
@@ -39,7 +43,10 @@ export default async function SettingsPage() {
 
 			<PageShellContent>
 				<HydrateClient>
-					<GoogleConnection />
+					<div className="flex max-w-3xl flex-col gap-6">
+						<GoogleConnection />
+						<AgentModel />
+					</div>
 				</HydrateClient>
 			</PageShellContent>
 		</PageShell>

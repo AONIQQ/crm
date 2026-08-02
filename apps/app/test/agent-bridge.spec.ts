@@ -1,19 +1,8 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { verifyJwtHmac } from "eve/channels/auth";
 
-/**
- * The token the contact sheet uses to reach the agent.
- *
- * This is the security boundary of the whole panel: the agent can read every
- * email in the CRM, and this token is what says a particular signed-in rep is
- * asking. So the test is a real round trip — minted by the app, verified by
- * eve's own verifier with the same configuration `agent/channels/eve.ts`
- * uses — rather than an assertion about what I believe the format to be.
- */
-
 const SECRET = "test-secret-at-least-long-enough-to-be-a-secret";
 
-/** Must match `apps/agent/agent/channels/eve.ts`. */
 const CONFIG = {
 	algorithm: "HS256",
 	audiences: ["crm-agent"],
@@ -43,16 +32,6 @@ describe("mintBridgeToken", () => {
 	});
 
 	it("names the rep, so the agent knows a person is driving", async () => {
-		// The whole reason this is not a shared service credential: the approval
-		// policy on the agent side behaves differently for a person than for the
-		// cron principal, and `ask_question` only makes sense when someone is
-		// there to answer.
-		//
-		// The *subject* is the rep. eve's own principal mapping labels an HMAC
-		// token as a service and namespaces its id (`crm-app:user_123`), which is
-		// the right default for a machine credential and wrong for this — so the
-		// agent re-maps it in `repFromCrm`, and `channel-auth.spec.ts` covers that
-		// half.
 		const token = await mintBridgeToken(rep);
 		const result = await verifyJwtHmac(token, CONFIG);
 

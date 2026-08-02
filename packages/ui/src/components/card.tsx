@@ -73,15 +73,6 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
 	);
 }
 
-/**
- * A card body pinned to one height, with its rows scrolling inside.
- *
- * Two lists side by side on a dashboard hold different numbers of rows, so
- * left to themselves one panel ends level with nothing and the page below
- * jumps whenever the shorter list gains a row. A set height fixes both the
- * pair and the page. Pair with `SimpleTable variant="panel"` so the column
- * header stays pinned while the rows move under it.
- */
 function CardPanel({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
@@ -95,10 +86,6 @@ function CardPanel({ className, ...props }: React.ComponentProps<"div">) {
 	);
 }
 
-/**
- * The empty state for a {@link CardPanel}: centred in the height the panel
- * holds open, rather than a line of text stranded at the top of it.
- */
 function CardPanelEmpty({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div

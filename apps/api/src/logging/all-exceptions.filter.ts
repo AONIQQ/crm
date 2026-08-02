@@ -9,14 +9,6 @@ import {
 import type { Request, Response } from "express";
 import { getRequestContext } from "./request-context";
 
-/**
- * Logs every exception with its request context and returns a consistent body.
- *
- * Nest's built-in filter logs unhandled errors, but without the request id —
- * which is the one field that makes a production stack trace actionable. The
- * response shape is left alone apart from `requestId`, so an operator can quote
- * the id from a failed call and land on the exact log line.
- */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
 	private readonly logger = new Logger("ExceptionsHandler");
@@ -38,8 +30,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
 		this.log(exception, status, request);
 
-		// A streamed or already-committed response can only be logged, not
-		// rewritten.
 		if (response.headersSent) {
 			return;
 		}
@@ -64,8 +54,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
 			return;
 		}
 
-		// The access log already records 4xx as a warning; this adds the reason
-		// for anyone who turns debug on, without doubling up in production.
 		this.logger.debug(payload);
 	}
 }
@@ -86,8 +74,6 @@ function body(
 	const withRequestId = requestId ? { requestId } : {};
 
 	if (!(exception instanceof HttpException)) {
-		// Never let an unexpected error's message reach the client: it is the
-		// classic way internals leak. The log has the detail.
 		return {
 			statusCode: status,
 			message: "Internal server error",

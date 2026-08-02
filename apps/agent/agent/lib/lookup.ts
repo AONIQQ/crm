@@ -1,22 +1,6 @@
 import { db } from "@crm/db";
 import { domainOf, normalise } from "./names";
 
-/**
- * Turning what a rep said into the record they meant.
- *
- * This is the gap that produced "I need an actual identifier: a contact's
- * name, email address, or a contact ID". The agent had a lookup by id and a
- * lookup by email and nothing that took the words a person would actually
- * type, so a rep sitting on the Comp AI record — with the answer on screen —
- * was asked to go and find a cuid.
- *
- * Free, local, and deliberately not clever: containment against the fields a
- * human would have searched, then a score that puts exact matches first. No
- * fuzzy distance, because "Northwind" matching "Northwind Savings Group" is
- * useful and "Marchetti" matching "Marchetta" is a wrong record in a CRM.
- * Ambiguity is returned, not resolved — four Marchettis is an answer.
- */
-
 export type RecordKind = "contact" | "company" | "deal";
 
 export type ContactHit = {
@@ -59,13 +43,6 @@ export type SearchResult = {
 	total: number;
 };
 
-/**
- * Everything in the CRM that could be what they meant.
- *
- * An address searches for the person who owns it *and* the company on its
- * domain, because "who is katya@fernhill.com" and "what is Fernhill" are the
- * same question asked from two ends.
- */
 export async function searchCrm(
 	query: string,
 	options: { kinds?: RecordKind[]; limit?: number } = {},
@@ -80,8 +57,6 @@ export async function searchCrm(
 
 	const wants = (kind: RecordKind) => kinds.includes(kind);
 	const email = term.includes("@") ? term.toLowerCase() : null;
-	// A bare domain is a company query in every case that matters: nobody types
-	// "fernhill.com" hoping for a deal called Fernhill.com.
 	const domain = email ? domainOf(email) : bareDomain(term);
 	const words = term.split(/\s+/).filter((word) => word.length >= 2);
 
@@ -119,8 +94,6 @@ async function searchContacts(
 					? [{ email: { equals: email, mode: "insensitive" as const } }]
 					: []),
 				...contains,
-				// The whole phrase against the company, so "Comp AI" finds the
-				// people there rather than only a person called Comp.
 				{ company: { name: { contains: term, mode: "insensitive" as const } } },
 			],
 		},
@@ -250,21 +223,6 @@ async function searchDeals(
 		.map((row) => row.hit);
 }
 
-/**
- * How well a row answers the query: exact, then prefix, then containment, and
- * only then the individual words.
- *
- * The two tiers matter because the SQL above is an `OR` across every word — it
- * has to be, or "Paula Marchetti" would miss a contact filed as "P. Marchetti"
- * — which means a two-word query drags in everything matching either half.
- * Whole-phrase hits score at least 1 and word hits always score below it, so
- * the row a person meant is never buried under the rows that share a word with
- * it.
- *
- * Ordering happens here rather than in Postgres because the interesting rank
- * is across three tables, and `similarity()` would mean an extension a
- * self-hoster has to install. These result sets are tens of rows.
- */
 function score(term: string, fields: string[]): number {
 	const needle = normalise(term);
 	if (!needle) return 0;
@@ -289,7 +247,6 @@ function score(term: string, fields: string[]): number {
 	return words.filter((word) => hay.includes(word)).length / words.length;
 }
 
-/** `fernhill.com` → `fernhill.com`; `Fernhill` → null. */
 function bareDomain(term: string): string | null {
 	const candidate = term
 		.trim()

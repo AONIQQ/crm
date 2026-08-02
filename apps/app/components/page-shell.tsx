@@ -22,10 +22,6 @@ function PageShell({ className, ...props }: React.ComponentProps<"div">) {
 	);
 }
 
-/**
- * No breadcrumbs: the app is five lists and a sheet, so there is never a trail
- * to draw. A record's own trail lives in the sheet, where the nesting is.
- */
 function PageShellHeader({
 	className,
 	children,

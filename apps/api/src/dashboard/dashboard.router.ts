@@ -13,11 +13,6 @@ export class DashboardRouter {
 		@Inject(DashboardService) private readonly dashboard: DashboardService,
 	) {}
 
-	/**
-	 * Everything on the overview: closed-won and the rolling rates behind it, the
-	 * open pipeline by stage, six months of won against created, what is due to
-	 * close, the biggest open deals, overdue tasks and recent activity.
-	 */
 	@Query({ input: dashboardSummaryInput })
 	async summary(
 		@Ctx() ctx: AuthedTrpcContext,

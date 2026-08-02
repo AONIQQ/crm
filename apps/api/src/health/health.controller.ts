@@ -8,7 +8,6 @@ import {
 import { AllowAnonymous } from "@thallesp/nestjs-better-auth";
 import { InjectDatabase } from "../database/database.constants";
 
-/** A `SELECT 1` slower than this means the pool or the network is in trouble. */
 const SLOW_PROBE_MS = 250;
 
 @Controller("health")
@@ -27,8 +26,6 @@ export class HealthController {
 		} catch (error) {
 			this.logger.error(
 				{ message: "Database health check failed" },
-				// Passed as the stack argument: handing Nest the error object
-				// instead prints it as a second message and drops the trace.
 				error instanceof Error ? error.stack : String(error),
 			);
 			throw new ServiceUnavailableException({

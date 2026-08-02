@@ -8,23 +8,9 @@ export type EnrichmentEvent = {
 	contactId?: string | null;
 	subject: string;
 	body?: string | null;
-	/** Where the facts came from, and what changed. Rendered on the entry. */
 	meta?: Record<string, unknown>;
 };
 
-/**
- * Writes an `ENRICHMENT` activity when something is created or filled in
- * automatically.
- *
- * Without this the agents are invisible: a company appears with a logo and an
- * industry nobody typed, a contact renames itself overnight, and the only way
- * to find out when or why is to read the server logs. A record that changes on
- * its own has to say so on its own timeline — that is the difference between an
- * assistant and a haunted database.
- *
- * Deliberately the same `ENRICHMENT` type the research brief already uses, so
- * one filter shows everything the machines did.
- */
 @Injectable()
 export class EnrichmentLogService {
 	constructor(
@@ -32,13 +18,6 @@ export class EnrichmentLogService {
 		private readonly stamp: ActivityStampService,
 	) {}
 
-	/**
-	 * Records one event, attributed to a system author.
-	 *
-	 * `Activity.createdById` is required, so an automatic write borrows the
-	 * record's owner and falls back to any user. `meta.automated` marks it, and
-	 * the timeline renders that as "via …" rather than as something a person did.
-	 */
 	async record(event: EnrichmentEvent): Promise<string | null> {
 		const author = await this.authorFor(event);
 		if (!author) return null;
@@ -65,7 +44,6 @@ export class EnrichmentLogService {
 		return activity.id;
 	}
 
-	/** The owner of whatever this is about, or any user. */
 	private async authorFor(event: EnrichmentEvent): Promise<string | null> {
 		if (event.contactId) {
 			const contact = await this.db.contact.findUnique({
@@ -88,7 +66,6 @@ export class EnrichmentLogService {
 	}
 }
 
-/** "logo, industry, description" — what a lookup actually filled in. */
 export function describeFilled(fields: readonly string[]): string | null {
 	if (fields.length === 0) return null;
 	if (fields.length === 1) return `Filled in ${fields[0]}.`;

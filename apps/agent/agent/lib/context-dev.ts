@@ -1,16 +1,6 @@
 import ContextDev from "context.dev";
 import { APIError } from "context.dev/core/error";
 
-/**
- * Context.dev: brand data, web extraction and web search.
- *
- * Moved here from `apps/api/src/enrichment` unchanged in behaviour. It is the
- * same client with the Nest scaffolding taken off — the API is not allowed to
- * know this vendor exists, and a class that needs a DI container is awkward in
- * a runtime that does not have one.
- */
-
-/** The Context.dev `brand` object, narrowed to the parts we map. */
 export type Brand = {
 	domain?: string | null;
 	title?: string | null;
@@ -22,10 +12,8 @@ export type Brand = {
 	logos?:
 		| {
 				url?: string | null;
-				/** "light" | "dark" | "has_opaque_background". */
 				mode?: string | null;
 				type?: string | null;
-				/** The artwork's own dominant colours — how a dark mark is detected. */
 				colors?: { hex?: string | null; name?: string | null }[] | null;
 		  }[]
 		| null;
@@ -45,19 +33,11 @@ export type Brand = {
 	} | null;
 };
 
-/**
- * Why a lookup did not produce a brand.
- *
- * `skipped` and `failed` are deliberately different: "there is nothing to find
- * for this domain" is a settled answer that should stop us retrying and cost
- * nothing, while "the call fell over" is worth another go.
- */
 export type LookupResult =
 	| { outcome: "found"; brand: Brand; raw: unknown }
 	| { outcome: "skipped"; reason: string }
 	| { outcome: "failed"; reason: string; retryable: boolean };
 
-/** One web search result, narrowed to the parts a person lookup reads. */
 export type SearchResult = {
 	url: string | null;
 	title: string | null;
@@ -65,13 +45,8 @@ export type SearchResult = {
 	markdown: string | null;
 };
 
-/** Cold lookups are p50 ≈ 7s, p90 ≈ 18s — so this is generous on purpose. */
 const TIMEOUT_MS = 60_000;
 
-/**
- * Resolved on first use rather than at import, because the agent's environment
- * is not necessarily populated at module-evaluation time.
- */
 let client: ContextDev | null | undefined;
 
 function contextDev(): ContextDev | null {
@@ -86,7 +61,6 @@ export function contextDevEnabled(): boolean {
 	return contextDev() !== null;
 }
 
-/** `POST /brand/retrieve` by domain. 10 credits, only on a successful match. */
 export async function brandByDomain(
 	domain: string,
 	maxAgeMs?: number,
@@ -99,35 +73,19 @@ export async function brandByDomain(
 	});
 }
 
-/** `POST /brand/retrieve` by work email — the domain is extracted for us. */
 export async function brandByEmail(email: string): Promise<LookupResult> {
 	return lookup({ type: "by_email", email, timeoutMS: TIMEOUT_MS });
 }
 
-/**
- * Warms the cache so a later retrieve lands sub-second. Free, and
- * fire-and-forget: the response carries no brand data.
- *
- * Paid plans only. A 403 here is a plan limit rather than a bug, and either way
- * the caller falls through to a direct retrieve — so nothing is reported.
- */
 export async function prefetch(domain: string): Promise<void> {
 	const api = contextDev();
 	if (!api) return;
 
 	try {
 		await api.utility.prefetch({ type: "brand", identifier: { domain } });
-	} catch {
-		// Deliberately silent; see above.
-	}
+	} catch {}
 }
 
-/**
- * `POST /web/extract` against a caller-defined JSON Schema.
- *
- * Used for a company brief, which is not a brand lookup — it is "read this
- * company's site and answer these questions".
- */
 export async function extract(
 	url: string,
 	schema: Record<string, unknown>,
@@ -154,13 +112,6 @@ export async function extract(
 	}
 }
 
-/**
- * `POST /web/search`.
- *
- * Accepts Google-style operators, which is what makes a person lookup *sourced*
- * rather than guessed: we search for evidence and read a name off a page,
- * instead of asking a model what "pmarchetti" probably stands for.
- */
 export async function search(
 	query: string,
 	options: { limit?: number; excludeDomains?: string[] } = {},
@@ -176,11 +127,7 @@ export async function search(
 	try {
 		const response = await api.web.search({
 			query,
-			// The API rejects anything under 10 — a smaller ask fails validation
-			// rather than returning fewer results.
 			numResults: Math.max(options.limit ?? 10, 10),
-			// Without this the results are titles and snippets only, and a name is
-			// usually in the page rather than the snippet.
 			markdownOptions: { enabled: true },
 			...(options.excludeDomains
 				? { excludeDomains: options.excludeDomains }
@@ -191,8 +138,6 @@ export async function search(
 			url: result.url ?? null,
 			title: result.title ?? null,
 			description: result.description ?? null,
-			// `code` is the per-result scrape outcome; anything but SUCCESS means
-			// `markdown` is null and the snippet is all we have.
 			markdown:
 				result.markdown?.code === "SUCCESS"
 					? (result.markdown.markdown ?? null)
@@ -225,12 +170,6 @@ async function lookup(
 	}
 }
 
-/**
- * Maps Context.dev's failures onto something the CRM can act on.
- *
- * The important distinction is which of these should leave a company retryable.
- * An unknown domain never becomes known by asking again; a timeout might.
- */
 function classify(error: unknown): LookupResult {
 	if (!(error instanceof APIError)) {
 		return { outcome: "failed", reason: describe(error), retryable: true };
@@ -238,8 +177,6 @@ function classify(error: unknown): LookupResult {
 
 	const code = errorCode(error);
 
-	// 400 covers both malformed input and "we looked, there is nothing there".
-	// Neither is billed, and neither is worth retrying.
 	if (error.status === 400) {
 		if (code === "NOT_FOUND" || code === "WEBSITE_ACCESS_ERROR") {
 			return {
@@ -253,7 +190,6 @@ function classify(error: unknown): LookupResult {
 		return { outcome: "failed", reason: describe(error), retryable: false };
 	}
 
-	// A personal or throwaway address says nothing about where someone works.
 	if (error.status === 422) {
 		return {
 			outcome: "skipped",
@@ -265,7 +201,6 @@ function classify(error: unknown): LookupResult {
 		return { outcome: "failed", reason: describe(error), retryable: false };
 	}
 
-	// Cold-cache timeouts and rate limits are the retryable ones.
 	if (error.status === 408 || error.status === 429) {
 		return { outcome: "failed", reason: describe(error), retryable: true };
 	}

@@ -2,44 +2,16 @@ import type { Db } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
-/** The records one activity can belong to. All three are stamped. */
 export type ActivityTarget = {
 	companyId?: string | null;
 	contactId?: string | null;
 	dealId?: string | null;
 };
 
-/**
- * Keeps `lastActivityAt` current on companies, contacts and deals.
- *
- * The column is denormalised because it is a **sortable** column on every list,
- * and ordering by `max(activity.createdAt)` is an aggregate over a relation that
- * Prisma cannot express — the alternative is a correlated subquery per row,
- * which would be the slowest thing on the page.
- *
- * Denormalised means it can drift, so every activity write goes through here
- * rather than each caller remembering to update three tables. There are five
- * places that write activities (the composer, stage changes, the research
- * agent, and both Google syncs); the fan-out belongs to the shape of the data,
- * not to whichever feature happened to trigger it. **A new activity writer adds
- * a `touch()` call here, not its own update.**
- *
- * Stamped with the activity's `createdAt`, not `occurredAt`: a meeting booked
- * for next month must not make a company look like it was active in the future.
- * That also matches the lateral join this replaced.
- */
 @Injectable()
 export class ActivityStampService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
-	/**
-	 * Raises `lastActivityAt` to `at` wherever it is currently older or unset.
-	 *
-	 * A conditional update rather than a read-then-write: two syncs stamping the
-	 * same company concurrently would otherwise race, and the older one could
-	 * win. Guarding in the `where` makes the operation idempotent and
-	 * order-independent, so replaying a window cannot move the value backwards.
-	 */
 	async touch(target: ActivityTarget, at: Date): Promise<void> {
 		const stale = {
 			OR: [{ lastActivityAt: null }, { lastActivityAt: { lt: at } }],
@@ -67,13 +39,6 @@ export class ActivityStampService {
 		]);
 	}
 
-	/**
-	 * Recomputes from the activity table.
-	 *
-	 * For deletes, where the value can only go *down* and `touch` — which never
-	 * lowers it — cannot help. Purging a mailbox is the case that needs it:
-	 * without this a company keeps claiming activity whose rows are gone.
-	 */
 	async recompute(target: ActivityTarget): Promise<void> {
 		if (target.companyId) {
 			const { _max } = await this.db.activity.aggregate({
@@ -109,13 +74,6 @@ export class ActivityStampService {
 		}
 	}
 
-	/**
-	 * Rebuilds every row's stamp in three statements.
-	 *
-	 * For bulk deletes, where naming the affected records would mean collecting
-	 * ids across cascades. Set-based, so it stays a few hundred milliseconds on a
-	 * table this size rather than one query per record.
-	 */
 	async recomputeAll(): Promise<void> {
 		await this.db.$transaction([
 			this.db.$executeRaw`

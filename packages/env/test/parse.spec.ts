@@ -1,11 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { parseEnv } from "../src/index";
 
-/**
- * The parser reads the one file every self-hoster edits by hand, so the cases
- * below are the ways people actually write these files rather than the ways a
- * spec says they should.
- */
 describe("parseEnv", () => {
 	it("reads plain and quoted values", () => {
 		expect(
@@ -28,8 +23,6 @@ describe("parseEnv", () => {
 	});
 
 	it("keeps a # that is part of the value", () => {
-		// Passwords contain these, and a generated secret routinely does. Only a
-		// space-hash pair starts a trailing comment.
 		expect(parseEnv("PASSWORD=pa#ssword\nPORT=3001 # the api")).toEqual({
 			PASSWORD: "pa#ssword",
 			PORT: "3001",
@@ -41,9 +34,6 @@ describe("parseEnv", () => {
 	});
 
 	it("keeps base64 padding, which openssl rand emits", () => {
-		// `openssl rand -base64 32` ends in `=` about a quarter of the time, and
-		// a parser that split on every `=` would silently truncate the secret —
-		// producing a session cookie the other process cannot verify.
 		const secret = "6oXI/PGPx8OGGiVz7zW2EODV6LcKmtyALiR+RvG2yc8=";
 		expect(parseEnv(`BETTER_AUTH_SECRET="${secret}"`)).toEqual({
 			BETTER_AUTH_SECRET: secret,

@@ -8,38 +8,16 @@ const buttonVariants = cva(
 	{
 		variants: {
 			variant: {
-				/*
-				 * Hover and press darken the fill rather than fading it. `/80`
-				 * let the page show through, so a primary button sat on a grey
-				 * row and a white one hovered to two different colours.
-				 */
 				default:
 					"bg-primary text-primary-foreground shadow-2xs hover:bg-[color-mix(in_oklch,var(--primary),black_12%)] active:bg-[color-mix(in_oklch,var(--primary),black_22%)] active:shadow-none",
-				/*
-				 * A solid fill in dark, not `bg-input/30`. A translucent control
-				 * takes the colour of whatever is behind it, so the same filter
-				 * button was one shade on the page and another on a panel.
-				 */
 				outline:
 					"border-border bg-background shadow-2xs hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-muted dark:hover:bg-accent",
 				secondary:
 					"bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
 				ghost:
 					"hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
-				/*
-				 * A solid fill, not a tint. Fills are reserved for the two ends
-				 * of the spectrum — the action you want and the one you cannot
-				 * undo — so destructive has to be unmistakable at a glance.
-				 */
 				destructive:
 					"bg-destructive text-destructive-foreground shadow-2xs hover:bg-[color-mix(in_oklch,var(--destructive),black_12%)] active:bg-[color-mix(in_oklch,var(--destructive),black_22%)] active:shadow-none focus-visible:ring-destructive/50",
-				/*
-				 * The inverted chip: the page's own text colour as a fill, and the
-				 * page's background as the label. It is the highest-contrast button
-				 * available in either theme without spending green or red — white on
-				 * dark, near-black on light — so it carries the one action inside a
-				 * neutral panel that has no colour of its own to lean on.
-				 */
 				contrast:
 					"bg-foreground text-background shadow-2xs hover:bg-foreground/90 active:bg-foreground/80 active:shadow-none",
 				link: "text-primary underline-offset-4 hover:underline",

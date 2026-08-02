@@ -20,6 +20,7 @@ import { conversationListInput, conversationEventsInput, conversationSaveInput, 
 import { dashboardSummaryInput } from "../dashboard/dashboard.contracts";
 import { dealListInput, dealIdInput, dealCreateInput, dealUpdateArgs, setStageInput } from "../deals/deals.contracts";
 import { setAutoCreateInput, suppressDomainInput, threadInput, calendarEventInput } from "../google/google.contracts";
+import { setAgentModelInput } from "../settings/settings.contracts";
 import type { ActivitiesRouter } from "../activities/activities.router";
 import type { CompaniesRouter } from "../companies/companies.router";
 import type { ContactsRouter } from "../contacts/contacts.router";
@@ -28,6 +29,7 @@ import type { DashboardRouter } from "../dashboard/dashboard.router";
 import type { DealsRouter } from "../deals/deals.router";
 import type { GoogleRouter } from "../google/google.router";
 import type { SearchRouter } from "../search/search.router";
+import type { SettingsRouter } from "../settings/settings.router";
 import type { UsersRouter } from "../users/users.router";
 
 const appRouter = t.router({
@@ -87,6 +89,9 @@ const appRouter = t.router({
     update: publicProcedure
       .input(contactUpdateArgs)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["update"]>>),
+    enrich: publicProcedure
+      .input(contactIdInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["enrich"]>>),
     decideFact: publicProcedure
       .input(factDecisionInput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ContactsRouter["decideFact"]>>)
@@ -153,6 +158,15 @@ const appRouter = t.router({
     quick: publicProcedure
       .input(z.object({ q: z.string().default("") }))
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SearchRouter["quick"]>>)
+    }),
+  settings: t.router({
+    agentModel: publicProcedure
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["agentModel"]>>),
+    modelCatalog: publicProcedure
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["modelCatalog"]>>),
+    setAgentModel: publicProcedure
+      .input(setAgentModelInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["setAgentModel"]>>)
     }),
   users: t.router({
     me: publicProcedure

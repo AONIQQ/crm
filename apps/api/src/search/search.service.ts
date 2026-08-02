@@ -2,32 +2,23 @@ import type { Db } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
-/** One hit in the quick switcher. */
 export type SearchHit = {
 	kind: "company" | "contact" | "deal";
 	id: string;
 	label: string;
-	/** The line under the label — domain, company, whatever identifies it. */
 	detail: string | null;
 	iconUrl: string | null;
 	iconDarkUrl: string | null;
 	iconTone: string | null;
+	imageUrl: string | null;
 };
 
-/** Per kind. Enough to be useful, few enough that the list stays scannable. */
 const PER_KIND = 5;
 
 @Injectable()
 export class SearchService {
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
-	/**
-	 * Everything matching one query string, across the three objects.
-	 *
-	 * Three indexed `contains` queries in parallel rather than a union view: the
-	 * result has to be grouped by kind for the UI anyway, and this keeps each
-	 * one's ordering and fields its own business.
-	 */
 	async quick(q: string): Promise<{ hits: SearchHit[] }> {
 		const term = q.trim();
 		if (term.length < 2) return { hits: [] };
@@ -66,6 +57,7 @@ export class SearchService {
 					firstName: true,
 					lastName: true,
 					email: true,
+					imageUrl: true,
 					company: { select: { name: true } },
 				},
 			}),
@@ -99,6 +91,7 @@ export class SearchService {
 						iconUrl: company.iconUrl,
 						iconDarkUrl: company.iconDarkUrl,
 						iconTone: company.iconTone,
+						imageUrl: null,
 					}),
 				),
 				...contacts.map(
@@ -112,6 +105,7 @@ export class SearchService {
 						iconUrl: null,
 						iconDarkUrl: null,
 						iconTone: null,
+						imageUrl: contact.imageUrl,
 					}),
 				),
 				...deals.map(
@@ -123,6 +117,7 @@ export class SearchService {
 						iconUrl: deal.company.iconUrl,
 						iconDarkUrl: deal.company.iconDarkUrl,
 						iconTone: deal.company.iconTone,
+						imageUrl: null,
 					}),
 				),
 			],

@@ -45,7 +45,6 @@ export type DataTableColumn<TRow> = {
 	id: string;
 	header: ReactNode;
 	cell: (row: TRow) => ReactNode;
-	/** Name used in the Sort and Columns menus when `header` is not a string. */
 	label?: string;
 	sortable?: boolean;
 	width?: string;
@@ -88,14 +87,6 @@ export type DataTableProps<TRow, TSub> = {
 	facets?: DataTableFacet[];
 	tabs?: DataTableTabs;
 	onRowClick?: (row: TRow) => void;
-	/**
-	 * The pointer or the keyboard has landed on a row, ahead of any click.
-	 *
-	 * For warming the record the row opens. Opening a sheet is a cold fetch
-	 * otherwise, so the panel appears with a spinner and a placeholder title
-	 * and only becomes the record a moment later — which reads as the sheet
-	 * not having opened at all.
-	 */
 	onRowHover?: (row: TRow) => void;
 	expandable?: DataTableExpandable<TRow, TSub>;
 	actions?: ReactNode;
@@ -145,16 +136,6 @@ function SortIndicator({
 	);
 }
 
-/**
- * The list view for every module.
- *
- * Everything it renders is driven by `query`, which is URL state — so a filtered,
- * sorted, paged view is a link. Rows arrive already filtered and paged from the
- * API; this component never slices data itself.
- *
- * Two params it owns directly, because they are presentation rather than data:
- * `expand` (which rows are open) and `hide` (which columns are off).
- */
 export function DataTable<TRow, TSub = unknown>({
 	query,
 	columns,
@@ -206,8 +187,6 @@ export function DataTable<TRow, TSub = unknown>({
 		? activeTabOption.label
 		: (tabs?.allLabel ?? "All");
 
-	// Keeps typing responsive: the input updates immediately, the (expensive)
-	// table body re-renders at a lower priority.
 	const deferredRows = useDeferredValue(rows);
 	const anyExpandable =
 		expandable != null &&
@@ -289,8 +268,6 @@ export function DataTable<TRow, TSub = unknown>({
 										<span className="flex-1">{tabs.allLabel ?? "All"}</span>
 									</DropdownMenuRadioItem>
 									{tabs.options.map((option) => {
-										// A tab that can never match anything is noise, but only
-										// once we actually know the count.
 										if (tabCounts?.[option.value] === 0) return null;
 										return (
 											<DropdownMenuRadioItem
@@ -438,23 +415,12 @@ export function DataTable<TRow, TSub = unknown>({
 			</div>
 
 			<Table
-				// Fixed layout so columns honour their widths and long cell text
-				// truncates (cells are overflow-hidden) instead of blowing the table
-				// out horizontally.
 				className={cn(
 					"table-fixed [&_td:first-child]:pl-4 [&_th:first-child]:pl-4 [&_td:last-child]:pr-4 [&_th:last-child]:pr-4",
 					tableClassName,
 				)}
-				// The shell: one rounded, bordered surface the rows live inside,
-				// rather than rows floating on the page. `overflow-hidden` is what
-				// makes the first and last row clip to the radius.
 				containerClassName="min-h-0 flex-1 overflow-auto rounded-lg border bg-card"
 			>
-				{/*
-				 * The header is a shelf above the rows, not another row. It gets the
-				 * muted fill and an inset rule rather than a border, so it stays put
-				 * when the body scrolls under it.
-				 */}
 				<TableHeader className="sticky top-0 z-10 bg-muted [&_th]:bg-muted [&_tr]:border-0 [&_tr]:shadow-[inset_0_-1px_0_var(--border)]">
 					<TableRow>
 						{anyExpandable && (
@@ -468,8 +434,6 @@ export function DataTable<TRow, TSub = unknown>({
 								<TableHead
 									key={column.id}
 									className={cn(
-										// overflow-hidden mirrors the body cells so a squeezed
-										// header truncates instead of spilling into the next column.
 										"h-11 overflow-hidden px-3 font-normal text-muted-foreground",
 										column.width,
 										ALIGN_CLASS[column.align ?? "left"],
@@ -529,7 +493,6 @@ export function DataTable<TRow, TSub = unknown>({
 										if (set.has(id)) set.delete(id);
 										else set.add(id);
 										const next = [...set];
-										// Empty array would still write `?expand=`; null clears it.
 										return next.length > 0 ? next : null;
 									});
 								} else {

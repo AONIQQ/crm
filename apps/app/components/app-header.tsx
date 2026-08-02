@@ -36,15 +36,9 @@ export function AppHeader({ user }: { user: User }) {
 			return;
 		}
 
-		// A full navigation rather than router.push: the session cookie is gone,
-		// so every cached server render has to be thrown away and `proxy.ts`
-		// re-evaluated from scratch.
 		window.location.assign("/sign-in");
 	}
 
-	// h-12 rather than mvp's h-14. mvp fills its bar with h-8 controls (org
-	// switcher, search, credits), so 56px reads tight there; this bar holds only
-	// a logo, a label and an avatar, so the same 56px reads empty.
 	return (
 		<header className="flex h-12 shrink-0 items-center gap-2 border-b px-3 [view-transition-name:app-header]">
 			<div className="flex shrink-0 items-center gap-1">
@@ -60,10 +54,6 @@ export function AppHeader({ user }: { user: User }) {
 				<Link
 					href="/"
 					aria-label="Homepage"
-					// The mark wears the page's ink, not the brand green. `text-primary`
-					// used to be near-black and became the accent when the palette
-					// changed, which put a second green on screen competing with the
-					// one button that is meant to be the only one.
 					className="hidden size-8 items-center justify-center text-foreground md:flex"
 				>
 					<Logo className="size-5" />

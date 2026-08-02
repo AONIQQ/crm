@@ -3,18 +3,12 @@ import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import request from "supertest";
 
-/** Only fills a variable that is missing or blank — `.env` ships empty OAuth
- * placeholders, and an empty string still fails validation. */
 const fallback = (key: string, value: string) => {
 	if (!process.env[key]) {
 		process.env[key] = value;
 	}
 };
 
-// `ConfigModule.forRoot()` validates the environment while `AppModule` is being
-// evaluated, so these have to land before that module is imported — hence the
-// dynamic import below. Real values win; these only keep the suite runnable
-// somewhere without credentials, such as CI.
 fallback(
 	"DATABASE_URL",
 	"postgresql://postgres:postgres@localhost:5432/crm?schema=public",
@@ -55,8 +49,6 @@ describe("Auth (e2e)", () => {
 		expect(response.body).toEqual({ authenticated: false, user: null });
 	});
 
-	// Asserting the route is mounted rather than that it succeeds: Better Auth
-	// stores rate limits in the database, so a 200 here needs a live Postgres.
 	it("mounts the Better Auth handler", async () => {
 		const response = await request(app.getHttpServer()).get("/api/auth/ok");
 

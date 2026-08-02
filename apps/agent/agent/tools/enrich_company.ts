@@ -1,22 +1,11 @@
 import { db, EnrichmentStatus } from "@crm/db";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { mirrorBrandImages } from "../lib/brand-images";
 import { brandToUpdate, filledFields } from "../lib/brand-mapping";
 import { brandByDomain, contextDevEnabled } from "../lib/context-dev";
 import { spend } from "../lib/focus";
 
-/**
- * A company's brand, firmographics and socials, from Context.dev.
- *
- * This used to be a Nest service on the API side, queued from a request
- * handler. Nothing about the lookup changed in the move; what changed is who
- * decides to make it. The API now says "a company exists with nothing but a
- * domain" and this decides whether that is worth ten credits.
- *
- * Fills gaps only. `brandToUpdate` has always refused to overwrite a field a
- * human filled in, and that rule is the same one the fact store applies to
- * people.
- */
 export default defineTool({
 	description:
 		"Look up a company's brand, industry, location and social links by domain, and fill in the blanks on its record. Fills empty fields only — never overwrites what a person typed.",
@@ -88,8 +77,6 @@ export default defineTool({
 			},
 		});
 
-		// `fresh` asks for a cache bypass; anything else takes whatever the vendor
-		// has, because a 90-day-old logo is still the logo.
 		const result = await brandByDomain(company.domain, fresh ? 0 : undefined);
 
 		if (result.outcome === "skipped") {
@@ -108,11 +95,11 @@ export default defineTool({
 
 		const update = brandToUpdate(result.brand, {
 			...company,
-			// A company the sync created is named after its domain until we know
-			// better, and that is the one non-null field a lookup may replace.
 			nameIsPlaceholder: company.name === company.domain,
 		});
 		const filled = filledFields(update);
+
+		const { mirrored } = await mirrorBrandImages(companyId, update);
 
 		await db.$transaction([
 			db.company.update({ where: { id: companyId }, data: update }),
@@ -134,6 +121,7 @@ export default defineTool({
 		return {
 			enriched: true as const,
 			filled,
+			mirrored,
 			note:
 				filled.length === 0
 					? "Everything it returned was already on the record."

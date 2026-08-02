@@ -12,15 +12,6 @@ import {
 	toTranscript,
 } from "../lib/agent-transcript";
 
-/**
- * Turning the agent's event stream into something a rep can read.
- *
- * The panel is a rendering of this, so this is where the behaviour worth
- * pinning lives: which step reads as a refusal, which URLs are offered to
- * click, and — the bug that shipped — whether a rep's own question comes back
- * as their own words.
- */
-
 const message = (parts: unknown[], role: "user" | "assistant" = "assistant") =>
 	({ id: "m1", role, parts }) as unknown as EveMessage;
 
@@ -36,10 +27,6 @@ const tool = (
 
 describe("toTranscript", () => {
 	it("keeps a rep's question as the words they typed", () => {
-		// The panel used to prefix every message with "About contact <cuid>
-		// (Name):" so the agent knew the record. The rep then read their own
-		// question back with plumbing bolted to the front of it. The record now
-		// travels in a header, and this is the assertion that keeps it there.
 		const [first] = toTranscript([
 			message([{ type: "text", text: "Hey!" }], "user"),
 		]);
@@ -49,9 +36,6 @@ describe("toTranscript", () => {
 	});
 
 	it("keeps one message's parts in one row", () => {
-		// The row is what the scroller measures. A row per tool call means a new
-		// boundary every few hundred milliseconds during an answer, and that is
-		// what the flicker was.
 		const grouped = toTranscript([
 			message([
 				{ type: "text", text: "Looking now." },
@@ -64,7 +48,6 @@ describe("toTranscript", () => {
 	});
 
 	it("gives a tool call the same id across its streaming states", () => {
-		// An id that moves as parts arrive remounts the row mid-answer.
 		const streaming = toTranscript([
 			message([
 				tool("get_linkedin_profile", {
@@ -121,9 +104,6 @@ describe("describe", () => {
 	});
 
 	it("falls back to a readable form of an unknown tool", () => {
-		// Sentence case, not the raw slug: `load skill` sitting in lowercase
-		// among finished English sentences is what made the transcript look
-		// half-built.
 		expect(describeStep(tool("some_new_tool") as never)).toBe("Some new tool");
 	});
 });
@@ -247,8 +227,6 @@ describe("resolveThread", () => {
 	];
 
 	it("lands on the most recent conversation when the URL says nothing", () => {
-		// Reopening a contact should show what you asked last time, not an
-		// empty box.
 		const { current } = resolveThread({
 			conversations: rows,
 			fromUrl: null,
@@ -280,8 +258,6 @@ describe("resolveThread", () => {
 	});
 
 	it("does not move the open thread when the list grows underneath it", () => {
-		// The bug this exists to stop: saving the first message adds a row, and
-		// re-deriving "the latest" would swap the session out mid-answer.
 		const before = resolveThread({
 			conversations: rows,
 			fromUrl: null,
@@ -321,12 +297,6 @@ describe("resolveThread", () => {
 });
 
 describe("every tool has a line of English", () => {
-	/**
-	 * The bug: `load_skill` appeared in the middle of a run, in lowercase, with
-	 * an underscore in it, between "Read a LinkedIn profile" and "Put a name to
-	 * the address". eve's built-ins arrive without anybody adding a file for
-	 * them, which is exactly why they are the ones that get missed.
-	 */
 	const BUILT_INS = [
 		"load_skill",
 		"web_search",

@@ -4,7 +4,6 @@ import { GoogleApiClient, type GoogleResult } from "./google-api.client";
 const EVENTS_URL =
 	"https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
-/** The slice of Google's event resource we actually read. */
 export type GoogleEvent = {
 	id?: string;
 	iCalUID?: string;
@@ -34,9 +33,7 @@ export type GoogleEvent = {
 };
 
 export type GoogleEventTime = {
-	/** Set on a timed event. */
 	dateTime?: string;
-	/** Set on an all-day event; a bare `YYYY-MM-DD`. */
 	date?: string;
 	timeZone?: string;
 };
@@ -48,7 +45,6 @@ export type EventsPage = {
 };
 
 export type EventsQuery = {
-	/** Incremental. Mutually exclusive with the time window, per Google. */
 	syncToken?: string;
 	timeMin?: string;
 	timeMax?: string;
@@ -60,19 +56,10 @@ export type EventsQuery = {
 export class CalendarClient {
 	constructor(private readonly api: GoogleApiClient) {}
 
-	/**
-	 * One page of events.
-	 *
-	 * `singleEvents: true` expands recurring series into instances, which is what
-	 * makes `(iCalUID, originalStartTime)` a usable key — an unexpanded series
-	 * would be one row for "every Tuesday forever" and could not sit on a
-	 * timeline. `showDeleted: true` is how cancellations arrive at all.
-	 */
 	async listEvents(
 		accessToken: string,
 		query: EventsQuery,
 	): Promise<GoogleResult<EventsPage>> {
-		// Google rejects a request carrying both a syncToken and a time window.
 		const window = query.syncToken
 			? {}
 			: { timeMin: query.timeMin, timeMax: query.timeMax };
@@ -88,7 +75,6 @@ export class CalendarClient {
 	}
 }
 
-/** The best conference link on an event, if it has one. */
 export function conferenceUrl(event: GoogleEvent): string | null {
 	if (event.hangoutLink) return event.hangoutLink;
 
@@ -99,7 +85,6 @@ export function conferenceUrl(event: GoogleEvent): string | null {
 	return entry?.uri ?? null;
 }
 
-/** A Google event time as a Date, plus whether the event is all-day. */
 export function eventTime(
 	time: GoogleEventTime | undefined,
 ): { at: Date; isAllDay: boolean } | null {
@@ -109,8 +94,6 @@ export function eventTime(
 	}
 
 	if (time?.date) {
-		// A bare date is midnight local to the calendar; parsing it as UTC keeps
-		// the key stable regardless of where the server runs.
 		const at = new Date(`${time.date}T00:00:00Z`);
 		return Number.isNaN(at.getTime()) ? null : { at, isAllDay: true };
 	}

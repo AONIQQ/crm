@@ -20,10 +20,8 @@ import { GoogleTokenService } from "./google-token.service";
 import type { Participant } from "./participants";
 import { SyncStateService } from "./sync-state.service";
 
-/** How many pages one cron tick will pull before yielding. */
 const MAX_PAGES_PER_TICK = 5;
 
-/** How far forward to look. Meetings matter before they happen. */
 const HORIZON_DAYS = 180;
 
 export type SyncOutcome = {
@@ -35,14 +33,6 @@ export type SyncOutcome = {
 	reason?: string;
 };
 
-/**
- * Google Calendar → `CalendarEvent` → a projected `Activity` on the timeline.
- *
- * Calendar is the simpler of the two syncs and was built first deliberately: the
- * dedupe key is handed to us, there are no bodies to parse, and it proves the
- * whole connect → cron → match → project → render path before Gmail adds its
- * own problems.
- */
 @Injectable()
 export class CalendarSyncService {
 	private readonly logger = new Logger(CalendarSyncService.name);
@@ -101,13 +91,6 @@ export class CalendarSyncService {
 			const result = await this.calendar.listEvents(token.accessToken, {
 				syncToken,
 				pageToken,
-				// Only meaningful on a full pass; ignored when a syncToken is set.
-				//
-				// `now`, never earlier: past meetings are not imported. Events that
-				// *start* from now on are, though, including ones booked before the
-				// sync was switched on — a meeting in next Tuesday's diary is the
-				// point of the feature, and putting it on the timeline is not
-				// back-dating anything.
 				timeMin: new Date().toISOString(),
 				timeMax: this.horizon().toISOString(),
 			});
@@ -163,8 +146,6 @@ export class CalendarSyncService {
 			pageToken = result.data.nextPageToken;
 
 			if (!pageToken) {
-				// The sync token only appears on the final page; that is the signal
-				// the window is fully drained and steady-state can begin.
 				syncToken = result.data.nextSyncToken ?? syncToken;
 				await this.state.settle(row.id, {
 					cursor: syncToken ?? null,
@@ -188,9 +169,6 @@ export class CalendarSyncService {
 			}
 		}
 
-		// Ran out of page budget without reaching the last page, so there is no
-		// sync token to keep. The next tick re-runs the window, which is free
-		// because every write is an upsert on a natural key.
 		await this.state.settle(row.id, {
 			status: GoogleSyncStatus.IDLE,
 		});
@@ -205,11 +183,6 @@ export class CalendarSyncService {
 		};
 	}
 
-	/**
-	 * One event: store it, project it, or delete what we stored before.
-	 *
-	 * Returns what it did so the caller can count without a second pass.
-	 */
 	private async apply(
 		event: GoogleEvent,
 		row: MailboxSync,
@@ -221,8 +194,6 @@ export class CalendarSyncService {
 		const start = eventTime(event.start);
 		const originalStart = eventTime(event.originalStartTime) ?? start;
 
-		// An instance keeps its original start even when moved, which is what
-		// identifies it within a recurring series.
 		if (!originalStart) return "ignored";
 
 		const key = {
@@ -233,8 +204,6 @@ export class CalendarSyncService {
 		};
 
 		if (event.status === "cancelled") {
-			// Cancellations arrive as ordinary items because we ask for
-			// showDeleted. Deleting cascades to the projected activity.
 			const deleted = await this.db.calendarEvent.deleteMany({
 				where: {
 					iCalUid,
@@ -249,8 +218,6 @@ export class CalendarSyncService {
 
 		const participants = this.participantsOf(event);
 
-		// A meeting is two-way engagement on its own: somebody put time in a
-		// diary. So calendar may create, subject to the row's own toggle.
 		const declinedByUs = event.attendees?.some(
 			(attendee) => attendee.self && attendee.responseStatus === "declined",
 		);
@@ -260,16 +227,12 @@ export class CalendarSyncService {
 				participants,
 				allowCreate: row.autoCreate && !declinedByUs,
 				source: RecordSource.CALENDAR,
-				// Whoever's calendar this is owns what it creates — they are the
-				// person with the relationship.
 				ownerId: row.userId,
 			},
 			context,
 		);
 
 		if (!match.companyId && !match.contactId) {
-			// Nothing we track, and nothing worth creating — a dentist appointment.
-			// Never stored, per the plan §5.
 			return "ignored";
 		}
 
@@ -324,13 +287,11 @@ export class CalendarSyncService {
 		return "written";
 	}
 
-	/** Replaces the attendee list, linking anyone we already know as a contact. */
 	private async syncAttendees(
 		eventId: string,
 		event: GoogleEvent,
 	): Promise<void> {
 		const attendees = (event.attendees ?? []).filter(
-			// Meeting rooms are attendees as far as Google is concerned.
 			(attendee) => attendee.email && !attendee.resource,
 		);
 
@@ -372,18 +333,6 @@ export class CalendarSyncService {
 		}
 	}
 
-	/**
-	 * Tells the agent about people we are about to meet and do not know.
-	 *
-	 * The most useful thing the calendar knows is that a conversation is
-	 * *coming*, and nothing in the stack acted on it before. A contact with no
-	 * background, on a meeting tomorrow, is worth more research than the same
-	 * contact would be on any other day — and the deadline is real, so it goes
-	 * to the front of the queue rather than waiting its turn behind a backlog.
-	 *
-	 * Only for meetings actually ahead of us: back-filling a year of history
-	 * would queue research for every meeting that has already happened.
-	 */
 	private async prepareForMeeting(
 		eventId: string,
 		startsAt: Date,
@@ -395,7 +344,6 @@ export class CalendarSyncService {
 			where: {
 				eventId,
 				contactId: { not: null },
-				// Whoever is taking the meeting is not who needs researching.
 				contact: { brief: { is: null } },
 			},
 			select: { contactId: true },
@@ -408,13 +356,6 @@ export class CalendarSyncService {
 		}
 	}
 
-	/**
-	 * The timeline projection: one `Activity` per event, kept current.
-	 *
-	 * `occurredAt` is the meeting's start even when that is in the future, so an
-	 * upcoming meeting sorts where a rep expects to find it rather than at the
-	 * moment the sync happened to run.
-	 */
 	private async project(
 		calendarEventId: string,
 		userId: string,
@@ -468,8 +409,6 @@ export class CalendarSyncService {
 			});
 		}
 
-		// A one-to-one booked through a scheduling link often has the customer as
-		// organiser and nobody in `attendees`.
 		if (event.organizer?.email) {
 			people.push({
 				email: event.organizer.email.toLowerCase(),

@@ -136,11 +136,6 @@ function ChartTooltipContent({
 		indicator?: "line" | "dot" | "dashed";
 		nameKey?: string;
 		labelKey?: string;
-		/**
-		 * Formats the value only, keeping the indicator and label markup.
-		 * `formatter` replaces the whole row, which is more than a chart
-		 * plotting money needs.
-		 */
 		valueFormatter?: (value: number | string) => React.ReactNode;
 	} & Omit<
 		RechartsPrimitive.DefaultTooltipContentProps<

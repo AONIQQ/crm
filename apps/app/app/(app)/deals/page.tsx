@@ -32,9 +32,6 @@ export default async function DealsPage({
 
 	const trpc = getServerTrpc();
 	const queryClient = getServerQueryClient();
-	// The rows are awaited so the first paint is the filtered, sorted, correct
-	// page rather than a spinner. The owner and company pickers behind the facet
-	// dropdowns are not — the table draws fine without them.
 	await queryClient.prefetchQuery(
 		trpc.deals.list.queryOptions(dealsSearchParams.toInput(values)),
 	);

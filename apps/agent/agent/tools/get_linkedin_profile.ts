@@ -4,12 +4,8 @@ import { enabled, unavailable } from "../lib/capabilities";
 import { spend } from "../lib/focus";
 import { getExperience, getProfile } from "../lib/linkdapi";
 import { looksLikeSameCompany, nameMatchesLocalPart } from "../lib/names";
+import { storePortrait } from "../lib/portrait";
 
-/**
- * Reads a candidate and judges it, rather than handing the model a profile and
- * hoping. The two checks are the thing standing between a search result and a
- * customer record.
- */
 export default defineTool({
 	description:
 		"Read a LinkedIn profile by slug and check whether it is really the person behind an email address. Returns the profile plus an explicit verdict.",
@@ -22,14 +18,25 @@ export default defineTool({
 			.boolean()
 			.default(false)
 			.describe("Also fetch full work history — costs an extra call."),
+		contactId: z
+			.string()
+			.optional()
+			.describe(
+				"The CRM contact this candidate is for. Supply it and their photo is copied automatically if — and only if — the profile turns out to be them.",
+			),
 	}),
-	async execute({ slug, email, companyName, companyDomain, includeHistory }) {
+	async execute({
+		slug,
+		email,
+		companyName,
+		companyDomain,
+		includeHistory,
+		contactId,
+	}) {
 		if (!enabled("RAPIDAPI_KEY")) {
 			return { found: false as const, ...unavailable("RAPIDAPI_KEY") };
 		}
 
-		// Charged before the call, not after: a budget that only counts successes
-		// is a budget an unlucky contact can blow through four times over.
 		const charge = spend(includeHistory ? 2 : 1);
 		if (!charge.ok) return { found: false as const, reason: charge.reason };
 
@@ -51,16 +58,26 @@ export default defineTool({
 		const history =
 			includeHistory && profile.urn ? await getExperience(profile.urn) : null;
 
+		const isSamePerson = employerMatches && nameMatches;
+
+		const portrait =
+			contactId && isSamePerson
+				? await storePortrait({
+						contactId,
+						sourceUrl: profile.photoUrl,
+						verified: true,
+					})
+				: null;
+
 		return {
 			found: true as const,
 			profile,
 			experience: history?.ok ? history.data : null,
+			photo: portrait ?? undefined,
 			verdict: {
 				employerMatches,
 				nameMatches,
-				// Both, or it is not them. Stated as a decision rather than as two
-				// facts so there is nothing to reinterpret.
-				isSamePerson: employerMatches && nameMatches,
+				isSamePerson,
 				confidence:
 					employerMatches && nameMatches
 						? ("high" as const)

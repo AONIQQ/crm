@@ -8,25 +8,40 @@ import {
 	AlertDescription,
 	AlertTitle,
 } from "@crm/ui/components/alert";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from "@crm/ui/components/alert-dialog";
 import { Button } from "@crm/ui/components/button";
+import {
+	Card,
+	CardAction,
+	CardContent,
+	CardDescription,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@crm/ui/components/card";
 import { Icon } from "@crm/ui/components/icon";
 import { Label } from "@crm/ui/components/label";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
 import { Switch } from "@crm/ui/components/switch";
 import { relativeTimeFromIso } from "@crm/ui/lib/format";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { isSyncing, SYNC_POLL_MS } from "@/components/crm/sync-status";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
-/**
- * What each source contributes, in the rep's terms.
- *
- * The toggle copy says what a record *becoming* real depends on, because that
- * is the only decision on this page with a consequence.
- */
 const SOURCES = {
 	calendar: {
 		label: "Meetings",
@@ -38,14 +53,6 @@ const SOURCES = {
 	},
 } as const;
 
-/**
- * Where a "Resolve" link is allowed to point.
- *
- * The URL is scraped out of a vendor error string with a regex, and the string
- * reaches us through a sync that talks to a third party. Rendering whatever it
- * contains as a link a rep will click is a phishing hop waiting to happen, so
- * the destination has to be somewhere the fix could actually live.
- */
 const RESOLVE_HOSTS = [
 	"console.cloud.google.com",
 	"console.developers.google.com",
@@ -77,13 +84,6 @@ function explain(error: string) {
 	};
 }
 
-/**
- * What is currently wrong, as one comparable string.
- *
- * Keyed by source *and* message so that a check which fixes Gmail and leaves
- * Calendar broken is a different state, not the same one — otherwise half a
- * repair would be reported as no progress at all.
- */
 function failureSignature(
 	sources: readonly {
 		source: string;
@@ -105,8 +105,6 @@ export function GoogleConnection() {
 
 	const status = useQuery({
 		...trpc.google.status.queryOptions(),
-		// A sync is background work no client action caused, so per the API rules
-		// it is polled, not invalidated — and the poll stops the moment it settles.
 		refetchInterval: (query) =>
 			query.state.data?.sources.some((source) => isSyncing(source.status))
 				? SYNC_POLL_MS
@@ -125,9 +123,6 @@ export function GoogleConnection() {
 
 	const revoke = useMutation(
 		trpc.google.revokeAccess.mutationOptions({
-			// A full navigation, not a router push: the grant is gone, so every
-			// cached render is wrong and the gate has to re-evaluate. Lands on
-			// /grant-access.
 			onSuccess: () => window.location.assign("/"),
 			onError: (error) => toast.error(error.message),
 		}),
@@ -140,12 +135,6 @@ export function GoogleConnection() {
 		}),
 	);
 
-	/*
-	 * A check that lands on the same failure changes nothing on screen, so the
-	 * button looks broken rather than the connection. Incrementing this replays
-	 * the alert's attention animation — the page answering "still here" instead
-	 * of appearing not to have run.
-	 */
 	const [insistence, setInsistence] = useState(0);
 
 	const syncNow = useMutation(
@@ -154,8 +143,6 @@ export function GoogleConnection() {
 				const before = failureSignature(status.data?.sources ?? []);
 				await cache.google();
 
-				// Read the refetched value rather than `status.data`, which is the
-				// render's snapshot and is still the pre-check one inside here.
 				const after = failureSignature(
 					queryClient.getQueryData(trpc.google.status.queryKey())?.sources ??
 						[],
@@ -171,8 +158,6 @@ export function GoogleConnection() {
 
 	const { sources, hasRefreshToken } = status.data;
 
-	// Both scopes come from one grant at sign-in, so "Gmail connected but
-	// Calendar not" is not a state that exists. One section, not one per source.
 	const failing = sources.filter(
 		(source) => source.status === "NEEDS_RECONNECT" || source.lastError,
 	);
@@ -185,20 +170,20 @@ export function GoogleConnection() {
 	const healthy = failing.length === 0 && hasRefreshToken;
 
 	return (
-		// No card: the page shell already owns the gutter, so a padded container
-		// here would indent every line away from the heading above it — and there
-		// is no border or fill to earn that indent. Sections separated by rules,
-		// like the record sheets.
-		<div className="flex max-w-3xl flex-col">
-			<section className="flex flex-col gap-2 pb-5">
-				<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-					<div className="flex items-center gap-3">
-						<h2 className="font-medium text-sm">Google</h2>
-						<StatusIndicator
-							tone={healthy ? "success" : "warning"}
-							label={healthy ? "Connected" : "Needs attention"}
-						/>
-					</div>
+		<Card>
+			<CardHeader>
+				<CardTitle>Google</CardTitle>
+				<CardDescription>
+					New meetings and email threads are added to the matching company as
+					they happen.
+				</CardDescription>
+
+				<CardAction>
+					<StatusIndicator
+						size="sm"
+						tone={healthy ? "success" : "warning"}
+						label={healthy ? "Connected" : "Needs attention"}
+					/>
 
 					<Button
 						variant="contrast"
@@ -208,14 +193,10 @@ export function GoogleConnection() {
 					>
 						{syncNow.isPending ? "Checking…" : "Check now"}
 					</Button>
-				</div>
+				</CardAction>
+			</CardHeader>
 
-				<p className="text-pretty text-muted-foreground text-sm/6">
-					New meetings and email threads are added to the matching company as
-					they happen. Nothing from before you connected is imported, and
-					nothing is ever sent on your behalf.
-				</p>
-
+			<CardContent>
 				{!hasRefreshToken ? (
 					<Alert variant="destructive" attention={insistence}>
 						<Icon icon={Warning} />
@@ -242,13 +223,6 @@ export function GoogleConnection() {
 
 								{url ? (
 									<AlertAction>
-										{/*
-										 * The inverted chip, not the primary fill. Green
-										 * means "the action you want" everywhere else, and
-										 * inside a failure panel it reads as reassurance.
-										 * On the alert's grey this is the loudest thing in
-										 * the box, which is what the one way out should be.
-										 */}
 										<Button variant="contrast" size="xs" asChild>
 											<a href={url} target="_blank" rel="noreferrer">
 												Resolve
@@ -267,9 +241,7 @@ export function GoogleConnection() {
 							: "Waiting for the first check"}
 					</p>
 				)}
-			</section>
 
-			<section className="flex flex-col gap-5 border-t py-5">
 				{sources.map((source) => {
 					const copy = SOURCES[source.source];
 
@@ -299,61 +271,78 @@ export function GoogleConnection() {
 						</div>
 					);
 				})}
-			</section>
 
-			{/*
-			 * Quiet by design. These are the irreversible actions and neither is
-			 * anybody's daily business, so they sit at the bottom in muted type
-			 * rather than as a third block competing for attention.
-			 */}
-			<div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-5 text-muted-foreground text-xs">
-				<button
-					type="button"
-					className="underline underline-offset-3 hover:text-foreground disabled:opacity-50"
-					disabled={purge.isPending}
-					onClick={() => {
-						if (
-							!window.confirm(
-								"Delete every synced email and meeting from the CRM?",
-							)
-						) {
-							return;
-						}
-						purge.mutate();
-					}}
-				>
-					Delete synced data
-				</button>
+				<CardFooter>
+					<div className="-ml-2 flex flex-wrap items-center gap-1 text-muted-foreground">
+						<AlertDialog>
+							<AlertDialogTrigger asChild>
+								<Button variant="ghost" size="xs" disabled={purge.isPending}>
+									Delete synced data
+								</Button>
+							</AlertDialogTrigger>
 
-				<button
-					type="button"
-					className="underline underline-offset-3 hover:text-foreground disabled:opacity-50"
-					disabled={revoke.isPending}
-					onClick={() => {
-						// Worth a confirm: one OAuth client means one grant, so this ends
-						// CRM access entirely, not just syncing.
-						if (
-							!window.confirm(
-								"Revoke Google access? You will be signed out and cannot use the CRM until you grant it again.",
-							)
-						) {
-							return;
-						}
-						revoke.mutate();
-					}}
-				>
-					Revoke Google access
-				</button>
+							<AlertDialogContent>
+								<AlertDialogHeader>
+									<AlertDialogTitle>Delete synced data?</AlertDialogTitle>
+									<AlertDialogDescription>
+										Every email and meeting brought in from Google is removed
+										from the CRM. The next check starts from now, so nothing
+										deleted here comes back.
+									</AlertDialogDescription>
+								</AlertDialogHeader>
 
-				<a
-					href="https://myaccount.google.com/permissions"
-					target="_blank"
-					rel="noreferrer"
-					className="underline underline-offset-3 hover:text-foreground"
-				>
-					Manage in your Google account
-				</a>
-			</div>
-		</div>
+								<AlertDialogFooter>
+									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogAction
+										variant="destructive"
+										onClick={() => purge.mutate()}
+									>
+										Delete
+									</AlertDialogAction>
+								</AlertDialogFooter>
+							</AlertDialogContent>
+						</AlertDialog>
+
+						<AlertDialog>
+							<AlertDialogTrigger asChild>
+								<Button variant="ghost" size="xs" disabled={revoke.isPending}>
+									Revoke Google access
+								</Button>
+							</AlertDialogTrigger>
+
+							<AlertDialogContent>
+								<AlertDialogHeader>
+									<AlertDialogTitle>Revoke Google access?</AlertDialogTitle>
+									<AlertDialogDescription>
+										You will be signed out, and you cannot use the CRM again
+										until you grant access.
+									</AlertDialogDescription>
+								</AlertDialogHeader>
+
+								<AlertDialogFooter>
+									<AlertDialogCancel>Cancel</AlertDialogCancel>
+									<AlertDialogAction
+										variant="destructive"
+										onClick={() => revoke.mutate()}
+									>
+										Revoke
+									</AlertDialogAction>
+								</AlertDialogFooter>
+							</AlertDialogContent>
+						</AlertDialog>
+
+						<Button variant="ghost" size="xs" asChild>
+							<Link
+								href="https://myaccount.google.com/permissions"
+								target="_blank"
+								rel="noreferrer"
+							>
+								Manage in your Google account
+							</Link>
+						</Button>
+					</div>
+				</CardFooter>
+			</CardContent>
+		</Card>
 	);
 }

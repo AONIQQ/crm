@@ -13,6 +13,7 @@
 		"auth:generate": "better-auth generate --config src/auth.ts --output ../db/prisma/schema.prisma --y",
 		"check-types": "tsc --noEmit",
 		"lint": "biome check .",
+		"test": "bun test",
 		"clean": "rm -rf .turbo node_modules"
 	},
 	"dependencies": {

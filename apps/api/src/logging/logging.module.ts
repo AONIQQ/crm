@@ -12,12 +12,6 @@ import { PrismaLogBridge } from "./prisma-log.bridge";
 import { RequestLoggerMiddleware } from "./request-logger.middleware";
 import { UserContextInterceptor } from "./user-context.interceptor";
 
-/**
- * Import this first in `AppModule`. Middleware runs in module-registration
- * order, and the request context has to be open before anything else — Better
- * Auth mounts its handler from `configure()` too, and a request that terminates
- * there would otherwise go unlogged.
- */
 @Global()
 @Module({
 	providers: [
@@ -32,7 +26,6 @@ export class LoggingModule implements NestModule {
 	configure(consumer: MiddlewareConsumer): void {
 		consumer
 			.apply(RequestLoggerMiddleware)
-			// Express 5 requires named wildcards; the braces also match `/`.
 			.forRoutes({ path: "{*splat}", method: RequestMethod.ALL });
 	}
 }

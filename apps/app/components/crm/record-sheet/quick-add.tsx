@@ -11,17 +11,6 @@ import { toast } from "sonner";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
 
-/**
- * Adding a person or a deal without leaving the company you are looking at.
- *
- * An inline panel rather than a dialog over the sheet: you are already two
- * layers deep, a third one that has to be dismissed before you can see whether
- * the row landed is a layer too many. It also means adding three people in a
- * row is three forms, not three round trips through a modal.
- *
- * Only the fields you would actually have to hand go here. Everything else is
- * one click away on the record it just created.
- */
 function QuickAddForm({
 	submitLabel,
 	pending,
@@ -71,7 +60,6 @@ export function QuickAddContact({
 	onDone,
 }: {
 	companyId: string;
-	/** Whoever owns the company — the person adding them almost never differs. */
 	ownerId: string | null;
 	onDone: () => void;
 }) {
@@ -167,7 +155,6 @@ export function QuickAddDeal({
 }: {
 	companyId: string;
 	companyName: string;
-	/** The company's owner; falls back to whoever is signed in. */
 	ownerId: string | null;
 	onDone: () => void;
 }) {
@@ -182,8 +169,6 @@ export function QuickAddDeal({
 	const amountId = useId();
 	const closeId = useId();
 
-	// The API refuses a deal without an owner, and asking who owns a deal on
-	// the company you already own is a question with one answer.
 	const me = useQuery(trpc.users.me.queryOptions());
 	const owner = ownerId ?? me.data?.id ?? null;
 

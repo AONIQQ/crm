@@ -16,6 +16,7 @@ import {
 	type EntityLogoTone,
 } from "@crm/ui/components/entity-logo";
 import { Icon } from "@crm/ui/components/icon";
+import { PersonAvatar } from "@crm/ui/components/person-avatar";
 import { SimpleTable, SimpleTableRow } from "@crm/ui/components/simple-table";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
 import { TableCell } from "@crm/ui/components/table";
@@ -23,6 +24,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AgentPanel } from "@/components/crm/agent-panel";
 import { contactName } from "@/components/crm/contact-name";
+import { ContactEnrichmentAction } from "@/components/crm/enrichment-actions";
 import {
 	ENRICHMENT_POLL_MS,
 	EnrichmentIndicator,
@@ -82,10 +84,6 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 	const cache = useCrmCache();
 	const { tab, setTab } = useRecordSheetView("overview");
 
-	// Polls while the agent is working, for the same reason the company sheet
-	// does: enrichment is a background write with no client action behind it, so
-	// there is nothing to invalidate and the only way to notice it finished is
-	// to ask. Stops the moment it settles.
 	const query = useQuery({
 		...trpc.contacts.byId.queryOptions({ id: contactId }),
 		refetchInterval: (current) => {
@@ -128,17 +126,7 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 				{
 					value: "agent",
 					label: "Agent",
-					// A tab rather than a band on the overview: the panel opens a
-					// durable session the moment it mounts, and a rep flicking through
-					// records should not start one on every contact they glance at.
-					//
-					// Rendered bare, not inside `DetailSheetBody`. That wrapper is
-					// itself a scroll container, and the panel brings its own — nesting
-					// them gives the sheet two scrollbars and an agent transcript that
-					// cannot reach its own bottom.
 					content: <AgentPanel record={{ kind: "contact", id: contact.id }} />,
-					// Stays mounted behind the other tabs: this one holds a live
-					// stream, and tearing it down mid-answer loses the answer.
 					keepMounted: true,
 				},
 			]
@@ -154,9 +142,6 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 					<MetaLine parts={[contact.title, contact.company?.name]} />
 				) : undefined
 			}
-			// Only when there is something to say. "Enriched" is the resting state
-			// of every contact in here, and a row that says so on all of them is a
-			// row nobody reads — which means nobody reads it when it says "failed".
 			note={
 				contact ? (
 					<>
@@ -176,17 +161,18 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 					</>
 				) : null
 			}
-			// A person, so initials rather than a logo — there are no avatars in
-			// the CRM and a broken image placeholder is worse than two letters.
-			// Still `EntityLogo` with no artwork: it draws exactly this, and a
-			// hand-rolled square meant the contact header wore a border the company
-			// header does not.
 			media={
-				<EntityLogo name={contact ? contactName(contact) : "?"} size="lg" />
+				<PersonAvatar
+					src={contact?.imageUrl}
+					name={contact ? contactName(contact) : "?"}
+					email={contact?.email}
+					size="lg"
+				/>
 			}
 			actions={
 				contact ? (
 					<>
+						<ContactEnrichmentAction contactId={contact.id} />
 						{contact.email ? (
 							<Button asChild variant="outline" size="sm">
 								<a href={`mailto:${contact.email}`}>
@@ -202,8 +188,6 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 								disabled={setPrimary.isPending}
 								onClick={() =>
 									setPrimary.mutate({
-										// Narrowed by the guard above; the API re-checks that this
-										// person actually works there.
 										companyId: contact.company?.id ?? "",
 										contactId: contact.id,
 									})
@@ -216,8 +200,6 @@ export function ContactSheet({ contactId }: { contactId: string }) {
 					</>
 				) : null
 			}
-			// How to reach this person, which is what anyone opening a contact
-			// wants — the deal count is already on the tab beside it.
 			stats={
 				contact ? (
 					<DetailSheetStats>
@@ -299,7 +281,6 @@ function ContactOverview({ contact }: { contact: Contact }) {
 
 	const { applied, proposed } = factsByField(contact.facts);
 
-	/** Everything a field needs to show where it came from and what is pending. */
 	const agentProps = (field: string) => {
 		const fact = applied.get(field);
 		const suggestion = proposed.get(field);
@@ -313,9 +294,6 @@ function ContactOverview({ contact }: { contact: Contact }) {
 
 	const update = useMutation(
 		trpc.contacts.update.mutationOptions({
-			// `settle: "record"` — the row's spinner should last until the new value
-			// is under it, not until the list behind the sheet and every cached
-			// company have caught up too.
 			onSuccess: () => cache.contact(contact.id, { settle: "record" }),
 			onError: (error) => toast.error(error.message),
 		}),
@@ -372,13 +350,6 @@ function ContactOverview({ contact }: { contact: Contact }) {
 						onSave={(linkedinUrl) => save({ linkedinUrl })}
 						{...agentProps("linkedinUrl")}
 					/>
-					{/*
-					 * No placeholders on these two. An empty inline field renders its
-					 * placeholder as the value, so an example handle reads as this
-					 * person's account rather than as a hint — and a plausible wrong
-					 * link on every contact is exactly the failure the rest of this
-					 * agent is built to avoid.
-					 */}
 					<InlineField
 						label="X"
 						value={contact.twitterUrl}
@@ -442,18 +413,6 @@ function ContactOverview({ contact }: { contact: Contact }) {
 	);
 }
 
-/**
- * Who this person is, above the fields that describe them.
- *
- * The prose and the lines under it do different jobs and are stored separately
- * for that reason: the narrative is what a rep reads on the way into a call,
- * the lines are what they scan for one number — how long have they been there.
- *
- * Everything here was written by the agent, so the whole section is sourced
- * once at the top rather than field by field. Repeating a dotted underline on
- * six consecutive agent-written lines would decorate the section, not inform
- * anyone.
- */
 function Background({ brief }: { brief: NonNullable<Contact["brief"]> }) {
 	const sections = brief.sections;
 	const previous = sections.previousRoles ?? [];
@@ -505,20 +464,6 @@ function Background({ brief }: { brief: NonNullable<Contact["brief"]> }) {
 	);
 }
 
-/**
- * Where they worked before, folded away.
- *
- * It used to be one `·`-joined string, which was unreadable for a reason worth
- * writing down: the agent writes each role as `"Head of Growth · Leap AI (Mar
- * 2024 – Oct 2024)"`, so the separator between roles was the same separator
- * used *inside* them. Six jobs came out as one forty-word sentence with no way
- * to tell where a job ended.
- *
- * Closed by default because the narrative directly above already says this in
- * prose — "he previously spent eight months as Head of Growth at Leap AI" —
- * and the list is the dates behind that sentence, not news. One line when you
- * do not need it, one click when you do.
- */
 function PreviousRoles({ roles }: { roles: string[] }) {
 	return (
 		<Accordion type="single" collapsible>
@@ -549,18 +494,6 @@ function daysAgo(iso: string): string {
 	return relativeFormat.format(-days, "day");
 }
 
-/**
- * What we have actually said to each other.
- *
- * The block no CRM that buys its data can render. Everything above it could be
- * purchased from a vendor; this is ours, and it is the part a rep checks last
- * before dialling — have they ever replied, when, and who else do we know
- * there.
- *
- * "Never replied" is stated rather than omitted. Twelve emails into silence is
- * a fact about the relationship, and a panel that shows only the twelve reads
- * like progress.
- */
 function WeKnowThem({
 	relationship,
 	contactName: name,

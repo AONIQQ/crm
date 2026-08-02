@@ -4,6 +4,7 @@ import { ConfigModule } from "@nestjs/config";
 import { AuthModule as BetterAuthModule } from "@thallesp/nestjs-better-auth";
 import { ActivitiesModule } from "./activities/activities.module";
 import { AuthModule } from "./auth/auth.module";
+import { BackfillModule } from "./backfill/backfill.module";
 import { AppCacheModule } from "./cache/cache.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { validateEnv } from "./config/env.validation";
@@ -18,6 +19,7 @@ import { HealthModule } from "./health/health.module";
 import { LoggingModule } from "./logging/logging.module";
 import { logAuthRoute } from "./logging/request-logger.middleware";
 import { SearchModule } from "./search/search.module";
+import { SettingsModule } from "./settings/settings.module";
 import { TrpcModule } from "./trpc/trpc.module";
 import { UsersModule } from "./users/users.module";
 
@@ -45,6 +47,8 @@ import { UsersModule } from "./users/users.module";
 		DashboardModule,
 		SearchModule,
 		GoogleModule,
+		SettingsModule,
+		BackfillModule,
 	],
 })
 export class AppModule {}

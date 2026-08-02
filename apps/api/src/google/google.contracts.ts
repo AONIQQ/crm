@@ -13,7 +13,6 @@ export const setAutoCreateInput = z.object({
 export const suppressDomainInput = z.object({
 	domain: z.string().trim().min(1),
 	reason: z.string().trim().max(200).optional(),
-	/** Also remove the threads and events this domain already produced. */
 	purge: z.boolean().default(true),
 });
 

@@ -8,6 +8,7 @@ export {
 	REQUIRED_SCOPES,
 	SYNC_SCOPES,
 } from "./scopes";
+export { onSignedIn, type SignedInHandler } from "./signed-in";
 export {
 	hasSignInAllowList,
 	isWorkspaceEmail,

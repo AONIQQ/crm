@@ -6,19 +6,6 @@ import { recordFact } from "../lib/facts";
 import { focusOn } from "../lib/focus";
 import { parseSocialUrl, verifyGithub, verifyX } from "../lib/socials";
 
-/**
- * The only way an X or GitHub link reaches a record.
- *
- * Verification happens here, against the CRM's own copy of who the contact is
- * and against evidence this tool fetches itself. Nothing the model says about a
- * candidate is taken as support for it — a `confidence` argument would be the
- * model marking its own homework, which is why there isn't one.
- *
- * What the checks produce is *evidence*, which then goes through the same
- * ledger as everything else. A GitHub account whose own profile names the
- * person is primary and lands on the record; a handle that merely looks like
- * their name is not, and becomes a suggestion at best.
- */
 export default defineTool({
 	description:
 		"Write a contact's X and/or GitHub profile URLs after verifying each one. GitHub is checked against the account's own profile via the GitHub API; X is checked by handle and independent citation. Rejects anything it cannot corroborate — a rejection is a correct outcome, not a problem to work around.",

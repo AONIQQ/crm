@@ -1,38 +1,15 @@
 import type { CarbonIcon } from "@crm/ui/components/icon";
 
-/**
- * Which record the agent is being asked about.
- *
- * The panel appears on three sheets and the questions worth asking are
- * different on each: a person has a job and a history, a company has a market
- * and a story, a deal has a state and a next step. Offering "Who is this
- * person?" on a company is the tell that a chat box was bolted on rather than
- * built into the record.
- *
- * One shape carries it end to end — the header the panel sends, the claim the
- * proxy mints, the field the conversation is filed under, and the preamble the
- * agent opens with — so adding a fourth kind is one entry rather than four
- * edits in four layers.
- */
-
 export type AgentRecordKind = "contact" | "company" | "deal";
 
 export type AgentRecord = { kind: AgentRecordKind; id: string };
 
 type RecordCopy = {
-	/** The header the panel sends; the proxy turns it into a token claim. */
 	header: string;
-	/** The tRPC field a conversation is filed under. */
 	field: "contactId" | "companyId" | "dealId";
 	title: string;
 	blurb: string;
 	placeholder: string;
-	/**
-	 * What this agent is actually good at, per record.
-	 *
-	 * Three, because a wall of chips is a menu nobody reads, and each one maps
-	 * onto tools the agent has rather than to something it would have to invent.
-	 */
 	suggestions: string[];
 };
 
@@ -82,12 +59,10 @@ export function recordCopy(kind: AgentRecordKind): RecordCopy {
 	return COPY[kind];
 }
 
-/** The header a panel sends so the agent knows what it is looking at. */
 export function recordHeader(record: AgentRecord): Record<string, string> {
 	return { [COPY[record.kind].header]: record.id };
 }
 
-/** The shape the conversations API files a thread under. */
 export function recordFilter(record: AgentRecord): {
 	contactId?: string;
 	companyId?: string;

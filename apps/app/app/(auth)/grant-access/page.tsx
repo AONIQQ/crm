@@ -10,16 +10,6 @@ export const metadata: Metadata = {
 	title: "Grant access",
 };
 
-/**
- * The re-consent wall.
- *
- * Outside the `(app)` group deliberately: the gate lives in that group's
- * layout, so a page inside it would redirect to itself.
- *
- * Reached by someone who is signed in but has not granted Gmail and Calendar —
- * either they unticked a scope on Google's granular consent screen, or their
- * account predates those scopes being required.
- */
 export default async function GrantAccessPage() {
 	const { user } = await requireSession();
 
@@ -28,8 +18,6 @@ export default async function GrantAccessPage() {
 		select: { scope: true },
 	});
 
-	// Already granted — nothing to ask for. Guards the back button and a stale
-	// link as much as anything.
 	if (hasSyncScopes(account?.scope)) {
 		redirect("/");
 	}
