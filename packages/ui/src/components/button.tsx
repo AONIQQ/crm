@@ -15,8 +15,13 @@ const buttonVariants = cva(
 				 */
 				default:
 					"bg-primary text-primary-foreground shadow-2xs hover:bg-[color-mix(in_oklch,var(--primary),black_12%)] active:bg-[color-mix(in_oklch,var(--primary),black_22%)] active:shadow-none",
+				/*
+				 * A solid fill in dark, not `bg-input/30`. A translucent control
+				 * takes the colour of whatever is behind it, so the same filter
+				 * button was one shade on the page and another on a panel.
+				 */
 				outline:
-					"border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+					"border-border bg-background shadow-2xs hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-muted dark:hover:bg-accent",
 				secondary:
 					"bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
 				ghost:
