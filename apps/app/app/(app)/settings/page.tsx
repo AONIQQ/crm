@@ -26,9 +26,8 @@ export default async function SettingsPage() {
 	await Promise.all([
 		queryClient.prefetchQuery(trpc.google.status.queryOptions()),
 		queryClient.prefetchQuery(trpc.settings.agentModel.queryOptions()),
+		queryClient.prefetchQuery(trpc.settings.modelCatalog.queryOptions()),
 	]);
-
-	void queryClient.prefetchQuery(trpc.settings.modelCatalog.queryOptions());
 
 	return (
 		<PageShell>
