@@ -210,7 +210,6 @@ export function CompaniesTable() {
 			facets={facets}
 			getRowId={(row) => row.id}
 			loading={companies.isFetching}
-			searchPlaceholder="Search companies by name or domain…"
 			onRowClick={(row) => openRecord({ kind: "company", id: row.id })}
 			empty="No companies match this view."
 		/>

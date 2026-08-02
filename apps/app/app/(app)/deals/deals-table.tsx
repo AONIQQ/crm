@@ -180,7 +180,6 @@ export function DealsTable() {
 			}}
 			getRowId={(row) => row.id}
 			loading={deals.isFetching}
-			searchPlaceholder="Search deals by name or company…"
 			onRowClick={(row) => openRecord({ kind: "deal", id: row.id })}
 			empty="No deals match this view."
 			meta={

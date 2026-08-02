@@ -159,7 +159,6 @@ export function ContactsTable() {
 			facets={facets}
 			getRowId={(row) => row.id}
 			loading={contacts.isFetching}
-			searchPlaceholder="Search by name, email or company…"
 			onRowClick={(row) => openRecord({ kind: "contact", id: row.id })}
 			empty="No contacts match this view."
 		/>

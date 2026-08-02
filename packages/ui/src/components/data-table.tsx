@@ -7,7 +7,6 @@ import ChevronDown from "@carbon/icons-react/es/ChevronDown";
 import ChevronRight from "@carbon/icons-react/es/ChevronRight";
 import Column from "@carbon/icons-react/es/Column";
 import Filter from "@carbon/icons-react/es/Filter";
-import Search from "@carbon/icons-react/es/Search";
 import { Button } from "@crm/ui/components/button";
 import {
 	DropdownMenu,
@@ -19,11 +18,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@crm/ui/components/dropdown-menu";
-import {
-	InputGroup,
-	InputGroupAddon,
-	InputGroupInput,
-} from "@crm/ui/components/input-group";
 import { Spinner } from "@crm/ui/components/spinner";
 import { TablePagination } from "@crm/ui/components/table-pagination";
 import {
@@ -91,7 +85,6 @@ export type DataTableProps<TRow, TSub> = {
 	total: number;
 	facetCounts?: Record<string, Record<string, number>>;
 	loading?: boolean;
-	searchPlaceholder?: string;
 	facets?: DataTableFacet[];
 	tabs?: DataTableTabs;
 	onRowClick?: (row: TRow) => void;
@@ -161,7 +154,6 @@ export function DataTable<TRow, TSub = unknown>({
 	total,
 	facetCounts,
 	loading,
-	searchPlaceholder = "Search…",
 	facets,
 	tabs,
 	onRowClick,
@@ -433,18 +425,6 @@ export function DataTable<TRow, TSub = unknown>({
 						{actions}
 					</div>
 				</div>
-
-				<InputGroup>
-					<InputGroupAddon>
-						<Search />
-					</InputGroupAddon>
-					<InputGroupInput
-						placeholder={searchPlaceholder}
-						value={query.q}
-						onChange={(event) => query.setSearch(event.target.value)}
-						autoComplete="off"
-					/>
-				</InputGroup>
 			</div>
 
 			<Table
