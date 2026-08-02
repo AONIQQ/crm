@@ -378,7 +378,14 @@ export class CompaniesService {
 				// and it is the one a rep can see. Cleared so the row shows a
 				// placeholder until the new domain answers, rather than confidently
 				// showing the old company's mark.
+				//
+				// All three variants, not just `iconUrl`: the agent's `brandToUpdate`
+				// only fills fields that are null, so a stale `iconDarkUrl` would
+				// survive re-enrichment and keep showing the previous company's mark
+				// to anyone in dark mode.
 				data.iconUrl = null;
+				data.iconDarkUrl = null;
+				data.iconTone = null;
 			}
 		}
 

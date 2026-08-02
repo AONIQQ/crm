@@ -33,10 +33,16 @@ export class FaviconService {
 			const iconUrl = await resolveFavicon(domain);
 			if (!iconUrl) return false;
 
-			// `iconUrl: null` in the filter, so an icon the agent found while we
+			// Filtered on the domain as well as `iconUrl`. The lookup is slow and
+			// nothing awaits it, so two quick domain edits leave two in flight: the
+			// older one can return last and stamp the previous company's icon onto
+			// the new domain. Matching the domain we actually resolved makes a
+			// late arrival a no-op instead.
+			//
+			// `iconUrl: null` for the other race — an icon the agent found while we
 			// were fetching is never overwritten by ours.
 			const { count } = await this.db.company.updateMany({
-				where: { id: companyId, iconUrl: null },
+				where: { id: companyId, iconUrl: null, domain },
 				data: { iconUrl },
 			});
 

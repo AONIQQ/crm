@@ -159,7 +159,13 @@
 	/* Lighter than the background: on near-black there is nothing darker to
 	 * draw a line with, so a border sits above its surface rather than below. */
 	--border: #2a2a2a;
-	--input: #3d3d3d;
+	/*
+	 * Lighter than `--border` on purpose, and lighter than it first was. A
+	 * control's edge is what tells you it can be typed into, so it has to clear
+	 * 3:1 against the surface behind it — #3d3d3d managed about 1.5:1 on a
+	 * #171717 card, which is a border you can only find if you know it is there.
+	 */
+	--input: #6b6b6b;
 	/* Much stronger than light: the page it covers is already dark. */
 	--overlay: rgb(0 0 0 / 0.55);
 	/*

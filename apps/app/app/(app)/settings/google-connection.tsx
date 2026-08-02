@@ -38,10 +38,42 @@ const SOURCES = {
 	},
 } as const;
 
+/**
+ * Where a "Resolve" link is allowed to point.
+ *
+ * The URL is scraped out of a vendor error string with a regex, and the string
+ * reaches us through a sync that talks to a third party. Rendering whatever it
+ * contains as a link a rep will click is a phishing hop waiting to happen, so
+ * the destination has to be somewhere the fix could actually live.
+ */
+const RESOLVE_HOSTS = [
+	"console.cloud.google.com",
+	"console.developers.google.com",
+	"support.google.com",
+	"myaccount.google.com",
+];
+
+function resolveLink(error: string): string | undefined {
+	const found = error.match(/https?:\/\/[^\s)]+/)?.[0];
+	if (!found) return undefined;
+
+	try {
+		const url = new URL(found);
+		const allowed =
+			url.protocol === "https:" &&
+			RESOLVE_HOSTS.some(
+				(host) => url.hostname === host || url.hostname.endsWith(`.${host}`),
+			);
+		return allowed ? url.toString() : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function explain(error: string) {
 	return {
 		summary: error.split(/(?<=\.)\s/)[0] ?? error,
-		url: error.match(/https?:\/\/[^\s)]+/)?.[0],
+		url: resolveLink(error),
 	};
 }
 
