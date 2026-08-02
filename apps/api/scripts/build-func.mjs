@@ -163,3 +163,24 @@ writeFileSync(
 );
 
 console.log(`✓ built ${outDir}`);
+
+const directDatabaseUrl = !process.env.VERCEL
+	? undefined
+	: process.env.DIRECT_DATABASE_URL ||
+		process.env.POSTGRES_URL_NON_POOLING ||
+		process.env.DATABASE_URL_UNPOOLED ||
+		process.env.DATABASE_URL;
+
+if (!process.env.VERCEL) {
+	console.log("• not a Vercel build — skipping migrations");
+} else if (!directDatabaseUrl) {
+	console.log("• no database URL at build time — skipping migrations");
+} else {
+	console.log("• applying migrations (prisma migrate deploy)...");
+	execSync(`${bun} x prisma migrate deploy`, {
+		cwd: join(repoRoot, "packages/db"),
+		stdio: "inherit",
+		env: { ...process.env, DATABASE_URL: directDatabaseUrl },
+	});
+	console.log("✓ migrations applied");
+}

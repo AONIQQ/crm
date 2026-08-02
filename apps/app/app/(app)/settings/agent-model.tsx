@@ -94,9 +94,11 @@ export function AgentModel() {
 	const defaultModel = models.find((model) => model.id === defaultId);
 	const current = selectedId ?? FOLLOW_DEFAULT;
 
+	const effectiveName = effective?.name ?? effectiveId;
+
 	const currentLabel = selectedId
-		? (effective?.name ?? selectedId)
-		: `Default — ${defaultModel?.name ?? defaultId}`;
+		? effectiveName
+		: `Default — ${effectiveName}`;
 
 	const choose = (id: string) => {
 		setOpen(false);
