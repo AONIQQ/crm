@@ -377,12 +377,16 @@ export class CompaniesService {
 			throw new NotFoundException(`No company with id ${id}.`);
 		}
 
-		await this.db.$transaction([
-			this.db.agentTask.deleteMany({ where: { companyId: id } }),
-			this.db.company.delete({ where: { id } }),
-		]);
+		try {
+			await this.db.$transaction([
+				this.db.agentTask.deleteMany({ where: { companyId: id } }),
+				this.db.company.delete({ where: { id } }),
+			]);
+		} catch (error) {
+			throw this.translate(error, id);
+		}
 
-		await this.stamp.recomputeAll();
+		await this.stamp.recomputeAllAfterDelete({ companyId: id });
 
 		this.logger.log({
 			message: "Company deleted",

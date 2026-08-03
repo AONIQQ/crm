@@ -1,5 +1,5 @@
 import type { Db } from "@crm/db";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
 export type ActivityTarget = {
@@ -10,6 +10,8 @@ export type ActivityTarget = {
 
 @Injectable()
 export class ActivityStampService {
+	private readonly logger = new Logger(ActivityStampService.name);
+
 	constructor(@InjectDatabase() private readonly db: Db) {}
 
 	async touch(target: ActivityTarget, at: Date): Promise<void> {
@@ -71,6 +73,21 @@ export class ActivityStampService {
 				where: { id: target.dealId },
 				data: { lastActivityAt: _max.createdAt },
 			});
+		}
+	}
+
+	async recomputeAllAfterDelete(deleted: ActivityTarget): Promise<void> {
+		try {
+			await this.recomputeAll();
+		} catch (error) {
+			this.logger.error(
+				{
+					message:
+						"A record was deleted but its activity stamps were not recomputed",
+					...deleted,
+				},
+				error instanceof Error ? error.stack : String(error),
+			);
 		}
 	}
 

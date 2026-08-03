@@ -254,8 +254,13 @@ export class DealsService {
 			throw new NotFoundException(`No deal with id ${id}.`);
 		}
 
-		await this.db.deal.delete({ where: { id } });
-		await this.stamp.recomputeAll();
+		try {
+			await this.db.deal.delete({ where: { id } });
+		} catch (error) {
+			throw this.translate(error, id);
+		}
+
+		await this.stamp.recomputeAllAfterDelete({ dealId: id });
 
 		this.logger.log({ message: "Deal deleted", dealId: id, name: deal.name });
 

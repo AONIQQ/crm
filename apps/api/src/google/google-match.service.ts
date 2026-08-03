@@ -80,7 +80,7 @@ export class GoogleMatchService {
 		const rows = await this.db.suppressedContact.findMany({
 			select: { email: true },
 		});
-		return new Set(rows.map((row) => row.email));
+		return new Set(rows.map((row) => row.email.toLowerCase()));
 	}
 
 	async resolve(

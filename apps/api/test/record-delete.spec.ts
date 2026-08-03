@@ -191,6 +191,41 @@ describe("deleting a contact", () => {
 		await db.contact.delete({ where: { id: readded.id } });
 		await db.suppressedContact.deleteMany({ where: { email } });
 	});
+
+	it("suppresses an address a rep typed in caps as the sync will see it", async () => {
+		const typed = `Mixed.Case@${domain.toUpperCase()}`;
+		const asSynced = typed.toLowerCase();
+
+		const created = await contacts.create({ firstName: "Mixed", email: typed });
+
+		expect(
+			await db.contact.findUnique({
+				where: { id: created.id },
+				select: { email: true },
+			}),
+		).toEqual({ email: asSynced });
+
+		await contacts.delete(created.id);
+
+		expect(
+			await db.suppressedContact.findUnique({ where: { email: asSynced } }),
+		).not.toBeNull();
+
+		const result = await match.resolve(
+			{
+				participants: [{ email: asSynced, name: "Mixed Case" }],
+				allowCreate: true,
+				source: RecordSource.EMAIL,
+				ownerId: userId,
+			},
+			await matchContext(),
+		);
+
+		expect(result.external).toEqual([]);
+		expect(
+			await db.contact.findFirst({ where: { email: asSynced } }),
+		).toBeNull();
+	});
 });
 
 describe("deleting a company", () => {

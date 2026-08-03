@@ -103,13 +103,12 @@ export function useCrmCache(): CrmCache {
 			),
 
 		removed: ({ kind, id }) => {
-			const gone = JSON.stringify(
-				{
-					company: trpc.companies.byId,
-					contact: trpc.contacts.byId,
-					deal: trpc.deals.byId,
-				}[kind].queryKey({ id }),
-			);
+			const goneKey = {
+				company: trpc.companies.byId,
+				contact: trpc.contacts.byId,
+				deal: trpc.deals.byId,
+			}[kind].queryKey({ id });
+			const gone = JSON.stringify(goneKey);
 
 			for (const record of [
 				trpc.companies.byId,
@@ -121,6 +120,12 @@ export function useCrmCache(): CrmCache {
 					predicate: (query) => JSON.stringify(query.queryKey) !== gone,
 				});
 			}
+
+			void queryClient.invalidateQueries({
+				queryKey: goneKey,
+				exact: true,
+				refetchType: "none",
+			});
 
 			return run(
 				[...listKeys(), ...activityKeys(), trpc.dashboard.summary.queryKey()],

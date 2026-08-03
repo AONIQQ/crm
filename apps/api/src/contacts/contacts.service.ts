@@ -17,7 +17,7 @@ import { AgentQueueService } from "../agent/agent-queue.service";
 import { AgentTriggerService } from "../agent/agent-trigger.service";
 import { CompanyDirectoryService } from "../companies/company-directory.service";
 import { ActivityStampService } from "../crm/activity-stamp.service";
-import { blankToNull, toCents } from "../crm/values";
+import { blankToNull, normalizeEmail, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import {
 	countsByKey,
@@ -257,11 +257,11 @@ export class ContactsService {
 	}
 
 	async create(input: ContactCreateInput) {
-		const email = blankToNull(input.email ?? "");
+		const email = normalizeEmail(input.email ?? "");
 
 		if (email) {
-			const existing = await this.db.contact.findUnique({
-				where: { email },
+			const existing = await this.db.contact.findFirst({
+				where: { email: { equals: email, mode: "insensitive" } },
 				select: { id: true, firstName: true, lastName: true },
 			});
 			if (existing) {
@@ -279,20 +279,22 @@ export class ContactsService {
 					})
 				: null);
 
-		const contact = await this.db.contact.create({
-			data: {
-				firstName: input.firstName.trim(),
-				lastName: blankToNull(input.lastName ?? ""),
-				email,
-				phone: blankToNull(input.phone ?? ""),
-				title: blankToNull(input.title ?? ""),
-				companyId,
-				ownerId: input.ownerId ?? null,
-			},
-			select: { id: true, firstName: true, lastName: true },
-		});
+		const contact = await this.db.$transaction(async (tx) => {
+			await this.allowAgain(tx, email);
 
-		await this.allowAgain(email);
+			return tx.contact.create({
+				data: {
+					firstName: input.firstName.trim(),
+					lastName: blankToNull(input.lastName ?? ""),
+					email,
+					phone: blankToNull(input.phone ?? ""),
+					title: blankToNull(input.title ?? ""),
+					companyId,
+					ownerId: input.ownerId ?? null,
+				},
+				select: { id: true, firstName: true, lastName: true },
+			});
+		});
 
 		this.logger.log({ message: "Contact created", contactId: contact.id });
 
@@ -318,30 +320,36 @@ export class ContactsService {
 			.filter(Boolean)
 			.join(" ");
 
-		await this.db.$transaction([
-			...(contact.email
-				? [
-						this.db.suppressedContact.upsert({
-							where: { email: contact.email },
-							create: {
-								email: contact.email,
-								reason: `Deleted from the CRM (${name})`,
-							},
-							update: {},
-						}),
-					]
-				: []),
-			this.db.agentTask.deleteMany({ where: { contactId: id } }),
-			this.db.agentEvent.deleteMany({ where: { contactId: id } }),
-			this.db.contact.delete({ where: { id } }),
-		]);
+		const suppress = normalizeEmail(contact.email ?? "");
 
-		await this.stamp.recomputeAll();
+		try {
+			await this.db.$transaction([
+				...(suppress
+					? [
+							this.db.suppressedContact.upsert({
+								where: { email: suppress },
+								create: {
+									email: suppress,
+									reason: `Deleted from the CRM (${name})`,
+								},
+								update: {},
+							}),
+						]
+					: []),
+				this.db.agentTask.deleteMany({ where: { contactId: id } }),
+				this.db.agentEvent.deleteMany({ where: { contactId: id } }),
+				this.db.contact.delete({ where: { id } }),
+			]);
+		} catch (error) {
+			throw this.translate(error, id);
+		}
+
+		await this.stamp.recomputeAllAfterDelete({ contactId: id });
 
 		this.logger.log({
 			message: "Contact deleted",
 			contactId: id,
-			suppressed: contact.email !== null,
+			suppressed: suppress !== null,
 		});
 
 		return { id, name };
@@ -353,7 +361,7 @@ export class ContactsService {
 		if (input.firstName !== undefined) data.firstName = input.firstName.trim();
 		if (input.lastName !== undefined)
 			data.lastName = blankToNull(input.lastName);
-		if (input.email !== undefined) data.email = blankToNull(input.email);
+		if (input.email !== undefined) data.email = normalizeEmail(input.email);
 		if (input.phone !== undefined) data.phone = blankToNull(input.phone);
 		if (input.title !== undefined) data.title = blankToNull(input.title);
 		if (input.linkedinUrl !== undefined) {
@@ -377,23 +385,32 @@ export class ContactsService {
 		}
 
 		try {
-			const updated = await this.db.contact.update({
-				where: { id },
-				data,
-				select: { id: true, firstName: true, lastName: true },
+			return await this.db.$transaction(async (tx) => {
+				const updated = await tx.contact.update({
+					where: { id },
+					data,
+					select: { id: true, firstName: true, lastName: true },
+				});
+
+				if (typeof data.email === "string") {
+					await this.allowAgain(tx, data.email);
+				}
+
+				return updated;
 			});
-
-			if (typeof data.email === "string") await this.allowAgain(data.email);
-
-			return updated;
 		} catch (error) {
 			throw this.translate(error, id);
 		}
 	}
 
-	private async allowAgain(email: string | null): Promise<void> {
+	private async allowAgain(
+		tx: Prisma.TransactionClient,
+		email: string | null,
+	): Promise<void> {
 		if (!email) return;
-		await this.db.suppressedContact.deleteMany({ where: { email } });
+		await tx.suppressedContact.deleteMany({
+			where: { email: { equals: email, mode: "insensitive" } },
+		});
 	}
 
 	private async relationship(contactId: string, companyId: string | null) {

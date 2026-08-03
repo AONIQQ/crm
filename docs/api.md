@@ -352,12 +352,25 @@ once.
 - **It suppresses the address, not the person.** A contact with no email cannot
   be recreated by the sync in the first place — the sync only knows people by
   address — so there is nothing to write down.
+- **The key is the address as the sync will see it: lower case.**
+  `parseAddress` lower-cases everything Google hands us, so a rep who typed
+  `Paula.Marchetti@Fernhill.com` into the quick-add form and then deleted the
+  contact left a suppression nothing would ever match, and the next thread put
+  them straight back — the exact loop the row exists to break. `normalizeEmail`
+  (`apps/api/src/crm/values.ts`) is the one canonicaliser, applied where a rep's
+  typing enters the system: `contacts.create`, `contacts.update` and the
+  suppression written by `contacts.delete`. The conflict check on create and
+  `allowAgain` both match case-insensitively so a row written before this rule
+  still answers.
 - **The colleagues are untouched.** Only the deleted address is filtered, so a
   thread with three other people at that company still files against them. A
   thread where the deleted person was the *only* outsider files against nobody,
   which is the correct reading of "we do not track this person".
 - **A rep can always add them back, and doing so lifts the suppression.**
-  `allowAgain` runs on `contacts.create` and on an `update` that sets the email.
+  `allowAgain` runs on `contacts.create` and on an `update` that sets the email,
+  **inside the same transaction as the write**. Outside it, a database blip
+  between the two left a contact the sync still ignores, and the retry hit the
+  "already uses that email" conflict — a record a rep can see and cannot fix.
   The rule is *not added back automatically* — somebody typing the address in is
   not the inbox making the decision for them.
 - **Deleting a company does not suppress its domain.** Its people survive the
@@ -372,11 +385,20 @@ survives a redeploy — which means a delete has to clear them itself. Leaving
 them behind queues research about a person who no longer exists, and the
 dispatcher spends a session finding that out.
 
-Every delete then calls `ActivityStampService.recomputeAll()`. Deleting a record
-deletes its activities, and `lastActivityAt` on whatever else those activities
-touched is a cached maximum that nothing else recomputes — a company whose only
-recent activity was on a deleted deal would sort as though the work were still
-fresh, forever.
+Every delete then calls `ActivityStampService.recomputeAllAfterDelete()`.
+Deleting a record deletes its activities, and `lastActivityAt` on whatever else
+those activities touched is a cached maximum that nothing else recomputes — a
+company whose only recent activity was on a deleted deal would sort as though
+the work were still fresh, forever.
+
+**It runs after the delete has committed, so it logs rather than throws.** The
+row is already gone by the time the stamps are rebuilt; letting that failure out
+reports a completed destructive action as a failure, the browser never
+invalidates its caches, and the rep's retry answers `No contact with id …`. A
+stale sort order is a smaller wrong than that, and the next delete or
+reconnection recomputes it. The delete itself is still translated: a record
+removed between the pre-check and the delete is the documented 404, not a P2025
+escaping as a 500.
 
 ## Freshness: invalidate the query, don't disable the cache
 
@@ -395,13 +417,16 @@ job: a mutation invalidates the query keys it affected, and the list refetches.
   key.** Everything a deletion can reach is refreshed together — the lists, the
   timeline, the dashboard, and the other records that named this one, since a
   colleague list and a deal's attendees both go stale the moment a contact goes.
-  The deleted record's *own* `byId` entry is deliberately left alone: its query is
-  still mounted for the moment it takes the sheet to animate shut, so
-  invalidating it asks the API for a row that no longer exists and the sheet
-  reads the 404 as "this record could not be loaded" on its way out. Nothing
-  observes that entry once the sheet is gone, so it expires on its own. One wide
-  fan-out is right here because deleting is rare and touches more than any edit
-  does.
+  The deleted record's *own* `byId` entry is invalidated with
+  `refetchType: "none"`, which is the one place that option is right: its query
+  is still mounted for the moment it takes the sheet to animate shut, so a
+  refetch asks the API for a row that no longer exists and the sheet reads the
+  404 as "this record could not be loaded" on its way out. Marking it stale
+  without refetching keeps the closing sheet quiet *and* stops the entry being
+  served from cache — `staleTime` is 30 seconds, so leaving it untouched meant a
+  rep who reopened the record from a stale link or the back button read half a
+  minute of a record that no longer exists. One wide fan-out is right here
+  because deleting is rare and touches more than any edit does.
 - **Pass `{ settle: "record" }`** when the caller is an inline editor. The
   default waits for every affected view to refetch, which is right when the point
   of the action *is* the view changing (a card moving between board columns);

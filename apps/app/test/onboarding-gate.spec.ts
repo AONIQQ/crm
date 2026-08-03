@@ -86,6 +86,7 @@ describe("proxy", () => {
 	});
 
 	it("ignores a neighbour's cookie from the parent domain", async () => {
+		expect(AUTH_COOKIE_PREFIX).not.toBe("better-auth");
 		answerWith(workspace({ onboarded: true, canRename: true }));
 
 		expect(
