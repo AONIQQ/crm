@@ -11,6 +11,7 @@ import {
 	type LeasedTask,
 	noteSession,
 	retireExhausted,
+	type TaskSubject,
 } from "./tasks";
 
 export const VISIBLE_BATCH = 60;
@@ -18,65 +19,85 @@ export const VISIBLE_CONCURRENCY = 6;
 export const VISIBLE_LEASE_MS = 2 * 60_000;
 
 export const RESEARCH_BATCH = 12;
+export const RESEARCH_LEASE_MS = 30 * 60_000;
 
 export async function retireAbandoned(): Promise<void> {
+	let abandoned: TaskSubject[] = [];
+
 	try {
-		for (const abandoned of await retireExhausted()) {
-			await settle(
-				abandoned,
-				EnrichmentStatus.FAILED,
-				"Research was attempted several times and never completed.",
-			);
-		}
-	} catch {}
+		abandoned = await retireExhausted();
+	} catch {
+		return;
+	}
+
+	for (const task of abandoned) {
+		await settle(
+			task,
+			EnrichmentStatus.FAILED,
+			"Research was attempted several times and never completed.",
+		).catch(() => {});
+	}
 }
 
 export async function runVisibleLane(): Promise<number> {
-	const tasks = await claimDue(
-		VISIBLE_BATCH,
-		{ only: DIRECT_KINDS },
-		VISIBLE_LEASE_MS,
-	);
+	let handled = 0;
 
-	if (tasks.length === 0) return 0;
+	while (handled < VISIBLE_BATCH) {
+		const tasks = await claimDue(
+			Math.min(VISIBLE_CONCURRENCY, VISIBLE_BATCH - handled),
+			{ only: DIRECT_KINDS },
+			VISIBLE_LEASE_MS,
+		);
 
-	await runLimited(VISIBLE_CONCURRENCY, tasks, async (task) => {
-		try {
-			if (task.kind === "brand" && task.companyId) {
-				const result = await runBrand({ companyId: task.companyId });
-				await completeTask(task.id, brandOutcome(result));
-				return;
-			}
+		if (tasks.length === 0) break;
 
-			if (task.kind === "portrait" && task.contactId) {
-				const portrait = await runPortrait({
-					contactId: task.contactId,
-					spend: () => ({ ok: true }),
-				});
+		await runLimited(VISIBLE_CONCURRENCY, tasks, runDirect);
+		handled += tasks.length;
+	}
 
-				await completeTask(
-					task.id,
-					portrait.stored
-						? `Picture stored from ${portrait.source}.`
-						: (portrait.reason ?? "No picture found."),
-				);
-				return;
-			}
+	return handled;
+}
 
-			await completeTask(task.id, "The record this names is gone.");
-		} catch (error) {
-			const reason = error instanceof Error ? error.message : String(error);
-			await settle(task, EnrichmentStatus.FAILED, reason).catch(() => {});
+async function runDirect(task: LeasedTask): Promise<void> {
+	try {
+		if (task.kind === "brand" && task.companyId) {
+			const result = await runBrand({ companyId: task.companyId });
+			if (result.retryable) return;
+
+			await completeTask(task.id, brandOutcome(result));
+			return;
 		}
-	});
 
-	return tasks.length;
+		if (task.kind === "portrait" && task.contactId) {
+			const portrait = await runPortrait({
+				contactId: task.contactId,
+				spend: () => ({ ok: true }),
+			});
+
+			await completeTask(
+				task.id,
+				portrait.stored
+					? `Picture stored from ${portrait.source}.`
+					: (portrait.reason ?? "No picture found."),
+			);
+			return;
+		}
+
+		await completeTask(task.id, "The record this names is gone.");
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		await settle(task, EnrichmentStatus.FAILED, reason).catch(() => {});
+	}
 }
 
 export async function runResearchLane(
 	start: (task: LeasedTask) => Promise<{ id: string }>,
 ): Promise<number> {
-	const tasks = await claimDue(RESEARCH_BATCH, { except: DIRECT_KINDS });
+	const tasks = await claimDue(
+		RESEARCH_BATCH,
+		{ except: DIRECT_KINDS },
+		RESEARCH_LEASE_MS,
+	);
 	if (tasks.length === 0) return 0;
 
 	await Promise.all(

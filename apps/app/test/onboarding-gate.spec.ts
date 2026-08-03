@@ -11,12 +11,18 @@ afterEach(() => {
 	globalThis.fetch = realFetch;
 });
 
+function stub(handler: () => Promise<Response>) {
+	globalThis.fetch = handler as unknown as typeof fetch;
+}
+
 function answerWith(body: unknown, status = 200) {
-	globalThis.fetch = (async () =>
-		new Response(JSON.stringify(body), {
-			status,
-			headers: { "content-type": "application/json" },
-		})) as typeof fetch;
+	stub(
+		async () =>
+			new Response(JSON.stringify(body), {
+				status,
+				headers: { "content-type": "application/json" },
+			}),
+	);
 }
 
 function request(pathname: string, cookies: string[] = []) {
@@ -58,9 +64,9 @@ describe("readOnboardingGate", () => {
 			"unknown",
 		);
 
-		globalThis.fetch = (async () => {
+		stub(async () => {
 			throw new Error("connect ECONNREFUSED");
-		}) as typeof fetch;
+		});
 		expect(await readOnboardingGate(request("/", [SESSION_COOKIE]))).toBe(
 			"unknown",
 		);
@@ -96,12 +102,12 @@ describe("proxy", () => {
 
 	it("asks once, then remembers", async () => {
 		let calls = 0;
-		globalThis.fetch = (async () => {
+		stub(async () => {
 			calls += 1;
 			return new Response(
 				JSON.stringify(workspace({ onboarded: true, canRename: true })),
 			);
-		}) as typeof fetch;
+		});
 
 		const first = await proxy(request("/companies", [SESSION_COOKIE]));
 		const marker = first.cookies.get(ONBOARDING_COOKIE);
@@ -142,9 +148,9 @@ describe("proxy", () => {
 	});
 
 	it("fails open when the API is unreachable", async () => {
-		globalThis.fetch = (async () => {
+		stub(async () => {
 			throw new Error("connect ECONNREFUSED");
-		}) as typeof fetch;
+		});
 
 		const response = await proxy(request("/companies", [SESSION_COOKIE]));
 

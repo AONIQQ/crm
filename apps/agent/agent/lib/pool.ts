@@ -12,15 +12,25 @@ export function collapsing<A extends unknown[]>(
 
 		active = run(...args);
 
+		let failure: { error: unknown } | null = null;
+
 		try {
 			await active;
+		} catch (error) {
+			failure = { error };
 		} finally {
 			active = null;
 		}
 
 		const next = trailing;
 		trailing = null;
-		if (next) await invoke(...next);
+
+		if (next) {
+			const catchUp = invoke(...next);
+			await (failure ? catchUp.catch(() => {}) : catchUp);
+		}
+
+		if (failure) throw failure.error;
 	};
 
 	return invoke;
@@ -32,18 +42,10 @@ export async function runLimited<T>(
 	run: (item: T) => Promise<void>,
 ): Promise<void> {
 	const width = Math.max(1, Math.min(concurrency, items.length));
-	let next = 0;
+	const queue = items[Symbol.iterator]();
 
 	const workers = Array.from({ length: width }, async () => {
-		while (true) {
-			const index = next++;
-			if (index >= items.length) return;
-
-			const item = items[index];
-			if (item === undefined) return;
-
-			await run(item);
-		}
+		for (const item of queue) await run(item);
 	});
 
 	await Promise.all(workers);

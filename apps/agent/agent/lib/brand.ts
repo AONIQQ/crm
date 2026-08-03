@@ -1,6 +1,6 @@
 import { db, EnrichmentStatus } from "@crm/db";
 import { mirrorBrandImages } from "./brand-images";
-import { brandToUpdate, filledFields } from "./brand-mapping";
+import { brandToUpdate, filledFields, stillFillable } from "./brand-mapping";
 import { brandByDomain, contextDevEnabled } from "./context-dev";
 
 export type BrandResult = {
@@ -50,16 +50,19 @@ export async function runBrand({
 	fresh?: boolean;
 	spend?: Spend;
 }): Promise<BrandResult> {
-	if (!contextDevEnabled()) {
-		return { enriched: false, reason: "Context.dev is not configured." };
-	}
-
 	const company = await db.company.findUnique({
 		where: { id: companyId },
 		select: COMPANY_FIELDS,
 	});
 
 	if (!company) return { enriched: false, reason: "No such company." };
+
+	if (!contextDevEnabled()) {
+		const reason =
+			"Context.dev is not configured, so there is nowhere to look.";
+		await settle(companyId, EnrichmentStatus.SKIPPED, reason);
+		return { enriched: false, reason };
+	}
 
 	if (!company.domain) {
 		await settle(companyId, EnrichmentStatus.SKIPPED, "No domain to look up.");
@@ -93,32 +96,52 @@ export async function runBrand({
 		};
 	}
 
-	const update = brandToUpdate(result.brand, {
-		...company,
-		nameIsPlaceholder: company.name === company.domain,
-	});
-	const filled = filledFields(update);
+	const update = brandToUpdate(result.brand, snapshot(company));
 
 	const { mirrored } = await mirrorBrandImages(companyId, update);
 
-	await db.$transaction([
-		db.company.update({ where: { id: companyId }, data: update }),
-		db.companyEnrichment.upsert({
-			where: { companyId },
-			create: { companyId, raw: result.raw as object },
-			update: { raw: result.raw as object, fetchedAt: new Date() },
-		}),
-		db.company.update({
+	const filled = await db.$transaction(async (tx) => {
+		const current = await tx.company.findUnique({
+			where: { id: companyId },
+			select: COMPANY_FIELDS,
+		});
+
+		if (!current) return null;
+
+		const data = stillFillable(update, snapshot(current));
+
+		await tx.company.update({
 			where: { id: companyId },
 			data: {
+				...data,
 				enrichmentStatus: EnrichmentStatus.COMPLETE,
 				enrichedAt: new Date(),
 				enrichmentError: null,
 			},
-		}),
-	]);
+		});
 
-	return { enriched: true, filled, mirrored };
+		await tx.companyEnrichment.upsert({
+			where: { companyId },
+			create: { companyId, raw: result.raw as object },
+			update: { raw: result.raw as object, fetchedAt: new Date() },
+		});
+
+		return filledFields(data);
+	});
+
+	if (!filled) return { enriched: false, reason: "No such company." };
+
+	return {
+		enriched: true,
+		filled,
+		mirrored: mirrored.filter((slot) => filled.includes(slot)),
+	};
+}
+
+function snapshot<T extends { name: string; domain: string | null }>(
+	company: T,
+) {
+	return { ...company, nameIsPlaceholder: company.name === company.domain };
 }
 
 export function brandOutcome(result: BrandResult): string {
