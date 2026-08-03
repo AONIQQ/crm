@@ -46,19 +46,35 @@ frames away as a missing variable. `packages/env/test/root.spec.ts` pins this.
 
 ## What is required
 
-Five values, and the API refuses to start without them.
+Three values, and the API refuses to start without them.
 
 | Variable | Why it has no default |
 | --- | --- |
 | `DATABASE_URL` | `docker compose up -d` starts a Postgres that matches `.env.example` exactly |
 | `BETTER_AUTH_SECRET` | Signs session cookies. `openssl rand -base64 32` |
 | `ALLOWED_SIGN_IN` | The entire authorisation model — see below |
-| `GOOGLE_CLIENT_ID` | Google is the only sign-in method |
-| `GOOGLE_CLIENT_SECRET` | |
 
 Everything else has a working localhost default or is genuinely optional. That
 is the difference between a clone that runs and a clone that makes you read a
 table of variables first.
+
+### Google is the fourth value, and it is a pair
+
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are what a clone starts with, and
+almost every install wants them: they are both the sign-in button and the Gmail
+and Calendar sync. They are nonetheless **optional**, because an install that
+signs in through [its own identity provider](./api.md#sso-is-a-row-not-a-deployment)
+should not have to create a Google Cloud project to do it.
+
+- **They are set together or not at all.** `packages/auth/src/env.ts` throws on
+  one without the other, because half a client is a sign-in button that fails at
+  Google with an error the reader cannot act on.
+- **Neither Google nor a provider is a state the sign-in page reports**, naming
+  the two variables — see [the SSO rules](./api.md#sso-is-a-row-not-a-deployment).
+  It is the one configuration mistake whose audience is the person who can fix
+  it, so it must not present as a blank page.
+- **Without them, Gmail sync is a capability the install does not have**, and
+  Settings → Connections says so rather than offering a button that cannot work.
 
 ### `ALLOWED_SIGN_IN`
 
@@ -163,10 +179,32 @@ Always on. Same OAuth client, same callback — the two read-only scopes are add
 to the existing Google provider rather than to a second one, so there is no
 extra redirect URI to register.
 
-The scopes are requested **at sign-in** and are a condition of using the CRM:
-`requireGoogleAccess()` gates the app shell on what Google actually granted,
-because granular consent lets a user untick a scope and still complete sign-in.
-Anyone missing either scope is sent to `/grant-access` to re-consent.
+The scopes are requested **at sign-in** and are a condition of using the CRM
+*for the person who signed in with Google*: `requireGoogleAccess()` gates the
+app shell on what Google actually granted, because granular consent lets a user
+untick a scope and still complete sign-in. Anyone missing either scope is sent
+to `/grant-access` to re-consent.
+
+**Someone who signed in through an identity provider is not gated**, and the
+distinction is the whole of `needsGoogleGrant` in
+[`@crm/auth`](../packages/auth/src/scopes.ts): the wall applies to an account
+whose only sign-in row is `google`. Two reasons it cannot be "does this person
+have the scopes".
+
+- **An SSO rep has no Google account to grant them on.** Sending them to
+  `/grant-access` is sending them to a page whose only other button is *sign
+  out* — a locked door with a sign on it, on an install that may have no Google
+  client at all.
+- **Linking Gmail must not become a trap.** An SSO rep who connects Google and
+  later revokes it would, under a scopes-only rule, be locked out of the CRM by
+  having tried the optional feature. `revoke()` clears the tokens and keeps the
+  `account` row, so that row is exactly what a scopes-only rule would trip over.
+
+They connect it from **Settings → Connections** instead, which posts the same
+`linkSocial` call `/grant-access` does — one write path, two doors. The card
+tells the three states apart, because they need three different sentences: no
+Google client on the install, a client but no linked account, and a linked
+account that has stopped working.
 
 **Sync is forward-only.** Nothing from before a mailbox was first seen is
 imported: Gmail records the current `historyId` on its first pass and imports
