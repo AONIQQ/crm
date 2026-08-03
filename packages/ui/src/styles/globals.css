@@ -187,11 +187,6 @@
 
 	--font-sans: var(--font-sans);
 	--font-mono: var(--font-mono);
-
-	/* One step below text-xs, for the quiet way out of a form. */
-	--text-xxs: 0.6875rem;
-	--text-xxs--line-height: 1rem;
-
 	--radius-sm: 4px;
 	--radius-md: var(--radius);
 	--radius-lg: 8px;

@@ -7,8 +7,6 @@ import {
 	ONBOARDING_PATH,
 	RESEARCH_COOKIE,
 	RESEARCH_PATH,
-	RESEARCH_SKIP_PATH,
-	RESEARCH_SKIPPED_COOKIE,
 	readOnboardingGate,
 	readResearchGate,
 	settle,
@@ -31,10 +29,6 @@ export async function proxy(request: NextRequest) {
 
 	if (isUngated(pathname)) return NextResponse.next();
 
-	if (pathname === RESEARCH_SKIP_PATH) {
-		return remember(request, home(request), RESEARCH_SKIPPED_COOKIE);
-	}
-
 	const onboarding = request.cookies.has(ONBOARDING_COOKIE)
 		? "settled"
 		: await readOnboardingGate(request);
@@ -45,19 +39,15 @@ export async function proxy(request: NextRequest) {
 		return remember(request, sendTo(ONBOARDING_PATH, request), ...settled);
 	}
 
-	const skipped = request.cookies.has(RESEARCH_SKIPPED_COOKIE);
-
-	const research: Gate = skipped
+	const research = request.cookies.has(RESEARCH_COOKIE)
 		? "settled"
-		: request.cookies.has(RESEARCH_COOKIE)
-			? "settled"
-			: await readResearchGate(request);
+		: await readResearchGate(request);
 
 	if (research === "required") {
 		return remember(request, sendTo(RESEARCH_PATH, request), ...settled);
 	}
 
-	if (!skipped && research === "settled") settled.push(RESEARCH_COOKIE);
+	if (research === "settled") settled.push(RESEARCH_COOKIE);
 
 	return remember(request, past(request, onboarding, research), ...settled);
 }

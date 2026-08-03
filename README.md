@@ -1,6 +1,10 @@
 <p align="center">
-  <a href="https://link.context.dev/crm"><img alt="Context" height="18" align="middle" src="./docs/images/context.png"></a>
-  &nbsp;<a href="https://link.context.dev/crm"><strong>Powered by Context</strong></a>
+  <a href="https://link.context.dev/crm">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./docs/images/powered-by-context-dark.png">
+      <img alt="Powered by Context" height="23" src="./docs/images/powered-by-context.png">
+    </picture>
+  </a>
 </p>
 
 <h1 align="center">CRM</h1>

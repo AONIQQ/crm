@@ -11,11 +11,9 @@ import {
 import { Input } from "@crm/ui/components/input";
 import { Spinner } from "@crm/ui/components/spinner";
 import { useMutation } from "@tanstack/react-query";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId } from "react";
 import { toast } from "sonner";
-import { RESEARCH_SKIP_PATH } from "@/lib/onboarding";
 import { useTRPC } from "@/lib/trpc/client";
 
 export function ResearchForm() {
@@ -74,19 +72,10 @@ export function ResearchForm() {
 				</Field>
 			</FieldGroup>
 
-			<div className="flex flex-col items-center gap-3">
-				<Button type="submit" disabled={save.isPending} className="w-full">
-					{save.isPending ? <Spinner data-icon="inline-start" /> : null}
-					Continue
-				</Button>
-
-				<Link
-					href={RESEARCH_SKIP_PATH}
-					className="text-muted-foreground text-xxs underline underline-offset-4 hover:text-foreground"
-				>
-					Skip
-				</Link>
-			</div>
+			<Button type="submit" disabled={save.isPending}>
+				{save.isPending ? <Spinner data-icon="inline-start" /> : null}
+				Continue
+			</Button>
 		</form>
 	);
 }

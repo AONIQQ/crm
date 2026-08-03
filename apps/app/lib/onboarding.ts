@@ -5,22 +5,9 @@ export const ONBOARDING_PATH = "/onboarding";
 
 export const RESEARCH_PATH = "/onboarding/research";
 
-/**
- * Skip is a link the proxy answers rather than a page, so the gate that would
- * otherwise redirect it back to the form is the same thing that lets it go.
- */
-export const RESEARCH_SKIP_PATH = "/onboarding/research/skip";
-
 export const ONBOARDING_COOKIE = "crm.onboarded";
 
 export const RESEARCH_COOKIE = "crm.research";
-
-/**
- * Two cookies because they record two different facts: one caches *a key is
- * saved*, the other *this browser was asked and said not now*. One writer each,
- * and neither can be mistaken for the other.
- */
-export const RESEARCH_SKIPPED_COOKIE = "crm.research.skipped";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 

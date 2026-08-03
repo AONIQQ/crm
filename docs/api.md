@@ -176,16 +176,13 @@ called, who works here, and what do we sell — and for nothing else.
     The marker is written onto the *redirect* to the key form, so the workspace
     is not re-read on every request during the window a rep is being asked
     something else.
-  - **Skip is a link the proxy answers, not a page.** `/onboarding/research/skip`
-    never renders: the proxy recognises the path, writes the marker and sends
-    them home. A route handler would have needed ungating — the gate would
-    otherwise redirect the skip link back to the form it is trying to leave —
-    and ungating is how you get a hole rather than a door.
-  - **Two cookies, because they are two different facts.** `crm.research` caches
-    *a key is saved*; `crm.research.skipped` records *this browser was asked and
-    said not now*. Collapsing them into one would mean the skip link wrote a
-    cookie claiming a key exists, and the proxy is careful not to: it only
-    writes `crm.research` when the API actually said so.
+  - **There is no way past it but to answer, and that is the point.** It had a
+    Skip, and Skip was the one path that could strand an install: every company
+    added afterwards sits `PENDING` waiting for a key nobody is going to be
+    asked for again, and nothing anywhere says so. A gate whose escape hatch
+    silently accumulates broken records is not a gate. If it should become
+    optional again, the missing piece is somewhere that surfaces *N companies
+    are waiting on a key* — not a link that hides the question.
   - **Settings → General is the same write.** `settings.setResearchKey` is
     posted by both, so there is one write path and no second opinion about what
     a valid key looks like — including the check: that mutation asks the agent

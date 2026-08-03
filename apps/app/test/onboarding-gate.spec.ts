@@ -4,7 +4,6 @@ import { NextRequest } from "next/server";
 import {
 	ONBOARDING_COOKIE,
 	RESEARCH_COOKIE,
-	RESEARCH_SKIPPED_COOKIE,
 	readOnboardingGate,
 	readResearchGate,
 } from "../lib/onboarding";
@@ -275,39 +274,6 @@ describe("the research key gate", () => {
 		setup({ configured: false });
 
 		const response = await proxy(request("/companies", [SESSION_COOKIE]));
-
-		expect(response.cookies.get(RESEARCH_COOKIE)).toBeUndefined();
-	});
-
-	it("lets a rep skip, and does not ask that browser again", async () => {
-		const calls = setup({ configured: false });
-
-		const skip = await proxy(
-			request("/onboarding/research/skip", [SESSION_COOKIE]),
-		);
-
-		expect(redirectedTo(skip)).toBe("/");
-		expect(skip.cookies.get(RESEARCH_SKIPPED_COOKIE)?.value).toBe("1");
-		expect(calls.research).toBe(0);
-
-		expect(
-			redirectedTo(
-				await proxy(
-					request("/companies", [
-						SESSION_COOKIE,
-						`${RESEARCH_SKIPPED_COOKIE}=1`,
-					]),
-				),
-			),
-		).toBeNull();
-	});
-
-	it("does not record a key for a rep who only skipped", async () => {
-		setup({ configured: false });
-
-		const response = await proxy(
-			request("/companies", [SESSION_COOKIE, `${RESEARCH_SKIPPED_COOKIE}=1`]),
-		);
 
 		expect(response.cookies.get(RESEARCH_COOKIE)).toBeUndefined();
 	});

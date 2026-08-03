@@ -212,6 +212,27 @@ whether a company arrives as itself or as a grey square with its initials in
 it — so [the proxy asks for it](./api.md#the-gate-is-proxyts-and-it-is-answered-once-per-browser)
 rather than leaving it to be discovered on a settings page nobody visits.
 
+- **An install that had the variable set is asked for the key again, and that
+  is the intended upgrade.** Nothing adopts the old value — no boot-time
+  migration, no fallback — so the first navigation after deploying lands
+  everyone on `/onboarding/research`, where they paste the key they already
+  have. It is one interruption, once, in exchange for the answer living in one
+  place rather than two — and it cannot be dismissed, because a dismissed gate
+  is an install quietly filling up with companies that have no logo.
+- **Nothing is lost in the meantime, and the wait is not a queue.** A `brand`
+  task with nowhere to look is consumed and marked done — but it settles
+  `SKIPPED` *before* anything marks the row `RUNNING`, and `settle` only writes
+  over a `RUNNING` row, so the company stays `PENDING`. `PENDING` is exactly
+  what the sign-in sweep re-queues, so the work is recovered from the record
+  rather than held in the queue. `test/keyless-brand.integration.spec.ts` pins
+  it, because a `settle` that wrote unconditionally would strand every company
+  added before the key with nothing to say so.
+- **Saving the key picks that work up immediately.**
+  `settings.setResearchKey` runs the company sweep itself rather than leaving it
+  to the next sign-in, because the person who just fixed it is standing there.
+  It is fire-and-forget: a sweep that fails logs and the sign-in one still
+  catches up. Contacts are not swept here — only one of the three portrait
+  sources is Context — and they are picked up on the next sign-in as before.
 - **`readContextDevKey` in [`@crm/db/settings`](../packages/db/src/settings.ts)
   is the only reader**, and it reads one column. Everything downstream —
   `contextDevKey()` in the agent's `capabilities.ts`, the client in
