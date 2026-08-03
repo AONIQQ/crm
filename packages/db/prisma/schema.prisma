@@ -623,7 +623,6 @@ model Organization {
   createdAt   DateTime
   metadata    String?
   website     String?
-  onboardedAt DateTime?
   members     Member[]
   invitations Invitation[]
 

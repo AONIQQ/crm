@@ -31,8 +31,8 @@ export function OnboardingForm({ placeholder }: { placeholder: string }) {
 	const save = useMutation(
 		trpc.workspace.update.mutationOptions({
 			onSuccess: () => {
-				router.replace("/");
 				router.refresh();
+				router.replace("/");
 			},
 			onError: (error) => toast.error(error.message),
 		}),

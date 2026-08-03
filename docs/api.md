@@ -114,15 +114,49 @@ called, who works here, and what do we sell — and for nothing else.
   Renaming the workspace is data, not authentication, so it belongs on the data
   surface with everything else — see the next rule.
 - **The name and the website are asked for once, at the door, and there is no
-  skipping it.** `onboardedAt` on the workspace row is the whole of that state,
-  and `(app)/layout.tsx` redirects to `/onboarding` while it is null. Both
-  fields are `required` in the form *and* in `updateWorkspaceInput`, so the
-  website cannot be dropped later from the settings page either — a CRM that
-  knows what we sell on Monday and not on Tuesday is worse than one that never
-  knew. The gate only catches somebody who could *answer* it (`canRename`), so a
-  member never meets a form they are forbidden to submit, and it posts the same
-  `workspace.update` mutation as the settings page rather than a second write
-  path.
+  skipping it.** Both fields are `required` in the form *and* in
+  `updateWorkspaceInput`, so the website cannot be dropped later from the
+  settings page either — a CRM that knows what we sell on Monday and not on
+  Tuesday is worse than one that never knew. The gate only catches somebody who
+  could *answer* it (`canRename`), so a member never meets a form they are
+  forbidden to submit, and it posts the same `workspace.update` mutation as the
+  settings page rather than a second write path.
+- **The state is `onboardedAt` inside the organization's `metadata`, not a
+  column beside it.** The plugin ships that blob and owns the table; a second
+  timestamp column is a second place the same fact is recorded, and the two
+  drifted the first time somebody wrote a website through a revision of
+  `WorkspaceService.update` that predated the column. A row with a name, a
+  website and a null timestamp is a workspace that has plainly answered the
+  question and is asked it forever. `isOnboarded` and `markOnboarded` in
+  [`@crm/db/workspace`](../packages/db/src/workspace.ts) are the only readers
+  and the only writer; `markOnboarded` keeps the first answer and preserves
+  every other key, because the blob is the plugin's, not ours.
+- **The gate is `proxy.ts`, and it is answered once per browser.** It used to
+  live in `(app)/layout.tsx`, which meant a `workspace.get` round trip on every
+  navigation into the app to re-establish a fact that changes once in the life
+  of an install — and a second, opposing redirect on the `/onboarding` page to
+  stop the first one looping. Two redirects pointing at each other is not a
+  gate, it is a latch waiting for the two reads to disagree.
+  - **`getSessionCookie()` decides signed-in, not a session lookup.** That is
+    Better Auth's documented optimistic check for proxy, and it is all a
+    redirect needs; every page behind it still resolves the real session
+    server-side through `requireGoogleAccess()`.
+  - **The answer is cached in an httpOnly `crm.onboarded` cookie**, so the
+    common path costs nothing and the tRPC read happens once — twice for the
+    person who actually fills the form in, since the cookie lands on the
+    navigation after the mutation. The proxy is the only writer; the form does
+    not set it, because two writers is how this went wrong in the first place.
+    Forging the cookie skips a setup form and grants nothing, which is why it
+    can be a cookie at all.
+  - **`/sign-in`, `/grant-access` and `/eve` are ungated.**
+    `requireGoogleAccess()` redirects to `/grant-access`, so gating it would
+    ping-pong against the onboarding redirect for anyone who signed in without
+    both scopes.
+  - **An unreachable API fails open.** `readOnboardingGate` returns `unknown`
+    on a non-200, a timeout or a parse failure, and an unknown gate lets the
+    request through without writing the cookie. The alternative is an install
+    that cannot reach its own API redirecting every request to a form that
+    cannot be submitted.
 - **The name arrives as a placeholder, not as an answer.** A workspace is
   created as `DEFAULT_WORKSPACE_NAME` — the literal string `CRM` — and the field
   is empty with that behind it. It used to be derived from the sign-in domain,

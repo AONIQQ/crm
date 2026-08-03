@@ -7,6 +7,7 @@ import {
 	type WorkspaceRole,
 } from "@crm/auth";
 import type { Db, Prisma } from "@crm/db";
+import { isOnboarded, markOnboarded } from "@crm/db/workspace";
 import {
 	BadRequestException,
 	ForbiddenException,
@@ -99,7 +100,7 @@ export class WorkspaceService {
 	async get(userId: string): Promise<Workspace> {
 		const row = await this.db.organization.findUnique({
 			where: { id: WORKSPACE_ID },
-			select: { id: true, name: true, website: true, onboardedAt: true },
+			select: { id: true, name: true, website: true, metadata: true },
 		});
 
 		if (!row) {
@@ -113,7 +114,7 @@ export class WorkspaceService {
 			id: row.id,
 			name: row.name,
 			website: row.website,
-			onboarded: row.onboardedAt !== null,
+			onboarded: isOnboarded(row.metadata),
 			viewerRole: role,
 			canRename: canRenameWorkspace(role),
 			canChangeRoles: canChangeRole(role),
@@ -134,7 +135,7 @@ export class WorkspaceService {
 
 		const before = await this.db.organization.findUnique({
 			where: { id: WORKSPACE_ID },
-			select: { website: true, onboardedAt: true },
+			select: { website: true, metadata: true },
 		});
 
 		const website = normalizeWebsite(input.website);
@@ -150,7 +151,7 @@ export class WorkspaceService {
 			data: {
 				name: input.name,
 				website,
-				...(before?.onboardedAt ? {} : { onboardedAt: new Date() }),
+				metadata: markOnboarded(before?.metadata ?? null, new Date()),
 			},
 		});
 

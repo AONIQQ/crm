@@ -88,10 +88,6 @@ export const auth = betterAuth({
 							type: "string",
 							required: false,
 						},
-						onboardedAt: {
-							type: "date",
-							required: false,
-						},
 					},
 				},
 			},

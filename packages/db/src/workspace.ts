@@ -7,6 +7,36 @@ export const MAX_NARRATIVE = 320;
 
 export const MAX_LINE = 140;
 
+export function isOnboarded(metadata: string | null): boolean {
+	return typeof readMetadata(metadata).onboardedAt === "string";
+}
+
+export function markOnboarded(metadata: string | null, at: Date): string {
+	const current = readMetadata(metadata);
+
+	return JSON.stringify(
+		typeof current.onboardedAt === "string"
+			? current
+			: { ...current, onboardedAt: at.toISOString() },
+	);
+}
+
+function readMetadata(metadata: string | null): Record<string, unknown> {
+	if (!metadata) return {};
+
+	try {
+		const parsed: unknown = JSON.parse(metadata);
+
+		return typeof parsed === "object" &&
+			parsed !== null &&
+			!Array.isArray(parsed)
+			? (parsed as Record<string, unknown>)
+			: {};
+	} catch {
+		return {};
+	}
+}
+
 export type WorkspaceProfile = {
 	website: string;
 	narrative: string;
