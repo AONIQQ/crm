@@ -20,20 +20,17 @@ export type SignInAccount = {
 	scope?: string | null;
 };
 
+export function signsInWithGoogle(accounts: readonly SignInAccount[]): boolean {
+	return (
+		accounts.length > 0 &&
+		accounts.every((account) => account.providerId === GOOGLE_PROVIDER_ID)
+	);
+}
+
 export function needsGoogleGrant(accounts: readonly SignInAccount[]): boolean {
-	const google = accounts.find(
-		(account) => account.providerId === GOOGLE_PROVIDER_ID,
-	);
+	if (!signsInWithGoogle(accounts)) return false;
 
-	if (!google) return false;
-
-	const viaSso = accounts.some(
-		(account) => account.providerId !== GOOGLE_PROVIDER_ID,
-	);
-
-	if (viaSso) return false;
-
-	return !hasSyncScopes(google.scope);
+	return !accounts.some((account) => hasSyncScopes(account.scope));
 }
 
 export function parseScopes(scope: string | null | undefined): Set<string> {

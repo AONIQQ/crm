@@ -22,6 +22,7 @@ export {
 	REQUIRED_SCOPES,
 	type SignInAccount,
 	SYNC_SCOPES,
+	signsInWithGoogle,
 } from "./scopes";
 export { onSignedIn, type SignedInHandler } from "./signed-in";
 export {

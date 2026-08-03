@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { needsGoogleGrant, SYNC_SCOPES } from "../src/scopes";
+import {
+	needsGoogleGrant,
+	SYNC_SCOPES,
+	signsInWithGoogle,
+} from "../src/scopes";
 
 const GRANTED = SYNC_SCOPES.join(",");
 
@@ -48,5 +52,26 @@ describe("who has to grant Gmail and Calendar", () => {
 
 	it("does not wall an account with no sign-in rows at all", () => {
 		expect(needsGoogleGrant([])).toBe(false);
+	});
+});
+
+describe("whether revoking Google costs someone the CRM", () => {
+	it("is true when Google is the only way in", () => {
+		expect(signsInWithGoogle([{ providerId: "google", scope: GRANTED }])).toBe(
+			true,
+		);
+	});
+
+	it("is false once an IdP is also on the account", () => {
+		expect(
+			signsInWithGoogle([
+				{ providerId: "okta", scope: null },
+				{ providerId: "google", scope: GRANTED },
+			]),
+		).toBe(false);
+	});
+
+	it("is false for an account with nothing linked", () => {
+		expect(signsInWithGoogle([])).toBe(false);
 	});
 });

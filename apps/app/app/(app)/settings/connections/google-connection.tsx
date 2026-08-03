@@ -121,7 +121,12 @@ function GoogleUnavailable() {
 	);
 }
 
-function ConnectGoogle() {
+const CONNECT_ERRORS: Record<string, string> = {
+	"email_doesn't_match":
+		"That Google account has a different email address to the one you sign in with, so it cannot be attached to your account. Connect the Google account that matches your sign-in address.",
+};
+
+function ConnectGoogle({ connectError }: { connectError?: string }) {
 	const [pending, setPending] = useState(false);
 
 	async function handleConnect() {
@@ -158,6 +163,17 @@ function ConnectGoogle() {
 			</CardHeader>
 
 			<CardContent>
+				{connectError ? (
+					<Alert variant="destructive">
+						<Icon icon={Warning} />
+						<AlertTitle>Google did not finish connecting</AlertTitle>
+						<AlertDescription>
+							{CONNECT_ERRORS[connectError] ??
+								"Google returned an error before the connection was made. Try again."}
+						</AlertDescription>
+					</Alert>
+				) : null}
+
 				<Button disabled={pending} onClick={handleConnect} type="button">
 					{pending ? (
 						<Spinner data-icon="inline-start" />
@@ -176,7 +192,7 @@ function ConnectGoogle() {
 	);
 }
 
-export function GoogleConnection() {
+export function GoogleConnection({ connectError }: { connectError?: string }) {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
 	const queryClient = useQueryClient();
@@ -201,7 +217,10 @@ export function GoogleConnection() {
 
 	const revoke = useMutation(
 		trpc.google.revokeAccess.mutationOptions({
-			onSuccess: () => window.location.assign("/"),
+			onSuccess: () =>
+				window.location.assign(
+					status.data?.required ? "/" : "/settings/connections",
+				),
 			onError: (error) => toast.error(error.message),
 		}),
 	);
@@ -234,10 +253,11 @@ export function GoogleConnection() {
 
 	if (!status.data) return null;
 
-	const { sources, hasRefreshToken, configured, linked } = status.data;
+	const { sources, hasRefreshToken, configured, linked, required } =
+		status.data;
 
 	if (!configured) return <GoogleUnavailable />;
-	if (!linked) return <ConnectGoogle />;
+	if (!linked) return <ConnectGoogle connectError={connectError} />;
 
 	const failing = sources.filter(
 		(source) => source.status === "NEEDS_RECONNECT" || source.lastError,
@@ -395,8 +415,9 @@ export function GoogleConnection() {
 								<AlertDialogHeader>
 									<AlertDialogTitle>Revoke Google access?</AlertDialogTitle>
 									<AlertDialogDescription>
-										You will be signed out, and you cannot use the CRM again
-										until you grant access.
+										{required
+											? "You will be signed out, and you cannot use the CRM again until you grant access."
+											: "New email and meetings stop arriving. Everything already synced stays, and you can connect Google again from this page."}
 									</AlertDialogDescription>
 								</AlertDialogHeader>
 

@@ -16,13 +16,20 @@ export const metadata: Metadata = {
 	title: "Connections",
 };
 
-export default async function ConnectionsSettingsPage() {
+export default async function ConnectionsSettingsPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ error?: string | string[] }>;
+}) {
 	await requireSession();
 
 	const trpc = getServerTrpc();
 	const queryClient = getServerQueryClient();
 
-	await queryClient.prefetchQuery(trpc.google.status.queryOptions());
+	const [{ error }] = await Promise.all([
+		searchParams,
+		queryClient.prefetchQuery(trpc.google.status.queryOptions()),
+	]);
 
 	return (
 		<PageShell>
@@ -38,7 +45,9 @@ export default async function ConnectionsSettingsPage() {
 			<PageShellContent>
 				<HydrateClient>
 					<div className="flex max-w-3xl flex-col gap-6">
-						<GoogleConnection />
+						<GoogleConnection
+							connectError={Array.isArray(error) ? error[0] : error}
+						/>
 					</div>
 				</HydrateClient>
 			</PageShellContent>
