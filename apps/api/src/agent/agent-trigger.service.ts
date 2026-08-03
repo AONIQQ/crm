@@ -2,6 +2,7 @@ import type { Db } from "@crm/db";
 import { PRIORITY } from "@crm/db/agent-tasks";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
+import { bridge } from "./bridge";
 
 const POKE_TIMEOUT_MS = 2_000;
 
@@ -192,10 +193,8 @@ export class AgentTriggerService {
 	}
 
 	private poke(): void {
-		const secret = process.env.AGENT_BRIDGE_SECRET?.trim();
-		if (!secret) return;
-
-		const base = process.env.AGENT_URL?.trim() || "http://127.0.0.1:2000";
+		const agent = bridge();
+		if (!agent) return;
 
 		const missed = (error: unknown) => {
 			this.logger.debug({
@@ -205,9 +204,9 @@ export class AgentTriggerService {
 		};
 
 		try {
-			void fetch(new URL("/internal/crm/dispatch", base), {
+			void fetch(agent.url("/internal/crm/dispatch"), {
 				method: "POST",
-				headers: { authorization: `Bearer ${secret}` },
+				headers: { authorization: `Bearer ${agent.secret}` },
 				signal: AbortSignal.timeout(POKE_TIMEOUT_MS),
 			}).catch(missed);
 		} catch (error) {

@@ -32,7 +32,7 @@ export function OnboardingForm({ placeholder }: { placeholder: string }) {
 		trpc.workspace.update.mutationOptions({
 			onSuccess: () => {
 				router.refresh();
-				router.replace("/");
+				router.replace("/onboarding/research");
 			},
 			onError: (error) => toast.error(error.message),
 		}),

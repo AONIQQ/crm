@@ -1,3 +1,8 @@
+<p align="center">
+  <a href="https://link.context.dev/crm"><img alt="Context" height="18" align="middle" src="./docs/images/context.png"></a>
+  &nbsp;<a href="https://link.context.dev/crm"><strong>Powered by Context</strong></a>
+</p>
+
 <h1 align="center">CRM</h1>
 
 <p align="center">
@@ -132,8 +137,16 @@ failed call at a time, and it prints the list at startup:
 ```
 [agent] on   LinkedIn (RAPIDAPI_KEY)
 [agent] off  Web research (PERPLEXITY_API_KEY)
-[agent] off  Company brand data (CONTEXT_DEV_API_KEY)
+[agent] off  Company brand data (Settings → General)
 ```
+
+**Company brand data is [Context](https://link.context.dev/crm)** — the logo, the
+colours, the industry and the real name behind a domain, which is the difference
+between an account that arrives as itself and one that arrives as a grey square with
+its initials in it. It is the one key that is asked for rather than configured: it
+lives in a row, the onboarding asks for it, and **Settings → General** changes it
+afterwards, because a self-hoster's admin cannot redeploy to set an environment
+variable.
 
 **The sandbox has no network and no database.** Turning it on is what gives the model
 a shell — the difference between a tool-caller and something that can keep a dossier,
@@ -277,7 +290,6 @@ short version:
 | `API_URL` / `APP_URL` | Where the two halves are served. Only needed off localhost. |
 | `PERPLEXITY_API_KEY` | Lets the agent search the open web, with citations. |
 | `RAPIDAPI_KEY` | Lets the agent read LinkedIn profiles for identity. |
-| `CONTEXT_DEV_API_KEY` | Company logo, industry and socials from a domain. |
 | `AGENT_BRIDGE_SECRET` | Lets a rep talk to the agent from a contact's **Agent** tab. |
 | `REDIS_URL` | A shared cache. Without it, per-instance and in-memory. |
 | `CRON_SECRET` | Guards the Gmail/Calendar sync route. Required to use it. |

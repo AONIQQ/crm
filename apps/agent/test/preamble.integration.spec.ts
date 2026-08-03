@@ -216,7 +216,7 @@ describe("sessionPreamble", () => {
 
 describe("every session is told who we are", () => {
 	it("ends each preamble with the same account of us", async () => {
-		const expected = composeClosing(await identity());
+		const expected = await composeClosing(await identity());
 
 		for (const { markdown } of [
 			await contactPreamble(paulaId, rep),

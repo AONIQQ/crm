@@ -244,6 +244,31 @@ and `FOR UPDATE SKIP LOCKED`, which already handle it.
 `AGENT_BRIDGE_SECRET` authorises it, and **unset means the route refuses rather
 than opens**, the same rule the rep bridge follows.
 
+### Checking a key belongs to the person who typed it
+
+`POST /internal/crm/verify-key` is the crm channel's second internal route, and
+it exists because the API is not allowed to call Context.dev and this agent
+already does. It takes a candidate key, probes with it, and answers `valid`,
+`invalid` or `unknown` — no session, no model, no task row, because there is
+nothing here to decide.
+
+- **The probe is free and it is chosen to be.** A brand lookup only bills when
+  it resolves a brand, and a free-provider address is refused with a documented
+  `422` first, so `key-check@gmail.com` authenticates without buying anything.
+  Do not "improve" this to a real domain: that is ten credits every time
+  somebody saves a key, including every time they correct a typo.
+- **`classifyKey` rejects on `401` and nothing else.** Every other status came
+  back *after* the key was accepted, so it says something about the plan, the
+  quota or Context's afternoon — not about the key. Treating a `429` as a bad
+  key would refuse a perfectly good one at the worst possible moment.
+- **It is the candidate key, never the stored one.** `verifyKey` builds a
+  throwaway client from the argument, so checking a new key cannot be confused
+  with exercising the one already saved.
+
+The API's half is `ResearchKeyService`, and an `unknown` answer there saves the
+key anyway — see
+[the environment rules](./environment.md#the-context-key-is-asked-for-not-configured).
+
 ### Catching up what was missed
 
 Enrichment is queued when a record is created, so anything created before a
@@ -341,6 +366,21 @@ help" result — checked **before** the research budget is charged.
 
 A missing key removes a place to look. It is never an error, and it must never
 throw.
+
+**Not all of them are environment variables, which is why `capabilities()` is
+async.** The Context.dev key is a row a rep can set on Settings → General — see
+[the environment rules](./environment.md#the-context-key-is-asked-for-not-configured)
+— so the answer to *what can I use here* now involves a read, and `enabled()`
+and `capabilitiesMarkdown()` are awaited with it. `capabilitiesFrom()` and
+`markdownFor()` are the pure halves, which is what keeps
+`test/capabilities.spec.ts` a unit test rather than something that reports a
+different answer depending on what the developer happens to have saved locally.
+
+`contextDevKey()` is the only resolver, and `lib/context-dev.ts` builds its
+client from it rather than from `process.env` — memoised on the key string, so
+replacing the key swaps the client and nothing else does. There is no cache in
+front of the read: a key saved in the browser applies to the next vendor call,
+not the next deploy.
 
 ## Budget, and deciding what to do next
 

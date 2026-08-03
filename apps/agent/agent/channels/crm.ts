@@ -1,5 +1,6 @@
 import { EnrichmentStatus } from "@crm/db";
 import { defineChannel, POST } from "eve/channels";
+import { verifyKey } from "../lib/context-dev";
 import { brief, drainAll, taskAuth } from "../lib/dispatch";
 import { settle } from "../lib/enrichment";
 import { completeTask, taskSubject } from "../lib/tasks";
@@ -44,6 +45,28 @@ export default defineChannel({
 			);
 
 			return new Response(null, { status: 202 });
+		}),
+
+		POST("/internal/crm/verify-key", async (request) => {
+			if (!authorised(request)) {
+				return new Response("Unauthorized", { status: 401 });
+			}
+
+			const body = (await request.json().catch(() => null)) as {
+				apiKey?: unknown;
+			} | null;
+
+			const apiKey =
+				typeof body?.apiKey === "string" ? body.apiKey.trim() : null;
+
+			if (!apiKey) {
+				return Response.json(
+					{ outcome: "invalid", reason: "No API key was sent." },
+					{ status: 400 },
+				);
+			}
+
+			return Response.json(await verifyKey(apiKey));
 		}),
 	],
 

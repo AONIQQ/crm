@@ -11,6 +11,7 @@ import { requireSession } from "@/lib/session";
 import { HydrateClient } from "@/lib/trpc/hydrate";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
 import { AgentModel } from "./agent-model";
+import { ResearchKey } from "./research-key";
 import { WorkspaceForm } from "./workspace-form";
 
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default async function GeneralSettingsPage() {
 		queryClient.prefetchQuery(trpc.workspace.get.queryOptions()),
 		queryClient.prefetchQuery(trpc.settings.agentModel.queryOptions()),
 		queryClient.prefetchQuery(trpc.settings.modelCatalog.queryOptions()),
+		queryClient.prefetchQuery(trpc.settings.researchKey.queryOptions()),
 	]);
 
 	return (
@@ -44,6 +46,7 @@ export default async function GeneralSettingsPage() {
 				<HydrateClient>
 					<div className="flex max-w-3xl flex-col gap-6">
 						<WorkspaceForm />
+						<ResearchKey />
 						<AgentModel />
 					</div>
 				</HydrateClient>

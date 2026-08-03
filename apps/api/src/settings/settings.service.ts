@@ -1,10 +1,14 @@
 import type { Db } from "@crm/db";
 import {
 	DEFAULT_AGENT_MODEL,
+	maskKey,
 	readAgentModel,
+	readContextDevKey,
 	writeAgentModel,
+	writeContextDevKey,
 } from "@crm/db/settings";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { ResearchKeyService } from "../agent/research-key.service";
 import { InjectDatabase } from "../database/database.constants";
 import {
 	type CatalogModel,
@@ -24,6 +28,11 @@ export interface ModelCatalogResult {
 	available: boolean;
 }
 
+export interface ResearchKeySettings {
+	configured: boolean;
+	hint: string | null;
+}
+
 @Injectable()
 export class SettingsService {
 	private readonly logger = new Logger(SettingsService.name);
@@ -31,6 +40,7 @@ export class SettingsService {
 	constructor(
 		@InjectDatabase() private readonly db: Db,
 		private readonly catalog: ModelCatalogService,
+		private readonly researchKeys: ResearchKeyService,
 	) {}
 
 	async agentModel(): Promise<AgentModelSettings> {
@@ -84,5 +94,28 @@ export class SettingsService {
 	async modelCatalog(): Promise<ModelCatalogResult> {
 		const models = await this.catalog.models();
 		return { models: models ?? [], available: models !== null };
+	}
+
+	async researchKey(): Promise<ResearchKeySettings> {
+		const key = await readContextDevKey(this.db);
+
+		return { configured: key !== null, hint: key ? maskKey(key) : null };
+	}
+
+	async setResearchKey(apiKey: string): Promise<ResearchKeySettings> {
+		const check = await this.researchKeys.verify(apiKey);
+
+		if (check.outcome === "invalid") {
+			throw new BadRequestException(check.reason);
+		}
+
+		await writeContextDevKey(this.db, apiKey);
+
+		this.logger.log({
+			message: "Context key saved",
+			verified: check.outcome === "valid",
+		});
+
+		return this.researchKey();
 	}
 }
