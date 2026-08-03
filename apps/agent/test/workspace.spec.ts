@@ -1,0 +1,113 @@
+import { describe, expect, it } from "bun:test";
+import {
+	MAX_LINE,
+	MAX_NARRATIVE,
+	profileOf,
+	trimSections,
+} from "@crm/db/workspace";
+import { composeClosing } from "../agent/lib/preamble";
+import { usMarkdown, type WorkspaceIdentity } from "../agent/lib/workspace";
+
+const us: WorkspaceIdentity = {
+	name: "Comp AI",
+	website: "trycomp.ai",
+	profile: {
+		website: "trycomp.ai",
+		narrative:
+			"Comp AI takes a startup from nothing to a SOC 2 or ISO 27001 audit by automating the evidence collection, and sells the platform on an annual subscription.",
+		sections: {
+			sells: "Compliance automation for SOC 2, ISO 27001 and GDPR",
+			sellsTo: "Series A to C startups facing their first framework audit",
+			edge: "Getting there in weeks rather than months",
+		},
+		sourceUrl: "https://trycomp.ai",
+		refreshedAt: new Date("2026-08-01T00:00:00.000Z"),
+	},
+};
+
+describe("who we are", () => {
+	it("says nothing at all when the install has no workspace", () => {
+		expect(usMarkdown(null)).toBe("");
+	});
+
+	it("names us, and refuses to invent the rest", () => {
+		const markdown = usMarkdown({
+			name: "Comp AI",
+			website: "trycomp.ai",
+			profile: null,
+		});
+
+		expect(markdown).toContain("Comp AI");
+		expect(markdown).toContain("trycomp.ai");
+		expect(markdown).toContain("do not guess");
+	});
+
+	it("states what we sell and who to", () => {
+		const markdown = usMarkdown(us);
+
+		expect(markdown).toContain("Comp AI");
+		expect(markdown).toContain("takes a startup from nothing");
+		expect(markdown).toContain("Compliance automation");
+		expect(markdown).toContain("Series A to C startups");
+	});
+
+	it("tells the agent what the context is for, and what it is not for", () => {
+		const markdown = usMarkdown(us);
+
+		expect(markdown).toContain("means for us");
+		expect(markdown).toContain("never write a pitch");
+	});
+
+	it("stays small enough to sit in front of every session", () => {
+		expect(usMarkdown(us).length).toBeLessThan(1_000);
+	});
+});
+
+describe("every session is told who we are", () => {
+	it("carries the block in front of the capabilities", () => {
+		const closing = composeClosing(us);
+
+		expect(closing).toContain("## Who we are");
+		expect(closing.indexOf("## Who we are")).toBeLessThan(
+			closing.indexOf("## What you can use here"),
+		);
+	});
+
+	it("degrades to the capabilities alone", () => {
+		expect(composeClosing(null)).not.toContain("## Who we are");
+		expect(composeClosing(null)).toContain("## What you can use here");
+	});
+});
+
+describe("a profile belongs to the website it was read from", () => {
+	const profile = us.profile;
+
+	it("is ours while the website is unchanged", () => {
+		expect(profileOf(profile, "trycomp.ai")).toBe(profile);
+	});
+
+	it("is dropped the moment the website changes", () => {
+		expect(profileOf(profile, "somewhere-else.com")).toBeNull();
+	});
+
+	it("is dropped when the website is taken away", () => {
+		expect(profileOf(profile, null)).toBeNull();
+	});
+});
+
+describe("the profile cannot grow", () => {
+	it("clamps a line that runs on", () => {
+		const { sells } = trimSections({ sells: "a".repeat(MAX_LINE + 50) });
+
+		expect(sells).toHaveLength(MAX_LINE);
+		expect(sells?.endsWith("…")).toBe(true);
+	});
+
+	it("drops what the site did not say", () => {
+		expect(trimSections({ sells: "  ", sellsTo: undefined })).toEqual({});
+	});
+
+	it("keeps the narrative shorter than a paragraph", () => {
+		expect(MAX_NARRATIVE).toBeLessThanOrEqual(400);
+	});
+});

@@ -1,3 +1,4 @@
+import { isGoogleConfigured } from "@crm/auth";
 import { type Db, GoogleSyncStatus } from "@crm/db";
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { normalizeDomain } from "../companies/domain";
@@ -22,6 +23,8 @@ export type SourceStatus = {
 };
 
 export type ConnectionStatus = {
+	configured: boolean;
+	linked: boolean;
 	hasRefreshToken: boolean;
 	sources: SourceStatus[];
 };
@@ -41,10 +44,11 @@ export class GoogleConnectionService {
 	async status(userId: string): Promise<ConnectionStatus> {
 		await this.onConnected(userId);
 
-		const [granted, rows, hasRefreshToken] = await Promise.all([
+		const [granted, rows, hasRefreshToken, linked] = await Promise.all([
 			this.tokens.grantedScopes(userId),
 			this.state.listForUser(userId),
 			this.tokens.hasRefreshToken(userId),
+			this.tokens.isLinked(userId),
 		]);
 
 		const bySource = new Map(rows.map((row) => [row.source, row]));
@@ -63,7 +67,12 @@ export class GoogleConnectionService {
 			};
 		});
 
-		return { hasRefreshToken, sources };
+		return {
+			configured: isGoogleConfigured(),
+			linked,
+			hasRefreshToken,
+			sources,
+		};
 	}
 
 	async onConnected(userId: string): Promise<void> {

@@ -214,7 +214,10 @@ works without any app running.
 - **Redis** — optional. Without `REDIS_URL` the cache falls back to a
   per-instance in-memory store, which is fine for local work and wrong for any
   multi-instance deploy (see `docs/api.md`).
-- **Sign-in method** — Google-only, in code, not configurable.
+- **Sign-in method** — Google is the built-in one and it is in code. An
+  install that wants its own identity provider adds one on the SSO settings
+  page, and that is a row rather than a variable — see
+  [SSO](./api.md#sso-is-a-row-not-a-deployment).
 
 ## `vercel env pull` writes to `.env.local`, which wins
 

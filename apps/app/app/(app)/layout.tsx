@@ -1,9 +1,12 @@
+import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { AppIconRail } from "@/components/app-icon-rail";
 import { QuickSwitcher } from "@/components/crm/quick-switcher";
 import { RecordSheetHost } from "@/components/crm/record-sheet/record-sheet-host";
 import { MobileNavProvider } from "@/components/mobile-nav";
 import { requireGoogleAccess } from "@/lib/session";
+import { HydrateClient } from "@/lib/trpc/hydrate";
+import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
 
 export default async function AppLayout({
 	children,
@@ -12,16 +15,26 @@ export default async function AppLayout({
 }>) {
 	const { user } = await requireGoogleAccess();
 
+	const workspace = await getServerQueryClient()
+		.fetchQuery(getServerTrpc().workspace.get.queryOptions())
+		.catch(() => null);
+
+	if (workspace && !workspace.onboarded && workspace.canRename) {
+		redirect("/onboarding");
+	}
+
 	return (
 		<MobileNavProvider>
 			<div className="isolate flex h-svh flex-col">
-				<AppHeader
-					user={{
-						name: user.name,
-						email: user.email,
-						image: user.image ?? null,
-					}}
-				/>
+				<HydrateClient>
+					<AppHeader
+						user={{
+							name: user.name,
+							email: user.email,
+							image: user.image ?? null,
+						}}
+					/>
+				</HydrateClient>
 				<div className="flex min-h-0 flex-1">
 					<AppIconRail />
 					{children}

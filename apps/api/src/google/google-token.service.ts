@@ -39,6 +39,15 @@ export class GoogleTokenService {
 		return scopes.includes(SCOPE_FOR_SOURCE[source]);
 	}
 
+	async isLinked(userId: string): Promise<boolean> {
+		const account = await this.db.account.findFirst({
+			where: { userId, providerId: GOOGLE_PROVIDER_ID },
+			select: { id: true },
+		});
+
+		return account !== null;
+	}
+
 	async hasRefreshToken(userId: string): Promise<boolean> {
 		const account = await this.db.account.findFirst({
 			where: { userId, providerId: GOOGLE_PROVIDER_ID },

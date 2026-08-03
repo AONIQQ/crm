@@ -2,6 +2,8 @@
 
 import Launch from "@carbon/icons-react/es/Launch";
 import Warning from "@carbon/icons-react/es/Warning";
+import { authClient } from "@crm/auth/client";
+import { SYNC_SCOPES } from "@crm/auth/scopes";
 import {
 	Alert,
 	AlertAction,
@@ -19,6 +21,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogTrigger,
 } from "@crm/ui/components/alert-dialog";
+import GoogleLogo from "@crm/ui/components/brand-logos/google";
 import { Button } from "@crm/ui/components/button";
 import {
 	Card,
@@ -31,6 +34,7 @@ import {
 } from "@crm/ui/components/card";
 import { Icon } from "@crm/ui/components/icon";
 import { Label } from "@crm/ui/components/label";
+import { Spinner } from "@crm/ui/components/spinner";
 import { StatusIndicator } from "@crm/ui/components/status-indicator";
 import { Switch } from "@crm/ui/components/switch";
 import { relativeTimeFromIso } from "@crm/ui/lib/format";
@@ -98,6 +102,80 @@ function failureSignature(
 		.join("|");
 }
 
+function GoogleUnavailable() {
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Google</CardTitle>
+				<CardDescription>
+					Gmail and Calendar sync needs a Google OAuth client, and this install
+					does not have one. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in
+					the root .env file and restart.
+				</CardDescription>
+
+				<CardAction>
+					<StatusIndicator size="sm" tone="neutral" label="Not configured" />
+				</CardAction>
+			</CardHeader>
+		</Card>
+	);
+}
+
+function ConnectGoogle() {
+	const [pending, setPending] = useState(false);
+
+	async function handleConnect() {
+		setPending(true);
+
+		const origin = window.location.origin;
+
+		const { error } = await authClient.linkSocial({
+			provider: "google",
+			scopes: [...SYNC_SCOPES],
+			callbackURL: `${origin}/settings/connections`,
+			errorCallbackURL: `${origin}/settings/connections`,
+		});
+
+		if (error) {
+			toast.error(error.message ?? "Could not reach Google.");
+			setPending(false);
+		}
+	}
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Google</CardTitle>
+				<CardDescription>
+					Connect Gmail and Calendar, and new meetings and email threads are
+					added to the matching company as they happen. It is read-only —
+					nothing is ever sent on your behalf.
+				</CardDescription>
+
+				<CardAction>
+					<StatusIndicator size="sm" tone="neutral" label="Not connected" />
+				</CardAction>
+			</CardHeader>
+
+			<CardContent>
+				<Button disabled={pending} onClick={handleConnect} type="button">
+					{pending ? (
+						<Spinner data-icon="inline-start" />
+					) : (
+						<GoogleLogo data-icon="inline-start" className="size-4" />
+					)}
+					Connect Google
+				</Button>
+
+				<p className="text-muted-foreground text-xs">
+					Only conversations with companies in the CRM are stored. Personal mail
+					is discarded without being saved.
+				</p>
+			</CardContent>
+		</Card>
+	);
+}
+
 export function GoogleConnection() {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
@@ -156,7 +234,10 @@ export function GoogleConnection() {
 
 	if (!status.data) return null;
 
-	const { sources, hasRefreshToken } = status.data;
+	const { sources, hasRefreshToken, configured, linked } = status.data;
+
+	if (!configured) return <GoogleUnavailable />;
+	if (!linked) return <ConnectGoogle />;
 
 	const failing = sources.filter(
 		(source) => source.status === "NEEDS_RECONNECT" || source.lastError,

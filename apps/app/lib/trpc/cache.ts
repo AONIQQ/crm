@@ -16,6 +16,8 @@ export type CrmCache = {
 	activity(options?: Options): Promise<void>;
 	google(options?: Options): Promise<void>;
 	settings(options?: Options): Promise<void>;
+	workspace(options?: Options): Promise<void>;
+	sso(options?: Options): Promise<void>;
 	everything(): Promise<void>;
 };
 
@@ -125,6 +127,20 @@ export function useCrmCache(): CrmCache {
 
 		settings: (options) =>
 			run([trpc.settings.agentModel.queryKey()], [], options),
+
+		workspace: (options) =>
+			run(
+				[trpc.workspace.get.queryKey(), trpc.workspace.members.queryKey()],
+				[],
+				options,
+			),
+
+		sso: (options) =>
+			run(
+				[trpc.sso.list.pathKey()],
+				[trpc.sso.settings.queryKey(), trpc.sso.signInOptions.queryKey()],
+				options,
+			),
 
 		everything: () => queryClient.invalidateQueries(),
 	};

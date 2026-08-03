@@ -1,8 +1,11 @@
+import { sso } from "@better-auth/sso";
 import { db } from "@crm/db";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
+import { organization } from "better-auth/plugins/organization";
 import { env } from "./env";
+import { ensureWorkspaceMembership } from "./organization";
 import { SYNC_SCOPES } from "./scopes";
 import { notifySignedIn } from "./signed-in";
 import {
@@ -72,6 +75,33 @@ export const auth = betterAuth({
 	trustedOrigins: [...env.trustedOrigins],
 	hooks: {},
 
+	plugins: [
+		organization({
+			allowUserToCreateOrganization: false,
+			disableOrganizationDeletion: true,
+			creatorRole: "owner",
+
+			schema: {
+				organization: {
+					additionalFields: {
+						website: {
+							type: "string",
+							required: false,
+						},
+						onboardedAt: {
+							type: "date",
+							required: false,
+						},
+					},
+				},
+			},
+		}),
+
+		sso({
+			organizationProvisioning: { disabled: true },
+		}),
+	],
+
 	databaseHooks: {
 		user: {
 			create: {
@@ -99,6 +129,14 @@ export const auth = betterAuth({
 
 		session: {
 			create: {
+				before: async (session) => {
+					const workspaceId = await ensureWorkspaceMembership(session.userId);
+
+					return {
+						data: { ...session, activeOrganizationId: workspaceId ?? null },
+					};
+				},
+
 				after: async (session) => {
 					const user = await db.user.findUnique({
 						where: { id: session.userId },

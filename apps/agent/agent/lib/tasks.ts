@@ -1,4 +1,4 @@
-import { db, type Prisma } from "@crm/db";
+import { db, Prisma } from "@crm/db";
 
 export type LeasedTask = {
 	id: string;
@@ -8,6 +8,8 @@ export type LeasedTask = {
 	reason: string;
 	budget: number;
 	attempts: number;
+	priority: number;
+	dueAt: Date;
 };
 
 export type TaskSubject = {
@@ -21,28 +23,45 @@ const LEASE_MS = 10 * 60_000;
 
 export const MAX_ATTEMPTS = 3;
 
-export async function claimDue(limit: number): Promise<LeasedTask[]> {
-	const now = new Date();
-	const until = new Date(now.getTime() + LEASE_MS);
+export { DIRECT_KINDS } from "@crm/db/agent-tasks";
 
-	return db.$queryRaw<LeasedTask[]>`
+export async function claimDue(
+	limit: number,
+	kinds: { only: readonly string[] } | { except: readonly string[] },
+	leaseMs = LEASE_MS,
+): Promise<LeasedTask[]> {
+	const now = new Date();
+	const until = new Date(now.getTime() + leaseMs);
+
+	const list = "only" in kinds ? kinds.only : kinds.except;
+	if ("only" in kinds && list.length === 0) return [];
+
+	const match = Prisma.sql`t2.kind ${"only" in kinds ? Prisma.sql`IN` : Prisma.sql`NOT IN`} (${Prisma.join(list)})`;
+
+	const claimed = await db.$queryRaw<LeasedTask[]>`
 		UPDATE "agentTask" AS t
 		SET "leasedUntil" = ${until},
 			"startedAt" = COALESCE(t."startedAt", ${now}),
 			"attempts" = t."attempts" + 1
 		FROM (
-			SELECT id FROM "agentTask"
-			WHERE "finishedAt" IS NULL
-				AND "dueAt" <= ${now}
-				AND ("leasedUntil" IS NULL OR "leasedUntil" < ${now})
-				AND "attempts" < ${MAX_ATTEMPTS}
-			ORDER BY "priority" DESC, "dueAt" ASC
+			SELECT t2.id FROM "agentTask" AS t2
+			WHERE t2."finishedAt" IS NULL
+				AND t2."dueAt" <= ${now}
+				AND (t2."leasedUntil" IS NULL OR t2."leasedUntil" < ${now})
+				AND t2."attempts" < ${MAX_ATTEMPTS}
+				AND ${match}
+			ORDER BY t2."priority" DESC, t2."dueAt" ASC
 			LIMIT ${limit}
 			FOR UPDATE SKIP LOCKED
 		) AS due
 		WHERE t.id = due.id
-		RETURNING t.id, t."contactId", t."companyId", t.kind, t.reason, t.budget, t.attempts;
+		RETURNING t.id, t."contactId", t."companyId", t.kind, t.reason,
+			t.budget, t.attempts, t.priority, t."dueAt";
 	`;
+
+	return claimed.sort(
+		(a, b) => b.priority - a.priority || a.dueAt.getTime() - b.dueAt.getTime(),
+	);
 }
 
 export async function retireExhausted(): Promise<TaskSubject[]> {

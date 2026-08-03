@@ -1,6 +1,9 @@
 import type { Db } from "@crm/db";
+import { PRIORITY } from "@crm/db/agent-tasks";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
+
+const POKE_TIMEOUT_MS = 2_000;
 
 @Injectable()
 export class AgentTriggerService {
@@ -14,9 +17,17 @@ export class AgentTriggerService {
 	): Promise<void> {
 		await this.enqueue({
 			companyId,
+			kind: "brand",
+			reason,
+			priority: PRIORITY.brand,
+			budget: 2,
+		});
+
+		await this.enqueue({
+			companyId,
 			kind: "company-profile",
 			reason,
-			priority: 10,
+			priority: PRIORITY.companyProfile,
 			budget: 4,
 		});
 	}
@@ -24,10 +35,27 @@ export class AgentTriggerService {
 	async companyRequested(companyId: string, reason: string): Promise<void> {
 		await this.enqueue({
 			companyId,
+			kind: "brand",
+			reason,
+			priority: PRIORITY.brand,
+			budget: 2,
+		});
+
+		await this.enqueue({
+			companyId,
 			kind: "company-profile",
 			reason,
-			priority: 100,
+			priority: PRIORITY.requested,
 			budget: 8,
+		});
+	}
+
+	async workspaceChanged(website: string, reason: string): Promise<void> {
+		await this.enqueue({
+			kind: "workspace-profile",
+			reason: `${reason} (${website})`,
+			priority: PRIORITY.workspace,
+			budget: 4,
 		});
 	}
 
@@ -36,7 +64,7 @@ export class AgentTriggerService {
 			contactId,
 			kind: "identify",
 			reason,
-			priority: 20,
+			priority: PRIORITY.identify,
 			budget: 4,
 		});
 	}
@@ -46,7 +74,7 @@ export class AgentTriggerService {
 			contactId,
 			kind: "meeting-prep",
 			reason: `Meeting on ${when.toDateString()} with someone we know nothing about`,
-			priority: 200,
+			priority: PRIORITY.meeting,
 			budget: 10,
 		});
 	}
@@ -57,6 +85,7 @@ export class AgentTriggerService {
 		contactIds?: string[];
 		companyIds?: string[];
 		budget?: number;
+		priority?: number;
 	}): Promise<{ queued: number; alreadyQueued: number }> {
 		const subject = input.contactIds ? "contactId" : "companyId";
 		const ids = [...new Set(input.contactIds ?? input.companyIds ?? [])];
@@ -84,7 +113,7 @@ export class AgentTriggerService {
 						companyId: input.companyIds ? id : null,
 						kind: input.kind,
 						reason: input.reason,
-						priority: 50,
+						priority: input.priority ?? PRIORITY.sweep,
 						budget: input.budget ?? 4,
 						dueAt: new Date(),
 					})),
@@ -97,6 +126,8 @@ export class AgentTriggerService {
 				queued: fresh.length,
 				alreadyQueued: ids.length - fresh.length,
 			});
+
+			if (fresh.length > 0) this.poke();
 
 			return {
 				queued: fresh.length,
@@ -150,11 +181,31 @@ export class AgentTriggerService {
 				contactId: task.contactId,
 				companyId: task.companyId,
 			});
+
+			this.poke();
 		} catch (error) {
 			this.logger.error(
 				{ message: "Could not queue agent task", kind: task.kind },
 				error instanceof Error ? error.stack : String(error),
 			);
 		}
+	}
+
+	private poke(): void {
+		const secret = process.env.AGENT_BRIDGE_SECRET?.trim();
+		if (!secret) return;
+
+		const base = process.env.AGENT_URL?.trim() || "http://127.0.0.1:2000";
+
+		void fetch(new URL("/internal/crm/dispatch", base), {
+			method: "POST",
+			headers: { authorization: `Bearer ${secret}` },
+			signal: AbortSignal.timeout(POKE_TIMEOUT_MS),
+		}).catch((error) => {
+			this.logger.debug({
+				message: "Agent poke did not land; the cron will pick this up",
+				reason: error instanceof Error ? error.message : String(error),
+			});
+		});
 	}
 }
