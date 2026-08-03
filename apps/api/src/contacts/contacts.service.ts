@@ -16,6 +16,7 @@ import {
 import { AgentQueueService } from "../agent/agent-queue.service";
 import { AgentTriggerService } from "../agent/agent-trigger.service";
 import { CompanyDirectoryService } from "../companies/company-directory.service";
+import { ActivityStampService } from "../crm/activity-stamp.service";
 import { blankToNull, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import {
@@ -108,6 +109,7 @@ export class ContactsService {
 		private readonly companies: CompanyDirectoryService,
 		private readonly agent: AgentTriggerService,
 		private readonly queue: AgentQueueService,
+		private readonly stamp: ActivityStampService,
 	) {}
 
 	async list(input: ContactListInput): Promise<ListResult<ContactRow>> {
@@ -290,6 +292,8 @@ export class ContactsService {
 			select: { id: true, firstName: true, lastName: true },
 		});
 
+		await this.allowAgain(email);
+
 		this.logger.log({ message: "Contact created", contactId: contact.id });
 
 		await this.agent.contactCreated(
@@ -298,6 +302,49 @@ export class ContactsService {
 		);
 
 		return contact;
+	}
+
+	async delete(id: string): Promise<{ id: string; name: string }> {
+		const contact = await this.db.contact.findUnique({
+			where: { id },
+			select: { id: true, firstName: true, lastName: true, email: true },
+		});
+
+		if (!contact) {
+			throw new NotFoundException(`No contact with id ${id}.`);
+		}
+
+		const name = [contact.firstName, contact.lastName]
+			.filter(Boolean)
+			.join(" ");
+
+		await this.db.$transaction([
+			...(contact.email
+				? [
+						this.db.suppressedContact.upsert({
+							where: { email: contact.email },
+							create: {
+								email: contact.email,
+								reason: `Deleted from the CRM (${name})`,
+							},
+							update: {},
+						}),
+					]
+				: []),
+			this.db.agentTask.deleteMany({ where: { contactId: id } }),
+			this.db.agentEvent.deleteMany({ where: { contactId: id } }),
+			this.db.contact.delete({ where: { id } }),
+		]);
+
+		await this.stamp.recomputeAll();
+
+		this.logger.log({
+			message: "Contact deleted",
+			contactId: id,
+			suppressed: contact.email !== null,
+		});
+
+		return { id, name };
 	}
 
 	async update(id: string, input: ContactUpdateInput) {
@@ -330,14 +377,23 @@ export class ContactsService {
 		}
 
 		try {
-			return await this.db.contact.update({
+			const updated = await this.db.contact.update({
 				where: { id },
 				data,
 				select: { id: true, firstName: true, lastName: true },
 			});
+
+			if (typeof data.email === "string") await this.allowAgain(data.email);
+
+			return updated;
 		} catch (error) {
 			throw this.translate(error, id);
 		}
+	}
+
+	private async allowAgain(email: string | null): Promise<void> {
+		if (!email) return;
+		await this.db.suppressedContact.deleteMany({ where: { email } });
 	}
 
 	private async relationship(contactId: string, companyId: string | null) {

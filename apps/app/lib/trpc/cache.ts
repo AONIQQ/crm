@@ -9,10 +9,13 @@ type Options = {
 	settle?: Settle;
 };
 
+type RemovedRecord = { kind: "company" | "contact" | "deal"; id: string };
+
 export type CrmCache = {
 	company(id?: string, options?: Options): Promise<void>;
 	contact(id?: string, options?: Options): Promise<void>;
 	deal(id?: string, options?: Options): Promise<void>;
+	removed(record: RemovedRecord): Promise<void>;
 	activity(options?: Options): Promise<void>;
 	google(options?: Options): Promise<void>;
 	settings(options?: Options): Promise<void>;
@@ -98,6 +101,32 @@ export function useCrmCache(): CrmCache {
 				],
 				options,
 			),
+
+		removed: ({ kind, id }) => {
+			const gone = JSON.stringify(
+				{
+					company: trpc.companies.byId,
+					contact: trpc.contacts.byId,
+					deal: trpc.deals.byId,
+				}[kind].queryKey({ id }),
+			);
+
+			for (const record of [
+				trpc.companies.byId,
+				trpc.contacts.byId,
+				trpc.deals.byId,
+			]) {
+				void queryClient.invalidateQueries({
+					queryKey: record.queryKey(),
+					predicate: (query) => JSON.stringify(query.queryKey) !== gone,
+				});
+			}
+
+			return run(
+				[...listKeys(), ...activityKeys(), trpc.dashboard.summary.queryKey()],
+				[],
+			);
+		},
 
 		activity: (options) =>
 			run(

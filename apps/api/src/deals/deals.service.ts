@@ -244,6 +244,24 @@ export class DealsService {
 		}
 	}
 
+	async delete(id: string): Promise<{ id: string; name: string }> {
+		const deal = await this.db.deal.findUnique({
+			where: { id },
+			select: { id: true, name: true },
+		});
+
+		if (!deal) {
+			throw new NotFoundException(`No deal with id ${id}.`);
+		}
+
+		await this.db.deal.delete({ where: { id } });
+		await this.stamp.recomputeAll();
+
+		this.logger.log({ message: "Deal deleted", dealId: id, name: deal.name });
+
+		return deal;
+	}
+
 	async setStage(input: SetStageInput, actingUserId: string) {
 		const deal = await this.db.deal.findUnique({
 			where: { id: input.id },

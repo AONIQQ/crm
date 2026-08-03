@@ -96,6 +96,7 @@ describe("externalParticipants", () => {
 		ourDomains: new Set(["trycomp.ai"]),
 		ourAddresses: new Set(["lewis@trycomp.ai"]),
 		suppressedDomains: new Set(["greenhouse.io"]),
+		suppressedEmails: new Set(["deleted@acme.com"]),
 	};
 
 	it("keeps only the other side of the conversation", () => {
@@ -128,6 +129,24 @@ describe("externalParticipants", () => {
 	it("returns nothing for a wholly internal thread", () => {
 		expect(
 			externalParticipants([person("colleague@trycomp.ai")], options),
+		).toEqual([]);
+	});
+
+	it("never brings back a contact a rep deleted", () => {
+		const result = externalParticipants(
+			[person("deleted@acme.com", "Deleted Person"), person("jane@acme.com")],
+			options,
+		);
+
+		expect(result).toEqual([person("jane@acme.com")]);
+	});
+
+	it("leaves nothing to file when the deleted contact is the only outsider", () => {
+		expect(
+			externalParticipants(
+				[person("lewis@trycomp.ai"), person("deleted@acme.com")],
+				options,
+			),
 		).toEqual([]);
 	});
 });

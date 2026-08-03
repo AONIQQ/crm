@@ -71,15 +71,17 @@ export class CalendarSyncService {
 
 		await this.state.markRunning(row.id);
 
-		const [internal, suppressedDomains] = await Promise.all([
+		const [internal, suppressedDomains, suppressedEmails] = await Promise.all([
 			this.match.internalIdentity(),
 			this.match.suppressedDomains(),
+			this.match.suppressedEmails(),
 		]);
 
 		const context = {
 			ourAddresses: internal.addresses,
 			ourDomains: internal.domains,
 			suppressedDomains,
+			suppressedEmails,
 		};
 
 		let pageToken: string | undefined;

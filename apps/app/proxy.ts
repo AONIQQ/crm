@@ -1,3 +1,4 @@
+import { AUTH_COOKIE_PREFIX } from "@crm/auth/cookies";
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 import {
@@ -14,7 +15,9 @@ const UNGATED = [SIGN_IN_PATH, "/grant-access", "/eve"];
 export async function proxy(request: NextRequest) {
 	const { pathname } = request.nextUrl;
 
-	if (getSessionCookie(request) === null) {
+	if (
+		getSessionCookie(request, { cookiePrefix: AUTH_COOKIE_PREFIX }) === null
+	) {
 		return pathname === SIGN_IN_PATH
 			? NextResponse.next()
 			: NextResponse.redirect(new URL(SIGN_IN_PATH, request.nextUrl));

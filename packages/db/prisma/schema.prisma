@@ -603,6 +603,14 @@ model SuppressedDomain {
   @@map("suppressedDomain")
 }
 
+model SuppressedContact {
+  email     String   @id
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@map("suppressedContact")
+}
+
 model AppSetting {
   id String @id
 

@@ -4,6 +4,7 @@ import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
 import { organization } from "better-auth/plugins/organization";
+import { AUTH_COOKIE_PREFIX } from "./cookies";
 import { env } from "./env";
 import { ensureWorkspaceMembership } from "./organization";
 import { SYNC_SCOPES } from "./scopes";
@@ -63,6 +64,8 @@ export const auth = betterAuth({
 	},
 
 	advanced: {
+		cookiePrefix: AUTH_COOKIE_PREFIX,
+
 		useSecureCookies: env.isProduction,
 		...(env.cookieDomain && {
 			crossSubDomainCookies: {

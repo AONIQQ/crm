@@ -123,6 +123,7 @@ export type ExternalFilterOptions = {
 	ourDomains: ReadonlySet<string>;
 	ourAddresses: ReadonlySet<string>;
 	suppressedDomains: ReadonlySet<string>;
+	suppressedEmails: ReadonlySet<string>;
 };
 
 export function externalParticipants(
@@ -131,6 +132,7 @@ export function externalParticipants(
 ): Participant[] {
 	return participants.filter((participant) => {
 		if (options.ourAddresses.has(participant.email)) return false;
+		if (options.suppressedEmails.has(participant.email)) return false;
 
 		const domain = workDomain(participant.email);
 		if (!domain) return false;

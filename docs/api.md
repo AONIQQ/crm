@@ -285,6 +285,53 @@ Everything the app reads or writes goes through `nestjs-trpc` routers under
   run the generator. Regenerate locally and commit the result with the router
   change that caused it.
 
+## Deleting a record is a decision the sync has to respect
+
+Each of the three records can be deleted from the three-dot menu in its sheet —
+`contacts.delete`, `companies.delete`, `deals.delete`, one confirm dialog each.
+There is no soft delete and no archive: a row a rep meant to be gone that is
+still in every list, facet and count is worse than either.
+
+**A deleted contact is remembered by address.** Deleting the row is not enough,
+because the Gmail and Calendar sync creates contacts from whoever is on a thread
+— so the next message from that person put them straight back, with a fresh
+`identify` task behind them, and the rep's only recourse was to delete them
+again every few days. `ContactsService.delete` writes a `SuppressedContact` row
+keyed on the email, and `externalParticipants`
+(`apps/api/src/google/participants.ts`) drops that address exactly as it drops a
+domain in `SuppressedDomain` — one filter, one place, so the address is
+invisible to contact creation, company auto-creation and thread attribution at
+once.
+
+- **It suppresses the address, not the person.** A contact with no email cannot
+  be recreated by the sync in the first place — the sync only knows people by
+  address — so there is nothing to write down.
+- **The colleagues are untouched.** Only the deleted address is filtered, so a
+  thread with three other people at that company still files against them. A
+  thread where the deleted person was the *only* outsider files against nobody,
+  which is the correct reading of "we do not track this person".
+- **A rep can always add them back, and doing so lifts the suppression.**
+  `allowAgain` runs on `contacts.create` and on an `update` that sets the email.
+  The rule is *not added back automatically* — somebody typing the address in is
+  not the inbox making the decision for them.
+- **Deleting a company does not suppress its domain.** Its people survive the
+  delete with no company, and a domain-wide suppression would silently stop
+  filing their email too. Turning off a whole domain stays the explicit control
+  on Settings → Connections, where it says what it does.
+
+**What the database does not cascade, the service does.** `AgentTask` and
+`AgentEvent` carry a `contactId` and a `companyId` as plain columns with no
+foreign key — they outlive the records they name on purpose, so the queue
+survives a redeploy — which means a delete has to clear them itself. Leaving
+them behind queues research about a person who no longer exists, and the
+dispatcher spends a session finding that out.
+
+Every delete then calls `ActivityStampService.recomputeAll()`. Deleting a record
+deletes its activities, and `lastActivityAt` on whatever else those activities
+touched is a cached maximum that nothing else recomputes — a company whose only
+recent activity was on a deleted deal would sort as though the work were still
+fresh, forever.
+
 ## Freshness: invalidate the query, don't disable the cache
 
 There is no HTTP response cache in front of tRPC. Freshness is TanStack Query's
@@ -298,6 +345,17 @@ job: a mutation invalidates the query keys it affected, and the list refetches.
   timeline entry it writes, creating a deal did not refresh the board, and nothing
   refreshed the overview, so a rep could close a deal and watch their own numbers
   not move. **A new mutation adds a call there, not a new list of keys.**
+- **A deletion is `cache.removed(ref)`, and it is the one call that skips a
+  key.** Everything a deletion can reach is refreshed together — the lists, the
+  timeline, the dashboard, and the other records that named this one, since a
+  colleague list and a deal's attendees both go stale the moment a contact goes.
+  The deleted record's *own* `byId` entry is deliberately left alone: its query is
+  still mounted for the moment it takes the sheet to animate shut, so
+  invalidating it asks the API for a row that no longer exists and the sheet
+  reads the 404 as "this record could not be loaded" on its way out. Nothing
+  observes that entry once the sheet is gone, so it expires on its own. One wide
+  fan-out is right here because deleting is rare and touches more than any edit
+  does.
 - **Pass `{ settle: "record" }`** when the caller is an inline editor. The
   default waits for every affected view to refetch, which is right when the point
   of the action *is* the view changing (a card moving between board columns);

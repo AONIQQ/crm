@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { AgentQueueService } from "../agent/agent-queue.service";
 import { AgentTriggerService } from "../agent/agent-trigger.service";
+import { ActivityStampService } from "../crm/activity-stamp.service";
 import { blankToNull, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import { OPEN_DEAL_STAGES } from "../deals/deal-stage";
@@ -89,6 +90,7 @@ export class CompaniesService {
 		private readonly agent: AgentTriggerService,
 		private readonly queue: AgentQueueService,
 		private readonly favicon: FaviconService,
+		private readonly stamp: ActivityStampService,
 	) {}
 
 	async list(input: CompanyListInput): Promise<ListResult<CompanyRow>> {
@@ -363,6 +365,32 @@ export class CompaniesService {
 		} catch (error) {
 			throw this.translate(error, id);
 		}
+	}
+
+	async delete(id: string): Promise<{ id: string; name: string }> {
+		const company = await this.db.company.findUnique({
+			where: { id },
+			select: { id: true, name: true },
+		});
+
+		if (!company) {
+			throw new NotFoundException(`No company with id ${id}.`);
+		}
+
+		await this.db.$transaction([
+			this.db.agentTask.deleteMany({ where: { companyId: id } }),
+			this.db.company.delete({ where: { id } }),
+		]);
+
+		await this.stamp.recomputeAll();
+
+		this.logger.log({
+			message: "Company deleted",
+			companyId: id,
+			name: company.name,
+		});
+
+		return company;
 	}
 
 	async enrich(id: string): Promise<{ id: string; queued: boolean }> {
