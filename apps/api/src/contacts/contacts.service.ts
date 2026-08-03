@@ -16,7 +16,10 @@ import {
 import { AgentQueueService } from "../agent/agent-queue.service";
 import { AgentTriggerService } from "../agent/agent-trigger.service";
 import { CompanyDirectoryService } from "../companies/company-directory.service";
-import { ActivityStampService } from "../crm/activity-stamp.service";
+import {
+	ActivityStampService,
+	type StampTargets,
+} from "../crm/activity-stamp.service";
 import { blankToNull, normalizeEmail, toCents } from "../crm/values";
 import { InjectDatabase } from "../database/database.constants";
 import {
@@ -307,52 +310,55 @@ export class ContactsService {
 	}
 
 	async delete(id: string): Promise<{ id: string; name: string }> {
-		const contact = await this.db.contact.findUnique({
-			where: { id },
-			select: { id: true, firstName: true, lastName: true, email: true },
-		});
-
-		if (!contact) {
-			throw new NotFoundException(`No contact with id ${id}.`);
-		}
-
-		const name = [contact.firstName, contact.lastName]
-			.filter(Boolean)
-			.join(" ");
-
-		const suppress = normalizeEmail(contact.email ?? "");
+		let deleted: {
+			targets: StampTargets;
+			name: string;
+			suppressed: boolean;
+		};
 
 		try {
-			await this.db.$transaction([
-				...(suppress
-					? [
-							this.db.suppressedContact.upsert({
-								where: { email: suppress },
-								create: {
-									email: suppress,
-									reason: `Deleted from the CRM (${name})`,
-								},
-								update: {},
-							}),
-						]
-					: []),
-				this.db.agentTask.deleteMany({ where: { contactId: id } }),
-				this.db.agentEvent.deleteMany({ where: { contactId: id } }),
-				this.db.contact.delete({ where: { id } }),
-			]);
+			deleted = await this.db.$transaction(async (tx) => {
+				const targets = await this.stamp.targetsOf({ contactId: id }, tx);
+
+				await tx.agentTask.deleteMany({ where: { contactId: id } });
+				await tx.agentEvent.deleteMany({ where: { contactId: id } });
+
+				const contact = await tx.contact.delete({
+					where: { id },
+					select: { firstName: true, lastName: true, email: true },
+				});
+
+				const name = [contact.firstName, contact.lastName]
+					.filter(Boolean)
+					.join(" ");
+				const suppress = normalizeEmail(contact.email ?? "");
+
+				if (suppress) {
+					await tx.suppressedContact.upsert({
+						where: { email: suppress },
+						create: {
+							email: suppress,
+							reason: `Deleted from the CRM (${name})`,
+						},
+						update: {},
+					});
+				}
+
+				return { targets, name, suppressed: suppress !== null };
+			});
 		} catch (error) {
 			throw this.translate(error, id);
 		}
 
-		await this.stamp.recomputeAllAfterDelete({ contactId: id });
+		await this.stamp.recomputeAfterDelete(deleted.targets, { contactId: id });
 
 		this.logger.log({
 			message: "Contact deleted",
 			contactId: id,
-			suppressed: suppress !== null,
+			suppressed: deleted.suppressed,
 		});
 
-		return { id, name };
+		return { id, name: deleted.name };
 	}
 
 	async update(id: string, input: ContactUpdateInput) {

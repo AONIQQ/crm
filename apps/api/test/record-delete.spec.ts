@@ -13,6 +13,8 @@ import { GoogleMatchService } from "../src/google/google-match.service";
 const suffix = process.env.TEST_RUN_ID ?? "record-delete-spec";
 const domain = `delete-${suffix}.test`;
 const doomedDomain = `doomed-${suffix}.test`;
+const stampDomain = `stamped-${suffix}.test`;
+const orphanDomain = `orphaned-${suffix}.test`;
 const email = `gone@${domain}`;
 const colleague = `stays@${domain}`;
 const userId = `user-${suffix}`;
@@ -49,7 +51,7 @@ async function matchContext() {
 	};
 }
 
-const domains = [domain, doomedDomain];
+const domains = [domain, doomedDomain, stampDomain, orphanDomain];
 const ours = {
 	OR: domains.map((host) => ({ email: { endsWith: `@${host}` } })),
 };
@@ -262,6 +264,96 @@ describe("deleting a company", () => {
 			select: { companyId: true },
 		});
 		expect(survivor?.companyId).toBeNull();
+
+		await db.contact.delete({ where: { id: contact.id } });
+	});
+});
+
+describe("the activity stamps a delete leaves behind", () => {
+	it("are recomputed on every record the deleted one's activities touched", async () => {
+		const company = await companies.create({
+			name: "Stamped",
+			domain: stampDomain,
+		});
+		const contact = await contacts.create({
+			firstName: "Stamped",
+			email: `stamped@${stampDomain}`,
+			companyId: company.id,
+		});
+		const deal = await db.deal.create({
+			data: { name: "Stamped deal", companyId: company.id, ownerId: userId },
+			select: { id: true },
+		});
+
+		const at = new Date();
+		await db.activity.create({
+			data: {
+				type: "NOTE",
+				subject: "The only thing on this account",
+				companyId: company.id,
+				contactId: contact.id,
+				dealId: deal.id,
+				createdById: userId,
+				createdAt: at,
+			},
+		});
+		await stamp.touch(
+			{ companyId: company.id, contactId: contact.id, dealId: deal.id },
+			at,
+		);
+
+		await contacts.delete(contact.id);
+
+		expect(
+			await db.company.findUnique({
+				where: { id: company.id },
+				select: { lastActivityAt: true },
+			}),
+		).toEqual({ lastActivityAt: null });
+		expect(
+			await db.deal.findUnique({
+				where: { id: deal.id },
+				select: { lastActivityAt: true },
+			}),
+		).toEqual({ lastActivityAt: null });
+	});
+
+	it("follow a deleted company through the deals it takes with it", async () => {
+		const company = await companies.create({
+			name: "Orphaner",
+			domain: orphanDomain,
+		});
+		const contact = await contacts.create({
+			firstName: "Orphaned",
+			email: `orphaned@${orphanDomain}`,
+			companyId: company.id,
+		});
+		const deal = await db.deal.create({
+			data: { name: "Orphaned deal", companyId: company.id, ownerId: userId },
+			select: { id: true },
+		});
+
+		const at = new Date();
+		await db.activity.create({
+			data: {
+				type: "MEETING",
+				subject: "Only ever attached to the deal",
+				contactId: contact.id,
+				dealId: deal.id,
+				createdById: userId,
+				createdAt: at,
+			},
+		});
+		await stamp.touch({ contactId: contact.id, dealId: deal.id }, at);
+
+		await companies.delete(company.id);
+
+		expect(
+			await db.contact.findUnique({
+				where: { id: contact.id },
+				select: { companyId: true, lastActivityAt: true },
+			}),
+		).toEqual({ companyId: null, lastActivityAt: null });
 
 		await db.contact.delete({ where: { id: contact.id } });
 	});

@@ -362,6 +362,16 @@ once.
   suppression written by `contacts.delete`. The conflict check on create and
   `allowAgain` both match case-insensitively so a row written before this rule
   still answers.
+- **The address is taken from the delete itself, not from a read before it.**
+  `contacts.delete` runs `tx.contact.delete({ select: { email: true } })` inside
+  the transaction and suppresses what comes back, so the row it writes down is
+  the address the contact had at the moment it ceased to exist. A pre-check read
+  is a different question asked earlier: a rep correcting the address in one tab
+  while another deletes the record left the old address suppressed and the new
+  one open, which is the same recreated-contact loop wearing a different hat.
+  It is also what supplies the name in the `reason`, and the 404 — a missing
+  contact is now the delete's own `P2025` through `translate`, rather than a
+  pre-check that a concurrent delete could pass.
 - **The colleagues are untouched.** Only the deleted address is filtered, so a
   thread with three other people at that company still files against them. A
   thread where the deleted person was the *only* outsider files against nobody,
@@ -385,13 +395,33 @@ survives a redeploy — which means a delete has to clear them itself. Leaving
 them behind queues research about a person who no longer exists, and the
 dispatcher spends a session finding that out.
 
-Every delete then calls `ActivityStampService.recomputeAllAfterDelete()`.
-Deleting a record deletes its activities, and `lastActivityAt` on whatever else
-those activities touched is a cached maximum that nothing else recomputes — a
-company whose only recent activity was on a deleted deal would sort as though
-the work were still fresh, forever.
+**The stamps are then recomputed on the records the delete actually reached,
+and no others.** Deleting a record deletes its activities, and `lastActivityAt`
+on whatever else those activities touched is a cached maximum that nothing else
+recomputes — a company whose only recent activity was on a deleted deal would
+sort as though the work were still fresh, forever.
 
-**It runs after the delete has committed, so it logs rather than throws.** The
+- **The affected set is read before the rows go, inside the delete's own
+  transaction.** `ActivityStampService.targetsOf(where)` groups the activities a
+  delete is about to destroy by each of their three foreign keys and hands back
+  the ids; `recomputeMany` restamps exactly those rows, one `UPDATE … SET
+  lastActivityAt = (SELECT MAX(…))` per table, which covers "has newer
+  activities" and "has none left, so null" in the same statement. Reading it
+  after the delete is not an option — the evidence is what was deleted.
+- **A company's `where` follows the deals it takes with it**, `{ OR: [{
+  companyId }, { deal: { companyId } }] }`. Deleting a company cascades to its
+  deals and those cascade to their activities, so a surviving contact whose only
+  activity hung off one of those deals would keep a stamp for work that no
+  longer exists. `test/record-delete.spec.ts` pins that branch specifically.
+- **`recomputeAll()` is still there and is still right for a purge.** It rebuilds
+  every stamp in the CRM with six full-table statements, which is what
+  disconnecting Google and dropping everything it synced needs. It is the wrong
+  tool for deleting one record: it made the cost of removing a contact a
+  function of the size of the entire CRM, and it repaired rows the rep's action
+  never touched.
+
+**Recomputing runs after the delete has committed, so it logs rather than
+throws.** The
 row is already gone by the time the stamps are rebuilt; letting that failure out
 reports a completed destructive action as a failure, the browser never
 invalidates its caches, and the rep's retry answers `No contact with id …`. A

@@ -1,4 +1,4 @@
-import type { Db } from "@crm/db";
+import { type Db, type Prisma, Prisma as PrismaNamespace } from "@crm/db";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
@@ -7,6 +7,16 @@ export type ActivityTarget = {
 	contactId?: string | null;
 	dealId?: string | null;
 };
+
+export type StampTargets = {
+	companyIds: string[];
+	contactIds: string[];
+	dealIds: string[];
+};
+
+function present(ids: (string | null)[]): string[] {
+	return ids.filter((id): id is string => id !== null);
+}
 
 @Injectable()
 export class ActivityStampService {
@@ -76,9 +86,41 @@ export class ActivityStampService {
 		}
 	}
 
-	async recomputeAllAfterDelete(deleted: ActivityTarget): Promise<void> {
+	async targetsOf(
+		where: Prisma.ActivityWhereInput,
+		client: Prisma.TransactionClient = this.db,
+	): Promise<StampTargets> {
+		const [companies, contacts, deals] = await Promise.all([
+			client.activity.groupBy({ by: ["companyId"], where }),
+			client.activity.groupBy({ by: ["contactId"], where }),
+			client.activity.groupBy({ by: ["dealId"], where }),
+		]);
+
+		return {
+			companyIds: present(companies.map((row) => row.companyId)),
+			contactIds: present(contacts.map((row) => row.contactId)),
+			dealIds: present(deals.map((row) => row.dealId)),
+		};
+	}
+
+	async recomputeMany(targets: StampTargets): Promise<void> {
+		const statements = [
+			this.restamp("company", "companyId", targets.companyIds),
+			this.restamp("contact", "contactId", targets.contactIds),
+			this.restamp("deal", "dealId", targets.dealIds),
+		].filter((statement) => statement !== null);
+
+		if (statements.length === 0) return;
+
+		await this.db.$transaction(statements);
+	}
+
+	async recomputeAfterDelete(
+		targets: StampTargets,
+		deleted: ActivityTarget,
+	): Promise<void> {
 		try {
-			await this.recomputeAll();
+			await this.recomputeMany(targets);
 		} catch (error) {
 			this.logger.error(
 				{
@@ -89,6 +131,20 @@ export class ActivityStampService {
 				error instanceof Error ? error.stack : String(error),
 			);
 		}
+	}
+
+	private restamp(table: string, column: string, ids: string[]) {
+		if (ids.length === 0) return null;
+
+		const record = PrismaNamespace.raw(`"${table}"`);
+		const key = PrismaNamespace.raw(`"${column}"`);
+
+		return this.db.$executeRaw`
+			UPDATE ${record} r
+			SET "lastActivityAt" = (
+				SELECT MAX(a."createdAt") FROM "activity" a WHERE a.${key} = r.id
+			)
+			WHERE r.id IN (${PrismaNamespace.join(ids)})`;
 	}
 
 	async recomputeAll(): Promise<void> {
