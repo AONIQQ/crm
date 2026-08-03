@@ -43,6 +43,8 @@ jobs:
       BETTER_AUTH_SECRET: ci-only-secret-regenerate-for-any-real-deployment
       API_URL: http://localhost:3001
       APP_URL: http://localhost:3000
+      GOOGLE_CLIENT_ID: ci-only-google-client-id
+      GOOGLE_CLIENT_SECRET: ci-only-google-client-secret
 
     steps:
       - uses: actions/checkout@v5
