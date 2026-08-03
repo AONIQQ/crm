@@ -78,8 +78,10 @@ export function AddSsoProviderSheet() {
 	const edit = (patch: Partial<typeof values>) =>
 		setValues({ ...values, ...patch });
 
+	const providerId = values.providerId.trim().toLowerCase();
+
 	const callbackURL = `${settings.data?.callbackBase ?? ""}/${
-		values.providerId || "…"
+		providerId || "…"
 	}`;
 
 	const complete = Object.values(values).every((value) => value.trim() !== "");
@@ -107,7 +109,7 @@ export function AddSsoProviderSheet() {
 					onSubmit={(event) => {
 						event.preventDefault();
 						register.mutate({
-							providerId: values.providerId.trim().toLowerCase(),
+							providerId,
 							issuer: values.issuer.trim(),
 							domain: values.domain.trim(),
 							clientId: values.clientId.trim(),

@@ -1,4 +1,5 @@
 import { db } from "@crm/db";
+import { websiteUrl } from "@crm/db/workspace";
 import { capabilitiesMarkdown } from "./capabilities";
 import { identity, usMarkdown, type WorkspaceIdentity } from "./workspace";
 
@@ -312,23 +313,21 @@ export async function workspacePreamble(
 	known?: WorkspaceIdentity | null,
 ): Promise<Preamble> {
 	const us = known === undefined ? await identity() : known;
+	const site = websiteUrl(us?.website);
 
-	if (!us?.website) {
+	if (!us || !site) {
 		return {
 			markdown: [
 				"## This session",
 				"",
 				"You were asked to write the profile of the company you work for, and",
-				"nobody has told this install what its website is. There is nothing to",
-				"read. Stop — do not guess at it from the email addresses in the CRM.",
+				"this install has no web address on record — nobody gave one, or what is",
+				"stored is not one. There is nothing to read. Stop — do not guess at it",
+				"from the email addresses in the CRM.",
 			].join("\n"),
 			focus: {},
 		};
 	}
-
-	const site = us.website.startsWith("http")
-		? us.website
-		: `https://${us.website}`;
 
 	const markdown = [
 		"## This session",

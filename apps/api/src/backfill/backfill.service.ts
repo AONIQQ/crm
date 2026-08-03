@@ -42,6 +42,8 @@ const RECHECK_PHOTO_AFTER_MS = 30 * 24 * 60 * 60_000;
 
 const RECHECK_BRAND_AFTER_MS = 30 * 24 * 60 * 60_000;
 
+const RECHECK_WORKSPACE_AFTER_MS = 7 * 24 * 60 * 60_000;
+
 @Injectable()
 export class BackfillService implements OnModuleInit {
 	private readonly logger = new Logger(BackfillService.name);
@@ -96,6 +98,16 @@ export class BackfillService implements OnModuleInit {
 
 		if (!us?.website || us.profile) return;
 
+		const attempted = await this.db.agentTask.findFirst({
+			where: {
+				kind: "workspace-profile",
+				finishedAt: { gte: new Date(Date.now() - RECHECK_WORKSPACE_AFTER_MS) },
+			},
+			select: { id: true },
+		});
+
+		if (attempted) return;
+
 		await this.agent.workspaceChanged(
 			us.website,
 			"We still have no profile of the company using this CRM",
@@ -109,42 +121,42 @@ export class BackfillService implements OnModuleInit {
 	}
 
 	private async runCompanies(dealsOnly: boolean): Promise<BackfillResult> {
-		const where: Prisma.CompanyWhereInput = {
-			...this.companiesNeedingBrand(),
-			...(dealsOnly ? { deals: { some: {} } } : {}),
-		};
+		const onDeals: Prisma.CompanyWhereInput = dealsOnly
+			? { deals: { some: {} } }
+			: {};
 
-		const [total, rows] = await Promise.all([
-			this.db.company.count({ where }),
+		const needsBrand = this.companiesNeedingBrand();
+		const needsArtwork = await this.companiesNeedingArtwork();
+
+		const [total, rows, artworkRows] = await Promise.all([
+			this.db.company.count({
+				where: { ...onDeals, OR: [needsBrand, needsArtwork] },
+			}),
 			this.db.company.findMany({
-				where,
+				where: { ...needsBrand, ...onDeals },
+				orderBy: { createdAt: "asc" },
+				take: MAX_PER_RUN,
+				select: { id: true },
+			}),
+			this.db.company.findMany({
+				where: { ...needsArtwork, ...onDeals },
 				orderBy: { createdAt: "asc" },
 				take: MAX_PER_RUN,
 				select: { id: true },
 			}),
 		]);
 
-		const artwork: Prisma.CompanyWhereInput = {
-			...(await this.companiesNeedingArtwork()),
-			...(dealsOnly ? { deals: { some: {} } } : {}),
-		};
-
-		const artworkRows = await this.db.company.findMany({
-			where: artwork,
-			orderBy: { createdAt: "asc" },
-			take: MAX_PER_RUN,
-			select: { id: true },
-		});
+		const companyIds = [
+			...new Set([
+				...rows.map((row) => row.id),
+				...artworkRows.map((row) => row.id),
+			]),
+		].slice(0, MAX_PER_RUN);
 
 		const brand = await this.agent.backfill({
 			kind: "brand",
 			reason: "Backfill — this company has no logo or icon",
-			companyIds: [
-				...new Set([
-					...rows.map((row) => row.id),
-					...artworkRows.map((row) => row.id),
-				]),
-			],
+			companyIds,
 			budget: 2,
 			priority: PRIORITY.brand,
 		});
@@ -164,7 +176,7 @@ export class BackfillService implements OnModuleInit {
 
 		return {
 			...queued,
-			remaining: Math.max(0, total - rows.length),
+			remaining: Math.max(0, total - companyIds.length),
 			iconsResolving,
 		};
 	}

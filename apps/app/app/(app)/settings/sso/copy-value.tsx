@@ -6,18 +6,28 @@ import { Icon } from "@crm/ui/components/icon";
 import { toast } from "sonner";
 
 export function CopyValue({ value, label }: { value: string; label: string }) {
+	const unavailable = () =>
+		toast.error(
+			`Could not copy the ${label.toLowerCase()}. Select it instead.`,
+		);
+
 	return (
 		<Button
 			variant="ghost"
 			size="icon"
 			type="button"
 			onClick={() => {
-				navigator.clipboard
+				const clipboard = navigator.clipboard;
+
+				if (!clipboard) {
+					unavailable();
+					return;
+				}
+
+				clipboard
 					.writeText(value)
 					.then(() => toast.success(`${label} copied.`))
-					.catch(() =>
-						toast.error(`Could not copy the ${label.toLowerCase()}.`),
-					);
+					.catch(unavailable);
 			}}
 		>
 			<Icon icon={Copy} />

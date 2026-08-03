@@ -197,15 +197,21 @@ export class AgentTriggerService {
 
 		const base = process.env.AGENT_URL?.trim() || "http://127.0.0.1:2000";
 
-		void fetch(new URL("/internal/crm/dispatch", base), {
-			method: "POST",
-			headers: { authorization: `Bearer ${secret}` },
-			signal: AbortSignal.timeout(POKE_TIMEOUT_MS),
-		}).catch((error) => {
+		const missed = (error: unknown) => {
 			this.logger.debug({
 				message: "Agent poke did not land; the cron will pick this up",
 				reason: error instanceof Error ? error.message : String(error),
 			});
-		});
+		};
+
+		try {
+			void fetch(new URL("/internal/crm/dispatch", base), {
+				method: "POST",
+				headers: { authorization: `Bearer ${secret}` },
+				signal: AbortSignal.timeout(POKE_TIMEOUT_MS),
+			}).catch(missed);
+		} catch (error) {
+			missed(error);
+		}
 	}
 }

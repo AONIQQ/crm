@@ -122,9 +122,13 @@ Live in `packages/auth/src/workspace.ts`.
 - **`AUTH_COOKIE_DOMAIN`** only when the API and the app are on different
   subdomains of one parent — then `.example.com`, so one cookie covers both. On
   localhost the shared cookie already works, because cookies ignore ports.
-- **`AGENT_URL`** is the research agent, which is its own deployment. Only the
-  app reads it, and only server-side: the browser never learns the agent has an
-  origin of its own. See [the agent bridge](./agent.md#the-bridge).
+- **`AGENT_URL`** is the research agent, which is its own deployment. The app
+  reads it to proxy the bridge and the API reads it to poke the dispatcher, both
+  server-side only: the browser never learns the agent has an origin of its own.
+  It must be a whole URL including the scheme, and the API validates that at
+  boot — `new URL("/internal/crm/dispatch", base)` throws on `127.0.0.1:2000`,
+  and it would throw at the moment a task is queued rather than at startup. See
+  [the agent bridge](./agent.md#the-bridge).
 
 ## Typed, validated env
 

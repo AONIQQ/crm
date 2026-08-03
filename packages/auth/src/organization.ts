@@ -15,12 +15,16 @@ export function isWorkspaceRole(value: string): value is WorkspaceRole {
 	return (WORKSPACE_ROLES as readonly string[]).includes(value);
 }
 
-export function canRenameWorkspace(role: WorkspaceRole | null): boolean {
+export function isWorkspaceAdmin(role: WorkspaceRole | null): boolean {
 	return role === "owner" || role === "admin";
 }
 
+export function canRenameWorkspace(role: WorkspaceRole | null): boolean {
+	return isWorkspaceAdmin(role);
+}
+
 export function canChangeRole(role: WorkspaceRole | null): boolean {
-	return role === "owner" || role === "admin";
+	return isWorkspaceAdmin(role);
 }
 
 export async function ensureWorkspaceMembership(
@@ -79,7 +83,10 @@ export async function ensureWorkspaceMembership(
 			return workspace.id;
 		});
 	} catch (error) {
-		console.error("[auth] could not enrol the user in the workspace", error);
+		console.error(
+			`[auth] could not enrol user ${userId} in workspace ${WORKSPACE_ID}; the next sign-in will retry`,
+			error,
+		);
 		return undefined;
 	}
 }

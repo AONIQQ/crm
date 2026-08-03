@@ -109,7 +109,7 @@ export function WorkspaceForm() {
 								onChange={(event) => edit({ name: event.target.value })}
 								placeholder="Acme Inc."
 								autoComplete="organization"
-								disabled={!canRename}
+								disabled={!canRename || save.isPending}
 								required
 							/>
 							<FieldDescription>
@@ -133,7 +133,7 @@ export function WorkspaceForm() {
 									autoCorrect="off"
 									spellCheck={false}
 									inputMode="url"
-									disabled={!canRename}
+									disabled={!canRename || save.isPending}
 								/>
 							</InputGroup>
 							<FieldDescription>Your own company's website.</FieldDescription>

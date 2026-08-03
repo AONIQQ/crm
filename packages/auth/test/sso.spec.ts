@@ -1,10 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import {
-	canConfigureSso,
-	ssoCallbackBase,
-	ssoCallbackURL,
-	ssoProviderName,
-} from "../src/sso";
+
+process.env.API_URL = "https://crm.example.test";
+
+const { canConfigureSso, ssoCallbackBase, ssoCallbackURL, ssoProviderName } =
+	await import("../src/sso");
 
 describe("canConfigureSso", () => {
 	it("is the same answer as renaming the workspace", () => {
@@ -16,13 +15,15 @@ describe("canConfigureSso", () => {
 });
 
 describe("ssoCallbackURL", () => {
-	it("hangs off the base the settings page shows", () => {
-		expect(ssoCallbackURL("okta")).toBe(`${ssoCallbackBase()}/okta`);
+	it("is the API origin plus the path better-auth mounts the callback on", () => {
+		expect(ssoCallbackURL("okta")).toBe(
+			"https://crm.example.test/api/auth/sso/callback/okta",
+		);
 	});
 
-	it("is the path better-auth mounts the callback on", () => {
-		expect(new URL(ssoCallbackURL("okta")).pathname).toBe(
-			"/api/auth/sso/callback/okta",
+	it("hangs off the base the settings page shows", () => {
+		expect(ssoCallbackBase()).toBe(
+			"https://crm.example.test/api/auth/sso/callback",
 		);
 	});
 });

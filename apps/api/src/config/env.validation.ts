@@ -90,7 +90,13 @@ export class EnvironmentVariables {
 	BLOB_READ_WRITE_TOKEN?: string;
 
 	@IsOptional()
-	@IsString()
+	@IsUrl(
+		{ require_tld: false, require_protocol: true },
+		{
+			message:
+				"AGENT_URL must be a full URL with a scheme, like http://127.0.0.1:2000.",
+		},
+	)
 	AGENT_URL?: string;
 
 	@IsOptional()
