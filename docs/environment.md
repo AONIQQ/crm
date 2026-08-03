@@ -177,11 +177,14 @@ Two sharp edges:
 Every outside source the agent can reach is optional, and it is designed to run
 with none of them. A missing key removes a place to look; it is never an error.
 
+The company research key is the exception and it is **not in this table**,
+because it is not a variable at all — see
+[the next section](#the-context-key-is-asked-for-not-configured).
+
 | Variable | What it adds |
 | --- | --- |
 | `PERPLEXITY_API_KEY` | Open-web research with citations, and the search that finds a LinkedIn slug |
 | `RAPIDAPI_KEY` | LinkedIn profiles via LinkDAPI — name, title, employer, tenure |
-| `CONTEXT_DEV_API_KEY` | Company logo, industry, location and socials from a domain |
 | `GITHUB_TOKEN` | Raises the GitHub rate limit from 60/hour when matching profiles |
 | `BLOB_READ_WRITE_TOKEN` | Mirrors every logo and profile picture into Vercel Blob rather than linking them. Read by the API and the seed too — see below |
 | `AI_GATEWAY_API_KEY` | The model. Not needed on Vercel, where OIDC handles it |
@@ -193,6 +196,81 @@ agent plans around what it actually has, and gives the tools a shared
 "not configured, and retrying will not help" result — checked *before* the
 research budget is charged, so an install without a key does not pay for the
 discovery on every contact.
+
+### The Context key is asked for, not configured
+
+**`CONTEXT_DEV_API_KEY` is not a variable in this repo, and adding one back
+would be a second answer to a question that already has one.** Nothing reads it
+— not `.env.example`, not `env.validation.ts`, not any `turbo.json`. The key
+lives in `AppSetting` beside the agent's model, it is asked for at
+`/onboarding/research`, and **Settings → General** changes it afterwards.
+
+Same reason as [SSO](./api.md#sso-is-a-row-not-a-deployment): an admin who
+cannot redeploy cannot set an environment variable. It goes further than SSO
+does, because this is not a key an install can sensibly do without — it decides
+whether a company arrives as itself or as a grey square with its initials in
+it — so [the proxy asks for it](./api.md#the-gate-is-proxyts-and-it-is-answered-once-per-browser)
+rather than leaving it to be discovered on a settings page nobody visits.
+
+- **An install that had the variable set is asked for the key again, and that
+  is the intended upgrade.** Nothing adopts the old value — no boot-time
+  migration, no fallback — so the first navigation after deploying lands
+  everyone on `/onboarding/research`, where they paste the key they already
+  have. It is one interruption, once, in exchange for the answer living in one
+  place rather than two — and it cannot be dismissed, because a dismissed gate
+  is an install quietly filling up with companies that have no logo.
+- **Nothing is lost in the meantime, and the wait is not a queue.** A `brand`
+  task with nowhere to look is consumed and marked done — but it settles
+  `SKIPPED` *before* anything marks the row `RUNNING`, and `settle` only writes
+  over a `RUNNING` row, so the company stays `PENDING`. `PENDING` is exactly
+  what the sign-in sweep re-queues, so the work is recovered from the record
+  rather than held in the queue. `test/keyless-brand.integration.spec.ts` pins
+  it, because a `settle` that wrote unconditionally would strand every company
+  added before the key with nothing to say so.
+- **Saving the key picks that work up immediately.**
+  `settings.setResearchKey` runs the company sweep itself rather than leaving it
+  to the next sign-in, because the person who just fixed it is standing there.
+  It is fire-and-forget: a sweep that fails logs and the sign-in one still
+  catches up. Contacts are not swept here — only one of the three portrait
+  sources is Context — and they are picked up on the next sign-in as before.
+- **`readContextDevKey` in [`@crm/db/settings`](../packages/db/src/settings.ts)
+  is the only reader**, and it reads one column. Everything downstream —
+  `contextDevKey()` in the agent's `capabilities.ts`, the client in
+  `lib/context-dev.ts`, the API's `settings.researchKey` — goes through it, so
+  there is exactly one place that knows where the key is kept.
+- **It is read live, not at boot.** There is no cache in front of it, so a key
+  pasted into the settings page applies to the very next vendor call rather than
+  to the next deployment. Each read is one indexed row in front of a lookup that
+  is about to make an HTTP request anyway.
+- **A database that cannot be read is a capability that is off**, not an
+  exception. `contextDevKey()` logs and returns null, because a missing source
+  must never throw — the rule at the top of this section, and the reason the
+  agent keeps running against everything else it has.
+- **The key is never read back.** The API returns whether one is set and its
+  last four characters, and nothing returns the key itself. Same rule as an SSO
+  client secret.
+- **A wrong key is refused at the point it is typed, and the agent is what
+  checks it.** Checking means calling Context, and [a vendor client in the API
+  is a bug](./api.md#intelligence-never-lives-in-the-api) — so
+  `settings.setResearchKey` asks the agent over the bridge
+  (`POST /internal/crm/verify-key`) and only writes the row if the answer is not
+  *invalid*. The agent already owns the client, the error classification and the
+  key, so nothing about Context.dev is learned twice.
+  - **The probe costs nothing.** A brand lookup only bills when it resolves a
+    brand, and a free-provider address is refused with a documented `422`
+    before any resolution — so `key-check@gmail.com` reaches Context, proves
+    the key authenticates, and is never billed. Measured at about half a second.
+  - **`401` is the only answer that means the key is wrong.** A `403` about the
+    plan, a `422` refusing the probe, a `429`, a `500` — all of those were
+    served *after* the key authenticated, so the key is good and only the probe
+    was refused. `classifyKey` in `lib/context-dev.ts` holds that rule and
+    `test/verify-key.spec.ts` pins every branch of it.
+  - **A check that cannot be made is not a failed check.** No
+    `AGENT_BRIDGE_SECRET`, an agent that is down, a timeout — all return
+    `unknown`, and an unknown answer *saves the key* and logs that it went in
+    unverified. The alternative is an install whose agent is not up yet being
+    unable to finish onboarding, which is a worse failure than an unchecked
+    key: the key is still checked by the first task that uses it.
 
 `BLOB_READ_WRITE_TOKEN` is the one entry in that table the agent does not own
 alone, which is why it is also declared in `apps/api/src/config/env.validation.ts`

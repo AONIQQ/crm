@@ -20,7 +20,7 @@ import { conversationListInput, conversationEventsInput, conversationSaveInput, 
 import { dashboardSummaryInput } from "../dashboard/dashboard.contracts";
 import { dealListInput, dealIdInput, dealCreateInput, dealUpdateArgs, setStageInput } from "../deals/deals.contracts";
 import { setAutoCreateInput, suppressDomainInput, threadInput, calendarEventInput } from "../google/google.contracts";
-import { setAgentModelInput } from "../settings/settings.contracts";
+import { setAgentModelInput, setResearchKeyInput } from "../settings/settings.contracts";
 import { ssoProviderListInput, registerSsoProviderInput, deleteSsoProviderInput } from "../sso/sso.contracts";
 import { memberListInput, updateWorkspaceInput, setMemberRoleInput } from "../workspace/workspace.contracts";
 import type { ActivitiesRouter } from "../activities/activities.router";
@@ -179,7 +179,12 @@ const appRouter = t.router({
       .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["modelCatalog"]>>),
     setAgentModel: publicProcedure
       .input(setAgentModelInput)
-      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["setAgentModel"]>>)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["setAgentModel"]>>),
+    researchKey: publicProcedure
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["researchKey"]>>),
+    setResearchKey: publicProcedure
+      .input(setResearchKeyInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SettingsRouter["setResearchKey"]>>)
     }),
   sso: t.router({
     signInOptions: publicProcedure

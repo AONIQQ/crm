@@ -618,6 +618,8 @@ model AppSetting {
 
   agentModelContextWindow Int?
 
+  contextDevApiKey String?
+
   updatedAt DateTime @updatedAt
 
   @@map("appSetting")

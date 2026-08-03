@@ -86,8 +86,8 @@ describe("who we are", () => {
 });
 
 describe("every session is told who we are", () => {
-	it("carries the block in front of the capabilities", () => {
-		const closing = composeClosing(us);
+	it("carries the block in front of the capabilities", async () => {
+		const closing = await composeClosing(us);
 
 		expect(closing).toContain("## Who we are");
 		expect(closing.indexOf("## Who we are")).toBeLessThan(
@@ -95,9 +95,9 @@ describe("every session is told who we are", () => {
 		);
 	});
 
-	it("degrades to the capabilities alone", () => {
-		expect(composeClosing(null)).not.toContain("## Who we are");
-		expect(composeClosing(null)).toContain("## What you can use here");
+	it("degrades to the capabilities alone", async () => {
+		expect(await composeClosing(null)).not.toContain("## Who we are");
+		expect(await composeClosing(null)).toContain("## What you can use here");
 	});
 });
 

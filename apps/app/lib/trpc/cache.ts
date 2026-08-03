@@ -160,7 +160,14 @@ export function useCrmCache(): CrmCache {
 			),
 
 		settings: (options) =>
-			run([trpc.settings.agentModel.queryKey()], [], options),
+			run(
+				[
+					trpc.settings.agentModel.queryKey(),
+					trpc.settings.researchKey.queryKey(),
+				],
+				[],
+				options,
+			),
 
 		workspace: (options) =>
 			run(

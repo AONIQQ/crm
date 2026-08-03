@@ -1,5 +1,6 @@
 "use client";
 
+import { CONTEXT_DEV_SIGNUP_URL } from "@crm/db/settings";
 import { Button } from "@crm/ui/components/button";
 import {
 	Field,
@@ -8,12 +9,6 @@ import {
 	FieldLabel,
 } from "@crm/ui/components/field";
 import { Input } from "@crm/ui/components/input";
-import {
-	InputGroup,
-	InputGroupAddon,
-	InputGroupInput,
-	InputGroupText,
-} from "@crm/ui/components/input-group";
 import { Spinner } from "@crm/ui/components/spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -21,18 +16,17 @@ import { useId } from "react";
 import { toast } from "sonner";
 import { useTRPC } from "@/lib/trpc/client";
 
-export function OnboardingForm({ placeholder }: { placeholder: string }) {
+export function ResearchForm() {
 	const trpc = useTRPC();
 	const router = useRouter();
 
-	const nameId = useId();
-	const websiteId = useId();
+	const keyId = useId();
 
 	const save = useMutation(
-		trpc.workspace.update.mutationOptions({
+		trpc.settings.setResearchKey.mutationOptions({
 			onSuccess: () => {
 				router.refresh();
-				router.replace("/onboarding/research");
+				router.replace("/");
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -45,46 +39,35 @@ export function OnboardingForm({ placeholder }: { placeholder: string }) {
 
 				const form = new FormData(event.currentTarget);
 
-				save.mutate({
-					name: String(form.get("name") ?? "").trim(),
-					website: String(form.get("website") ?? "").trim(),
-				});
+				save.mutate({ apiKey: String(form.get("apiKey") ?? "").trim() });
 			}}
 			className="flex flex-col gap-6"
 		>
 			<FieldGroup>
 				<Field>
-					<FieldLabel htmlFor={nameId}>Company name</FieldLabel>
+					<FieldLabel htmlFor={keyId}>Context API key</FieldLabel>
 					<Input
-						id={nameId}
-						name="name"
-						placeholder={placeholder}
-						autoComplete="organization"
+						id={keyId}
+						name="apiKey"
+						type="password"
+						placeholder="Paste the key"
+						autoComplete="off"
+						autoCapitalize="off"
+						autoCorrect="off"
+						spellCheck={false}
 						autoFocus
 						required
 					/>
-				</Field>
-
-				<Field>
-					<FieldLabel htmlFor={websiteId}>Website</FieldLabel>
-					<InputGroup>
-						<InputGroupAddon>
-							<InputGroupText>https://</InputGroupText>
-						</InputGroupAddon>
-						<InputGroupInput
-							id={websiteId}
-							name="website"
-							placeholder="acme.com"
-							autoComplete="off"
-							autoCapitalize="off"
-							autoCorrect="off"
-							spellCheck={false}
-							inputMode="url"
-							required
-						/>
-					</InputGroup>
 					<FieldDescription>
-						Read once, so every answer afterwards knows what you sell.
+						Don't have a Context API key?{" "}
+						<a
+							href={CONTEXT_DEV_SIGNUP_URL}
+							target="_blank"
+							rel="noreferrer"
+							className="underline underline-offset-4 hover:text-foreground"
+						>
+							Sign up here
+						</a>
 					</FieldDescription>
 				</Field>
 			</FieldGroup>
