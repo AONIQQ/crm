@@ -208,10 +208,10 @@ You need [Bun](https://bun.com) and Docker.
 
 ```sh
 git clone https://github.com/trycompai/crm.git && cd crm
+cp .env.example .env          # then fill in the four values below
 bun install
 
 docker compose up -d          # Postgres on :5432
-cp .env.example .env          # then fill in the four values below
 
 bun run db:deploy             # apply migrations
 bun run db:seed               # optional: a believable pipeline to look at

@@ -24,9 +24,9 @@ issue.
 Everything you need is in the [README](./README.md#quick-start). Short version:
 
 ```sh
+cp .env.example .env      # fill in ALLOWED_SIGN_IN and the two Google values
 bun install
 docker compose up -d
-cp .env.example .env      # fill in ALLOWED_SIGN_IN and the two Google values
 bun run db:deploy && bun run db:seed
 bun run dev
 ```
