@@ -296,6 +296,17 @@ API's side of the line in [`api.md`](./api.md); whether a given company is worth
 the credits stays the agent's call. Each pass is capped at 500 rows and the
 leftover is logged rather than rounded away.
 
+**The cap is on the pass, not on each query inside it.** A company sweep has two
+sets of candidates — never successfully looked up, and still missing its
+artwork — and it used to take 500 of each and hand the union to `backfill`, so
+one sign-in could enqueue a thousand `brand` rows at priority 900 and fill the
+[direct lane](#two-lanes-what-a-rep-sees-and-what-a-rep-asks-for) with twice the
+declared budget. The union is deduplicated and cut to 500 before it is queued,
+and `remaining` is counted against the union in one query — the two sets overlap
+heavily, since a company that was never looked up rarely has a logo — so the
+figure the log prints is the work actually left rather than the leftover of one
+of the two halves.
+
 The script is the cheap half: it re-derives from the `CompanyEnrichment.raw`
 payloads already on disk, which is what keeping them was for. Reach for it when
 the records are fine and only the images are missing.
@@ -451,6 +462,16 @@ is the only way to file the result. `WorkspaceService.update` queues it when the
 website changes, and the sign-in sweep queues it when a website has no profile
 behind it, which covers the install that filled the settings page in before any
 of this existed and the one whose first attempt failed.
+
+**A finished attempt stands the sweep down for seven days**, the same shape as
+the portrait stand-down above and for the same reason. There is one workspace,
+so a website that cannot be read into a profile — a holding page, a site that
+blocks the fetch — was a `workspace-profile` session queued on *every* sign-in
+sweep for the life of the install, at the highest research priority there is,
+never getting a different answer. Changing the website still queues one
+immediately through `WorkspaceService.update`, so the stand-down only paces the
+retry of a failure, and it is shorter than a contact's thirty days because this
+one row rides in front of every question a rep asks.
 
 ## What the agent may read, and what may leave
 
@@ -751,8 +772,15 @@ it was widened to both lanes — see [starting now](#starting-now-instead-of-on-
 A row written by the API is dispatched immediately whatever the clock is doing,
 so the schedule is a backstop rather than the only door.
 
-That leaves two cases where the clock's absence still bites, and both look
-identical to the above: **a task the API did not write** — `schedule_recheck`,
+**It only does that when `AGENT_BRIDGE_SECRET` is set**, and that variable is
+optional: `poke()` reads it first and returns without sending anything when it is
+unset. So an install that has not set it is back at the paragraph above with no
+cron behind it either — rows queue, nothing dispatches, and the queue looks
+exactly like a slow agent. Set it, or run the dispatch below by hand.
+
+That leaves two cases where the clock's absence bites even with the poke
+working, and both look identical to the above: **a task the API did not
+write** — `schedule_recheck`,
 which books its own `dueAt` weeks out — and **anything queued while the agent was
 down**, since a missed poke is not retried. For those, the dev server mounts a
 one-shot route that runs the exact dispatch path production cron uses:
@@ -762,10 +790,14 @@ bun run --filter=agent dispatch
 # {"scheduleId":"dispatch","sessionIds":["wrun_01KZ…", …]}
 ```
 
-It claims a batch of `BATCH` tasks and starts a real session per row, so it
-spends real credits — that is the point of it, and the reason it is a command
-you run rather than a ticker somebody leaves on. Watch the agent pane; the
-session ids it returns are also streamable at
+It drains **both lanes**, exactly as the cron does: up to `VISIBLE_BATCH` (60)
+`brand` and `portrait` rows six at a time, handled in the process with no session
+at all, and `RESEARCH_BATCH` (12) research rows, one session each. So the
+`sessionIds` it prints are the research rows only — a run that resolved forty
+logos prints an empty list and was not idle. Either way it spends real credits, a
+vendor call per visible row and a model session per research one; that is the
+point of it, and the reason it is a command you run rather than a ticker somebody
+leaves on. Watch the agent pane; the session ids it returns are also streamable at
 `GET /eve/v1/session/:id/stream`.
 
 `eve start` on a built app *does* run the schedule, and so does Vercel, where

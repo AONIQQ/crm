@@ -229,7 +229,7 @@ Open `.env` and set these. Everything else in the file is optional and commented
 | ------------------------------------------ | -------------------------------------------------------------------- |
 | `BETTER_AUTH_SECRET`                       | `openssl rand -base64 32`                                             |
 | `ALLOWED_SIGN_IN`                          | Your email domain, e.g. `acme.com`. Or one address, e.g. `you@gmail.com`. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`| A Google OAuth client — 2 minutes, below.                             |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`| A Google OAuth client — 2 minutes, below. Both or neither.             |
 
 `DATABASE_URL` already matches the `docker compose` Postgres, so leave it alone unless
 you brought your own.
@@ -242,9 +242,13 @@ you brought your own.
 3. Enable the [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com) and the [Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com) for the project.
 4. Copy the client ID and secret into `.env`.
 
-Google sign-in is the only way in, so the API will not start without these. If your
-account is on a Google Workspace domain, set the consent screen to **Internal** and
-nobody outside your org can even reach the prompt.
+Google is the sign-in method a clone starts with, and the same client reads Gmail and
+Calendar — so almost every install wants it. It is nonetheless the one of the four that
+the API will still boot without: an install that signs in through its own identity
+provider, added on **Settings → SSO**, leaves both empty and gets no Google button and
+no mail sync. Set them together or not at all; half a pair is a button that fails at
+Google. If your account is on a Google Workspace domain, set the consent screen to
+**Internal** and nobody outside your org can even reach the prompt.
 
 </details>
 
@@ -264,7 +268,7 @@ ALLOWED_SIGN_IN="you@gmail.com"                  # a one-person install
 environment variables always win, so on a hosting platform you configure it there and
 the file is purely a local convenience.
 
-Beyond the four required values, everything is optional and the app runs without any
+Beyond the four values above, everything is optional and the app runs without any
 of it. [`.env.example`](./.env.example) is the full list with a note on each; the
 short version:
 

@@ -14,8 +14,10 @@ import {
 	Injectable,
 	Logger,
 	NotFoundException,
+	ServiceUnavailableException,
 } from "@nestjs/common";
 import { AgentTriggerService } from "../agent/agent-trigger.service";
+import { normalizeDomain } from "../companies/domain";
 import { InjectDatabase } from "../database/database.constants";
 import {
 	countsByKey,
@@ -71,19 +73,6 @@ const SORTABLE: Record<
 	joinedAt: (dir) => ({ createdAt: dir }),
 };
 
-function normalizeWebsite(value: string | null): string | null {
-	const trimmed = value?.trim();
-
-	if (!trimmed) return null;
-
-	const bare = trimmed
-		.replace(/^https?:\/\//i, "")
-		.replace(/\/+$/, "")
-		.trim();
-
-	return bare || null;
-}
-
 function toRole(value: string): WorkspaceRole {
 	return isWorkspaceRole(value) ? value : "member";
 }
@@ -98,14 +87,17 @@ export class WorkspaceService {
 	) {}
 
 	async get(userId: string): Promise<Workspace> {
-		const row = await this.db.organization.findUnique({
-			where: { id: WORKSPACE_ID },
-			select: { id: true, name: true, website: true, metadata: true },
-		});
+		let row = await this.readWorkspace();
 
 		if (!row) {
 			await ensureWorkspaceMembership(userId);
-			return this.get(userId);
+			row = await this.readWorkspace();
+		}
+
+		if (!row) {
+			throw new ServiceUnavailableException(
+				"The workspace could not be read. Sign in again in a moment.",
+			);
 		}
 
 		const role = await this.roleOf(userId);
@@ -138,7 +130,7 @@ export class WorkspaceService {
 			select: { website: true, metadata: true },
 		});
 
-		const website = normalizeWebsite(input.website);
+		const website = normalizeDomain(input.website);
 
 		if (!website) {
 			throw new BadRequestException(
@@ -157,7 +149,7 @@ export class WorkspaceService {
 
 		this.logger.log({ message: "Workspace updated", userId });
 
-		if (website && website !== before?.website) {
+		if (website !== before?.website) {
 			await this.agent.workspaceChanged(
 				website,
 				before?.website
@@ -211,37 +203,41 @@ export class WorkspaceService {
 			);
 		}
 
-		const target = await this.db.member.findFirst({
-			where: { id: input.memberId, organizationId: WORKSPACE_ID },
-			select: { id: true, role: true },
-		});
-
-		if (!target) {
-			throw new NotFoundException("That person is not in this workspace.");
-		}
-
-		if (target.role === "owner" && input.role !== "owner") {
-			const owners = await this.db.member.count({
-				where: { organizationId: WORKSPACE_ID, role: "owner" },
+		const updated = await this.db.$transaction(async (tx) => {
+			const target = await tx.member.findFirst({
+				where: { id: input.memberId, organizationId: WORKSPACE_ID },
+				select: { id: true, role: true },
 			});
 
-			if (owners <= 1) {
-				throw new ForbiddenException(
-					"The workspace needs an owner. Make someone else an owner first.",
-				);
+			if (!target) {
+				throw new NotFoundException("That person is not in this workspace.");
 			}
-		}
 
-		const updated = await this.db.member.update({
-			where: { id: target.id },
-			data: { role: input.role },
-			select: MEMBER_SELECT,
+			if (target.role === "owner" && input.role !== "owner") {
+				const owners = await tx.$queryRaw<{ id: string }[]>`
+					SELECT id FROM "member"
+					WHERE "organizationId" = ${WORKSPACE_ID} AND role = 'owner'
+					FOR UPDATE
+				`;
+
+				if (owners.length <= 1) {
+					throw new ForbiddenException(
+						"The workspace needs an owner. Make someone else an owner first.",
+					);
+				}
+			}
+
+			return tx.member.update({
+				where: { id: target.id },
+				data: { role: input.role },
+				select: MEMBER_SELECT,
+			});
 		});
 
 		this.logger.log({
 			message: "Workspace role changed",
 			userId,
-			memberId: target.id,
+			memberId: updated.id,
 			role: input.role,
 		});
 
@@ -285,6 +281,13 @@ export class WorkspaceService {
 		}
 
 		return where;
+	}
+
+	private async readWorkspace() {
+		return this.db.organization.findUnique({
+			where: { id: WORKSPACE_ID },
+			select: { id: true, name: true, website: true, metadata: true },
+		});
 	}
 
 	private async roleOf(userId: string): Promise<WorkspaceRole | null> {

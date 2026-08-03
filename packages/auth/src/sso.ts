@@ -1,8 +1,8 @@
 import { apiUrl } from "./env";
-import type { WorkspaceRole } from "./organization";
+import { isWorkspaceAdmin, type WorkspaceRole } from "./organization";
 
 export function canConfigureSso(role: WorkspaceRole | null): boolean {
-	return role === "owner" || role === "admin";
+	return isWorkspaceAdmin(role);
 }
 
 export function ssoCallbackBase(): string {

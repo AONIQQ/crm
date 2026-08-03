@@ -70,6 +70,27 @@ export async function readWorkspaceProfile(
 	return { ...row, sections: readSections(row.sections) };
 }
 
+export function websiteUrl(website: string | null | undefined): string | null {
+	const trimmed = website?.trim();
+	if (!trimmed) return null;
+
+	const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed)?.[1];
+	if (scheme && !/^https?$/i.test(scheme)) return null;
+
+	let url: URL;
+	try {
+		url = new URL(scheme ? trimmed : `https://${trimmed}`);
+	} catch {
+		return null;
+	}
+
+	if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(url.hostname)) return null;
+
+	const path = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/, "");
+
+	return `${url.protocol}//${url.hostname}${path}`;
+}
+
 export function profileOf(
 	profile: WorkspaceProfile | null,
 	website: string | null,

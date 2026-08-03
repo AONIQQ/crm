@@ -109,7 +109,12 @@ called, who works here, and what do we sell — and for nothing else.
   They match the plugin's own default statements — owner and admin — rather
   than inventing a second model beside it. `WorkspaceService` adds the one
   invariant the plugin has no opinion about: **the last owner cannot be
-  demoted.**
+  demoted.** It is enforced in a transaction that takes `FOR UPDATE` on the
+  owner rows before counting them, because counting and then updating is two
+  statements: two admins demoting the two remaining owners at the same moment
+  both counted two and both wrote, and a workspace with no owner is a workspace
+  nobody can rename or hand back. The lock makes the second one read the first
+  one's result and refuse.
 - **Reads and writes go through tRPC, not `authClient.organization.*`.**
   Renaming the workspace is data, not authentication, so it belongs on the data
   surface with everything else — see the next rule.
@@ -168,6 +173,20 @@ called, who works here, and what do we sell — and for nothing else.
   [the agent's rules](./agent.md#every-session-also-knows-who-we-are). The API
   writes the row and decides nothing about it, which is what keeps this on the
   right side of the first rule in this file.
+- **It is a hostname, and `normalizeDomain` is the one thing that says so.**
+  `WorkspaceService.update` runs the field through the same helper a company's
+  domain goes through (`apps/api/src/companies/domain.ts`) and rejects what
+  comes back null, so the message about entering `acme.com` is now true — it
+  used to strip `https://` and a trailing slash and store whatever was left,
+  which meant a typed sentence was accepted, marked the workspace onboarded,
+  and sent the agent to research a website that does not exist. A second
+  hostname rule beside that helper would be a second answer to one question.
+  The value is stored canonical (lower case, no `www.`, no path), so saving a
+  website that was previously stored uncanonically counts as a *change*: the
+  existing `WorkspaceProfile` stops matching and is dropped by `profileOf`, and
+  the same save queues the research that replaces it. That is the intended
+  order — a profile that no longer matches the website is a description of the
+  company we used to be.
 
 ## SSO is a row, not a deployment
 

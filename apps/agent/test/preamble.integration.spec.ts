@@ -259,4 +259,15 @@ describe("the workspace profile session", () => {
 		expect(markdown).toContain("do not guess");
 		expect(markdown).not.toContain("`write_workspace_profile`");
 	});
+
+	it("stops rather than sending the session at something unfetchable", async () => {
+		const { markdown } = await workspacePreamble({
+			name: "Comp AI",
+			website: "httpx://trycomp.ai",
+			profile: null,
+		});
+
+		expect(markdown).toContain("do not guess");
+		expect(markdown).not.toContain("`web_fetch`");
+	});
 });
