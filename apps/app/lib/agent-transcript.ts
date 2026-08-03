@@ -33,6 +33,7 @@ const VERBS: Record<string, string> = {
 	identify_contact: "Put a name to the address",
 	record_fact: "Recorded what it found",
 	write_brief: "Wrote the background",
+	write_workspace_profile: "Wrote up who we are",
 	research_person: "Researched them on the web",
 	research_company: "Read the company's site",
 	enrich_company: "Looked up the company",

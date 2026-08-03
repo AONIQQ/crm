@@ -11,20 +11,20 @@ import { requireSession } from "@/lib/session";
 import { HydrateClient } from "@/lib/trpc/hydrate";
 import { getServerQueryClient, getServerTrpc } from "@/lib/trpc/server";
 import { AgentModel } from "./agent-model";
-import { GoogleConnection } from "./google-connection";
+import { WorkspaceForm } from "./workspace-form";
 
 export const metadata: Metadata = {
-	title: "Settings",
+	title: "General",
 };
 
-export default async function SettingsPage() {
+export default async function GeneralSettingsPage() {
 	await requireSession();
 
 	const trpc = getServerTrpc();
 	const queryClient = getServerQueryClient();
 
 	await Promise.all([
-		queryClient.prefetchQuery(trpc.google.status.queryOptions()),
+		queryClient.prefetchQuery(trpc.workspace.get.queryOptions()),
 		queryClient.prefetchQuery(trpc.settings.agentModel.queryOptions()),
 		queryClient.prefetchQuery(trpc.settings.modelCatalog.queryOptions()),
 	]);
@@ -33,9 +33,9 @@ export default async function SettingsPage() {
 		<PageShell>
 			<PageShellHeader>
 				<PageShellHeading>
-					<PageShellTitle>Settings</PageShellTitle>
+					<PageShellTitle>General</PageShellTitle>
 					<PageShellDescription>
-						Your meetings and email, on the companies they belong to.
+						Who you are, and the model the research agent thinks with.
 					</PageShellDescription>
 				</PageShellHeading>
 			</PageShellHeader>
@@ -43,7 +43,7 @@ export default async function SettingsPage() {
 			<PageShellContent>
 				<HydrateClient>
 					<div className="flex max-w-3xl flex-col gap-6">
-						<GoogleConnection />
+						<WorkspaceForm />
 						<AgentModel />
 					</div>
 				</HydrateClient>

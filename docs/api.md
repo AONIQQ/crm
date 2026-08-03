@@ -65,17 +65,173 @@ slower than the request that produced it.
 If you are about to add a vendor client to `apps/api`, you want
 `apps/agent/agent/lib` instead.
 
-## There are no organizations
+## There is exactly one organization, and it is not a tenancy boundary
 
 This is an internal tool behind Google sign-in, and it is **single tenant**.
-There is no `Organization` model, no `x-organization-slug` header, no org
-context interceptor, and no org-scoped cache keys. "Signed in" is the entire
-authorisation model.
+There is no `x-organization-slug` header, no org context interceptor, no
+org-scoped cache keys, and **no `organizationId` on any CRM record**. A company,
+a contact, a deal and an activity are scoped by nothing, because there is
+nothing to scope them to.
 
-If you are porting something from the Comp AI MVP, delete the org plumbing
-rather than stubbing it — an `organizationId` that is always the same value is
-a column, an index and a `where` clause that buy nothing, and a permissions
-check that always returns `true` reads like a real one at review time.
+What does exist is a **singleton workspace**: the Better Auth `organization`
+plugin, holding one row whose id is the literal string `workspace`
+(`WORKSPACE_ID`, defined in [`@crm/db`](../packages/db/src/workspace.ts) and
+re-exported by `@crm/auth` — the agent reads workspace rows and does not depend
+on the auth package, and one id must not be two strings). It is there to answer
+three questions a CRM has to answer about *itself* — what is this company
+called, who works here, and what do we sell — and for nothing else.
+
+- **The id is a constant, never a parameter.** Every read says
+  `where: { id: WORKSPACE_ID }`. The moment a function takes an
+  `organizationId`, the plugin has become tenancy plumbing and the rule above
+  is broken. If you are porting something from the Comp AI MVP, delete the org
+  threading rather than stubbing it — an `organizationId` that is always the
+  same value is a column, an index and a `where` clause that buy nothing.
+- **Signing in is the join, and there is no invite flow.**
+  `ensureWorkspaceMembership` runs in `databaseHooks.session.create.before`, so
+  the workspace and the caller's `Member` row exist by the time any request is
+  served. `ALLOWED_SIGN_IN` already decides who may sign in; an invitation
+  would be a second, quieter answer to the same question. The plugin's
+  `invitation` table is created because the plugin owns its own schema — it is
+  unused, and nothing in this repo writes to it.
+- **The first account is the owner; everyone after is a member.** When the
+  workspace row is created the hook enrols *every user that already exists*,
+  oldest first as owner — otherwise an install that predates the plugin shows
+  an empty Members page until each person happens to sign in again, which looks
+  identical to being broken.
+- **`ensureWorkspaceMembership` degrades, it does not throw.** A failure there
+  would fail the session create, which is to say it would lock everyone out of
+  the CRM to protect a settings page. It logs, returns `undefined`, and the next
+  sign-in retries — the hook runs on every session, so it is self-healing.
+- **Permissions are read from one place.** `canRenameWorkspace` and
+  `canChangeRole` in `@crm/auth` are what the service enforces *and* what the
+  UI disables its controls on, so the button and the 403 can never disagree.
+  They match the plugin's own default statements — owner and admin — rather
+  than inventing a second model beside it. `WorkspaceService` adds the one
+  invariant the plugin has no opinion about: **the last owner cannot be
+  demoted.**
+- **Reads and writes go through tRPC, not `authClient.organization.*`.**
+  Renaming the workspace is data, not authentication, so it belongs on the data
+  surface with everything else — see the next rule.
+- **The name and the website are asked for once, at the door, and there is no
+  skipping it.** Both fields are `required` in the form *and* in
+  `updateWorkspaceInput`, so the website cannot be dropped later from the
+  settings page either — a CRM that knows what we sell on Monday and not on
+  Tuesday is worse than one that never knew. The gate only catches somebody who
+  could *answer* it (`canRename`), so a member never meets a form they are
+  forbidden to submit, and it posts the same `workspace.update` mutation as the
+  settings page rather than a second write path.
+- **The state is `onboardedAt` inside the organization's `metadata`, not a
+  column beside it.** The plugin ships that blob and owns the table; a second
+  timestamp column is a second place the same fact is recorded, and the two
+  drifted the first time somebody wrote a website through a revision of
+  `WorkspaceService.update` that predated the column. A row with a name, a
+  website and a null timestamp is a workspace that has plainly answered the
+  question and is asked it forever. `isOnboarded` and `markOnboarded` in
+  [`@crm/db/workspace`](../packages/db/src/workspace.ts) are the only readers
+  and the only writer; `markOnboarded` keeps the first answer and preserves
+  every other key, because the blob is the plugin's, not ours.
+- **The gate is `proxy.ts`, and it is answered once per browser.** It used to
+  live in `(app)/layout.tsx`, which meant a `workspace.get` round trip on every
+  navigation into the app to re-establish a fact that changes once in the life
+  of an install — and a second, opposing redirect on the `/onboarding` page to
+  stop the first one looping. Two redirects pointing at each other is not a
+  gate, it is a latch waiting for the two reads to disagree.
+  - **`getSessionCookie()` decides signed-in, not a session lookup.** That is
+    Better Auth's documented optimistic check for proxy, and it is all a
+    redirect needs; every page behind it still resolves the real session
+    server-side through `requireGoogleAccess()`.
+  - **The answer is cached in an httpOnly `crm.onboarded` cookie**, so the
+    common path costs nothing and the tRPC read happens once — twice for the
+    person who actually fills the form in, since the cookie lands on the
+    navigation after the mutation. The proxy is the only writer; the form does
+    not set it, because two writers is how this went wrong in the first place.
+    Forging the cookie skips a setup form and grants nothing, which is why it
+    can be a cookie at all.
+  - **`/sign-in`, `/grant-access` and `/eve` are ungated.**
+    `requireGoogleAccess()` redirects to `/grant-access`, so gating it would
+    ping-pong against the onboarding redirect for anyone who signed in without
+    both scopes.
+  - **An unreachable API fails open.** `readOnboardingGate` returns `unknown`
+    on a non-200, a timeout or a parse failure, and an unknown gate lets the
+    request through without writing the cookie. The alternative is an install
+    that cannot reach its own API redirecting every request to a form that
+    cannot be submitted.
+- **The name arrives as a placeholder, not as an answer.** A workspace is
+  created as `DEFAULT_WORKSPACE_NAME` — the literal string `CRM` — and the field
+  is empty with that behind it. It used to be derived from the sign-in domain,
+  which put `Trycomp` in the box as though somebody had typed it, and a guess
+  presented as an answer is a guess that gets accepted.
+- **The website is the field with a consequence.** Saving it queues the agent's
+  `workspace-profile` task, and what comes back is read into the opening context
+  of every session the agent runs — see
+  [the agent's rules](./agent.md#every-session-also-knows-who-we-are). The API
+  writes the row and decides nothing about it, which is what keeps this on the
+  right side of the first rule in this file.
+
+## SSO is a row, not a deployment
+
+Google is the sign-in method a clone starts with. An install that has its own
+identity provider adds one on **Settings → SSO**, and the whole of that
+configuration is an `ssoProvider` row written by Better Auth's
+[`sso` plugin](https://www.better-auth.com/docs/plugins/sso) — not an
+environment variable, because a self-hoster's admin cannot redeploy.
+
+- **OpenID Connect only.** `apps/api/src/sso` registers a provider from an
+  issuer, a client id and a client secret; everything else — the authorization,
+  token, JWKS and userinfo endpoints — is read from the issuer's discovery
+  document at registration time. The plugin can do SAML as well and there is
+  deliberately no UI for it: SAML needs an X.509 certificate and an SP signing
+  key this app has nowhere to generate or keep, and a half-configured SAML
+  provider fails at the IdP with an error nobody here can read.
+- **The provider belongs to the workspace, and the id is still a constant.**
+  `SsoService` passes `WORKSPACE_ID`; it is never an input. That is also what
+  gives the plugin's own `sso/register` its permission check for free, and
+  `canConfigureSso` in [`@crm/auth`](../packages/auth/src/sso.ts) is the second
+  half — the same owner-or-admin answer the settings page disables its button
+  on, beside `canRenameWorkspace`.
+- **The management surface is tRPC; signing in is not.** Listing, adding and
+  removing a provider is configuration, so it goes through `sso.*` like every
+  other read and write. `authClient.signIn.sso()` stays on the auth client,
+  because that one *is* authentication.
+- **`sso.signInOptions` is the one public procedure in the app.** The sign-in
+  page is unauthenticated and has to know what it may offer, so it returns each
+  provider's id and the name to print on the button, plus whether a Google
+  client is configured at all — nothing else. `sso.list` carries the issuer, the
+  domains and the last four of the client id, and it — like `sso.settings`,
+  `sso.register` and `sso.remove` — takes `AuthMiddleware` at the method rather
+  than the router, which is what leaves `sso.signInOptions` open. A client
+  secret is never read back out of any of them.
+- **It is the API's answer, not the app's.** Both processes read one `.env`, but
+  `/api/auth/*` is served by the API, so whether Google sign-in works is a fact
+  about *its* environment. The app asking itself would be right until the day
+  the two are deployed with different configuration, and then it would offer a
+  button that 500s.
+- **An install with neither says so.** No Google client and no provider is not
+  an empty sign-in page: it is the one state where the reader is the person who
+  can fix it, so `/sign-in` names the two variables to set. A read that *fails*
+  is different and must not print that — an unreachable API is not a missing
+  configuration, so the page falls back to offering Google.
+- **A configured provider replaces the Google button, it does not disable
+  Google.** `/sign-in?method=google` still offers it. Hiding is the point —
+  locking an admin out of their own CRM because they typed an issuer URL wrong
+  is not. It only offers it when there *is* a Google client, so the escape hatch
+  is never a button that cannot work.
+- **Signing in with an IdP does not cost you Gmail.** Google is two separate
+  things here — a way to prove who you are, and a mailbox to read — and an
+  install that replaced the first still wants the second. So Gmail and Calendar
+  are a *connection* for an SSO rep, not a condition of entry: `needsGoogleGrant`
+  in [`@crm/auth`](../packages/auth/src/scopes.ts) walls only an account whose
+  sole sign-in row is Google, and Settings → Connections carries the button that
+  links one. See [the sync rules](./environment.md#gmail-and-calendar-sync).
+- **`ALLOWED_SIGN_IN` still decides who gets in.** SSO says where someone
+  authenticates; the allow-list says whether that address may have an account,
+  and `databaseHooks.user.create.before` enforces it on an SSO sign-up exactly
+  as it does on a Google one. Two questions, one answer each.
+- **The plugin does not do the workspace join.**
+  `organizationProvisioning: { disabled: true }`, because
+  `ensureWorkspaceMembership` already runs on every session create. Two things
+  enrolling the same person is two things to keep in step.
 
 ## tRPC is the data surface; REST is for auth and health
 

@@ -23,13 +23,18 @@ model User {
   sessions      Session[]
   accounts      Account[]
 
-  ownedCompanies Company[]     @relation("CompanyOwner")
-  ownedContacts  Contact[]     @relation("ContactOwner")
-  ownedDeals     Deal[]        @relation("DealOwner")
-  activities     Activity[]    @relation("ActivityAuthor")
+  ownedCompanies Company[]           @relation("CompanyOwner")
+  ownedContacts  Contact[]           @relation("ContactOwner")
+  ownedDeals     Deal[]              @relation("DealOwner")
+  activities     Activity[]          @relation("ActivityAuthor")
   mailboxSyncs   MailboxSync[]
-  factDecisions  ContactFact[] @relation("FactDecider")
+  factDecisions  ContactFact[]       @relation("FactDecider")
   conversations  AgentConversation[] @relation("ConversationOwner")
+
+  members     Member[]
+  invitations Invitation[]
+
+  ssoproviders SsoProvider[]
 
   @@unique([email])
   @@map("user")
@@ -45,6 +50,8 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  activeOrganizationId String?
 
   @@unique([token])
   @@index([userId])
@@ -162,7 +169,7 @@ model Company {
   primaryContactId String?  @unique
   primaryContact   Contact? @relation("PrimaryContact", fields: [primaryContactId], references: [id], onDelete: SetNull)
 
-  enrichmentStatus EnrichmentStatus @default(PENDING)
+  enrichmentStatus EnrichmentStatus   @default(PENDING)
   enrichedAt       DateTime?
   enrichmentError  String?
   enrichment       CompanyEnrichment?
@@ -171,14 +178,14 @@ model Company {
 
   lastActivityAt DateTime?
 
-  contacts       Contact[]       @relation("CompanyContacts")
+  contacts       Contact[]           @relation("CompanyContacts")
   conversations  AgentConversation[]
   deals          Deal[]
   activities     Activity[]
   emailThreads   EmailThread[]
   calendarEvents CalendarEvent[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@index([ownerId])
   @@index([name])
@@ -197,10 +204,10 @@ model CompanyEnrichment {
 }
 
 model Contact {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   firstName   String
   lastName    String?
-  email       String?  @unique
+  email       String? @unique
   phone       String?
   title       String?
   linkedinUrl String?
@@ -218,11 +225,11 @@ model Contact {
   facts         ContactFact[]
   conversations AgentConversation[]
 
-  companyId   String?
-  company     Company? @relation("CompanyContacts", fields: [companyId], references: [id], onDelete: SetNull)
-  ownerId     String?
-  owner       User?    @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  primaryOf   Company? @relation("PrimaryContact")
+  companyId String?
+  company   Company? @relation("CompanyContacts", fields: [companyId], references: [id], onDelete: SetNull)
+  ownerId   String?
+  owner     User?    @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  primaryOf Company? @relation("PrimaryContact")
 
   source RecordSource @default(MANUAL)
 
@@ -291,7 +298,7 @@ model ContactBrief {
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
   narrative String
-  sections Json
+  sections  Json
 
   score     Float
   sourceUrl String?
@@ -311,10 +318,10 @@ model AgentTask {
   reason String
 
   priority Int @default(0)
-  budget Int @default(4)
+  budget   Int @default(4)
   attempts Int @default(0)
 
-  dueAt DateTime
+  dueAt       DateTime
   leasedUntil DateTime?
 
   sessionId  String?
@@ -330,7 +337,7 @@ model AgentTask {
 }
 
 model AgentEvent {
-  id        String @id
+  id        String  @id
   sessionId String
   contactId String?
   type      String
@@ -358,7 +365,7 @@ model AgentConversation {
 
   sessionId         String  @unique
   continuationToken String?
-  streamIndex Int @default(0)
+  streamIndex       Int     @default(0)
 
   title        String?
   messageCount Int     @default(0)
@@ -376,10 +383,10 @@ model Deal {
   id            String              @id @default(cuid())
   conversations AgentConversation[]
   name          String
-  companyId String
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  ownerId   String
-  owner     User    @relation("DealOwner", fields: [ownerId], references: [id])
+  companyId     String
+  company       Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ownerId       String
+  owner         User                @relation("DealOwner", fields: [ownerId], references: [id])
 
   stage             DealStage @default(DEMO_BOOKED)
   stageChangedAt    DateTime  @default(now())
@@ -471,12 +478,12 @@ model MailboxSync {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   source String
 
-  status GoogleSyncStatus @default(IDLE)
-  cursor String?
+  status       GoogleSyncStatus @default(IDLE)
+  cursor       String?
   lastSyncedAt DateTime?
   lastError    String?
   retryAfter   DateTime?
-  autoCreate   Boolean   @default(false)
+  autoCreate   Boolean          @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -487,7 +494,7 @@ model MailboxSync {
 }
 
 model EmailThread {
-  id String @id @default(cuid())
+  id            String  @id @default(cuid())
   rootMessageId String  @unique
   subject       String?
 
@@ -516,18 +523,18 @@ model EmailMessage {
   threadId String
   thread   EmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  rfcMessageId String @unique
+  rfcMessageId   String  @unique
   syncedByUserId String?
   gmailMessageId String?
 
-  direction EmailDirection
-  fromEmail String
-  fromName  String?
+  direction  EmailDirection
+  fromEmail  String
+  fromName   String?
   recipients Json
   subject    String?
   snippet    String?
-  body   String?
-  sentAt DateTime
+  body       String?
+  sentAt     DateTime
 
   createdAt DateTime @default(now())
 
@@ -536,10 +543,10 @@ model EmailMessage {
 }
 
 model CalendarEvent {
-  id String @id @default(cuid())
+  id                String   @id @default(cuid())
   iCalUid           String
   originalStartTime DateTime
-  recurringEventId String?
+  recurringEventId  String?
 
   title          String?
   description    String?
@@ -576,8 +583,8 @@ model CalendarAttendee {
   eventId String
   event   CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
-  email String
-  name  String?
+  email          String
+  name           String?
   responseStatus String?
   isOrganizer    Boolean  @default(false)
   contactId      String?
@@ -606,4 +613,81 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 
   @@map("appSetting")
+}
+
+model Organization {
+  id          String       @id
+  name        String
+  slug        String
+  logo        String?
+  createdAt   DateTime
+  metadata    String?
+  website     String?
+  members     Member[]
+  invitations Invitation[]
+
+  @@unique([slug])
+  @@map("organization")
+}
+
+model WorkspaceProfile {
+  id String @id
+
+  website   String
+  narrative String
+  sections  Json
+
+  sourceUrl String?
+  sessionId String?
+
+  refreshedAt DateTime @default(now())
+
+  @@map("workspaceProfile")
+}
+
+model Member {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member")
+  createdAt      DateTime
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  status         String       @default("pending")
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  inviterId      String
+  user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+}
+
+model SsoProvider {
+  id             String  @id
+  issuer         String
+  oidcConfig     String?
+  samlConfig     String?
+  userId         String?
+  user           User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId     String
+  organizationId String?
+  domain         String
+
+  @@unique([providerId])
+  @@map("ssoProvider")
 }
