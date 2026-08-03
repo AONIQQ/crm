@@ -18,7 +18,13 @@ const colleague = `stays@${domain}`;
 const userId = `user-${suffix}`;
 
 const stamp = new ActivityStampService(db);
-const agent = new AgentTriggerService(db);
+
+const agent = {
+	contactCreated: async () => undefined,
+	companyCreated: async () => undefined,
+	companyRequested: async () => undefined,
+} as unknown as AgentTriggerService;
+
 const directory = new CompanyDirectoryService(db, agent);
 const log = new EnrichmentLogService(db, stamp);
 const queue = new AgentQueueService(db);
@@ -43,15 +49,48 @@ async function matchContext() {
 	};
 }
 
+const domains = [domain, doomedDomain];
+const ours = {
+	OR: domains.map((host) => ({ email: { endsWith: `@${host}` } })),
+};
+
+async function parked(subject: { contactId?: string; companyId?: string }) {
+	return db.agentTask.create({
+		data: {
+			...subject,
+			kind: "identify",
+			reason: `record-delete-spec (${suffix})`,
+			dueAt: new Date(Date.now() + 60 * 60 * 1000),
+		},
+		select: { id: true },
+	});
+}
+
 async function clean() {
-	const domains = [domain, doomedDomain];
-	await db.contact.deleteMany({
-		where: { OR: domains.map((host) => ({ email: { endsWith: `@${host}` } })) },
+	const [existingContacts, existingCompanies] = await Promise.all([
+		db.contact.findMany({ where: ours, select: { id: true } }),
+		db.company.findMany({
+			where: { domain: { in: domains } },
+			select: { id: true },
+		}),
+	]);
+
+	const contactIds = existingContacts.map((row) => row.id);
+	const companyIds = existingCompanies.map((row) => row.id);
+
+	await db.agentTask.deleteMany({
+		where: {
+			OR: [
+				{ reason: `record-delete-spec (${suffix})` },
+				{ contactId: { in: contactIds } },
+				{ companyId: { in: companyIds } },
+			],
+		},
 	});
+	await db.agentEvent.deleteMany({ where: { contactId: { in: contactIds } } });
+	await db.contact.deleteMany({ where: ours });
 	await db.company.deleteMany({ where: { domain: { in: domains } } });
-	await db.suppressedContact.deleteMany({
-		where: { OR: domains.map((host) => ({ email: { endsWith: `@${host}` } })) },
-	});
+	await db.suppressedContact.deleteMany({ where: ours });
 	await db.user.deleteMany({ where: { id: userId } });
 }
 
@@ -75,6 +114,8 @@ describe("deleting a contact", () => {
 			ownerId: userId,
 		});
 		contactId = created.id;
+
+		await parked({ contactId });
 
 		await db.agentEvent.create({
 			data: {
@@ -168,6 +209,8 @@ describe("deleting a company", () => {
 			data: { name: "Doomed deal", companyId: company.id, ownerId: userId },
 			select: { id: true },
 		});
+
+		await parked({ companyId: company.id });
 
 		expect(await companies.delete(company.id)).toEqual({
 			id: company.id,
