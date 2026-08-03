@@ -17,7 +17,7 @@ import {
 } from "./calendar.client";
 import { GoogleMatchService, type MatchContext } from "./google-match.service";
 import { GoogleTokenService } from "./google-token.service";
-import type { Participant } from "./participants";
+import { isMachineAddress, type Participant } from "./participants";
 import { SyncStateService } from "./sync-state.service";
 
 const MAX_PAGES_PER_TICK = 5;
@@ -294,7 +294,10 @@ export class CalendarSyncService {
 		event: GoogleEvent,
 	): Promise<void> {
 		const attendees = (event.attendees ?? []).filter(
-			(attendee) => attendee.email && !attendee.resource,
+			(attendee) =>
+				attendee.email &&
+				!attendee.resource &&
+				!isMachineAddress(attendee.email.toLowerCase()),
 		);
 
 		if (attendees.length === 0) return;

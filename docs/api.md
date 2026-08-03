@@ -285,6 +285,52 @@ Everything the app reads or writes goes through `nestjs-trpc` routers under
   run the generator. Regenerate locally and commit the result with the router
   change that caused it.
 
+## Not every address on a thread is a person
+
+`externalParticipants` (`apps/api/src/google/participants.ts`) is the one gate
+between what Google returns and what becomes a record, and it has to throw away
+three different kinds of thing before it gets to a lead: **us** (the allow-list
+domains and the `User` table), **a decision a rep made** (`SuppressedContact`,
+`SuppressedDomain`), and **an address no human has ever read**.
+
+The third is `isMachineAddress`, and it exists because of a company called
+`group.calendar.google.com` with one contact on it named "Interviews
+scheduled". A secondary Google calendar is invited to an event as an ordinary
+attendee — it is not flagged `resource`, the way a meeting room is — so it
+arrived with a display name and a plausible-looking domain and the sync did
+exactly what it does for a stranger at a customer: made a person, made a
+company, and queued research on both.
+
+- **A machine domain never becomes a company.** `isMachineDomain` in
+  `apps/api/src/companies/domain.ts` sits beside `FREE_EMAIL_DOMAINS` because
+  the two answer the same question — *is this host a company* — and
+  `domainFromEmail` returns `null` for both. That is the load-bearing half:
+  `companyForEmail` is the only way a company is derived from an address, so a
+  caller that never heard of this rule still cannot create one.
+  `.calendar.google.com` covers the shared calendars, the rooms, the imported
+  ICS feeds and the holiday calendars in one entry.
+- **It matches the *host*, never a substring.** `calendar.acme.com` and
+  `sendgrid.com` are somebody's real company; only the exact hosts and the
+  listed suffixes are refused.
+- **An opaque local part is the second door.** `c_f5ec…@` and a bare UUID are
+  identifiers, not names, and they come from providers whose infrastructure
+  hostname we have not learned yet. The patterns are deliberately narrow — 24
+  hex characters or a formatted UUID — because the cost of a false positive
+  here is a real customer who is silently never filed.
+- **It is not a suppression, and it leaves no row.** A rep can still type any of
+  these into the quick-add form; the rule is only that the *inbox* may not
+  decide they are worth a record. `SuppressedContact` is for a person a rep
+  deleted, and writing one for a calendar id would be recording a decision
+  nobody made.
+- **The attendee list is filtered too.** `syncAttendees` drops the same
+  addresses beside `attendee.resource`, so a shared calendar is not listed as
+  somebody who came to the meeting.
+
+Shared inboxes and the machines that send invitations are a separate list,
+`isAutomatedAddress` — `sales@`, `noreply@`, `bookings@`. That one is about the
+*local part*, and it is the reason `support@acme.com` never becomes a lead at a
+company we do genuinely sell to.
+
 ## Deleting a record is a decision the sync has to respect
 
 Each of the three records can be deleted from the three-dot menu in its sheet —
