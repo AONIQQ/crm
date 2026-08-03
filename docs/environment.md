@@ -122,6 +122,32 @@ Live in `packages/auth/src/workspace.ts`.
 - **`AUTH_COOKIE_DOMAIN`** only when the API and the app are on different
   subdomains of one parent — then `.example.com`, so one cookie covers both. On
   localhost the shared cookie already works, because cookies ignore ports.
+
+### The session cookie is named after this app, not after the library
+
+`AUTH_COOKIE_PREFIX` in [`@crm/auth/cookies`](../packages/auth/src/cookies.ts)
+is the literal string `crm`, so the session cookie is
+`__Secure-crm.session_token` rather than Better Auth's default
+`__Secure-better-auth.session_token`.
+
+The default is a hazard for any install whose app shares a parent domain with
+something else — `crm.example.com` beside an existing `app.example.com`. A
+cookie set with `Domain=.example.com` by the neighbour is sent to *us* too,
+under a name identical to ours, and `parseCookies` keeps one value per name. The
+failure is silent and reads as a deployment problem rather than a naming one:
+sign-in completes, the `session` row is written with a week's expiry, the
+browser holds a cookie, and then every reader — the API that minted it and the
+app alike — resolves it to `null` and bounces to `/sign-in`. Nothing logs an
+error, because nothing has errored.
+
+Two things follow. It is set on the **server config and the proxy's read**
+together: `advanced.cookiePrefix` in `auth.ts` names the cookie and
+`getSessionCookie(request, { cookiePrefix: AUTH_COOKIE_PREFIX })` in
+`apps/app/proxy.ts` looks for it, and a prefix changed in one place only is a
+gate that redirects every signed-in request. And **changing it signs everybody
+out** — the old cookies stop matching. That is a one-time cost paid on deploy,
+not a loop: a stale `better-auth`-prefixed cookie no longer matches, so the
+proxy sends the reader to `/sign-in`, which is where they need to be.
 - **`AGENT_URL`** is the research agent, which is its own deployment. The app
   reads it to proxy the bridge and the API reads it to poke the dispatcher, both
   server-side only: the browser never learns the agent has an origin of its own.

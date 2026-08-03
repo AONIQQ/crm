@@ -285,6 +285,151 @@ Everything the app reads or writes goes through `nestjs-trpc` routers under
   run the generator. Regenerate locally and commit the result with the router
   change that caused it.
 
+## Not every address on a thread is a person
+
+`externalParticipants` (`apps/api/src/google/participants.ts`) is the one gate
+between what Google returns and what becomes a record, and it has to throw away
+three different kinds of thing before it gets to a lead: **us** (the allow-list
+domains and the `User` table), **a decision a rep made** (`SuppressedContact`,
+`SuppressedDomain`), and **an address no human has ever read**.
+
+The third is `isMachineAddress`, and it exists because of a company called
+`group.calendar.google.com` with one contact on it named "Interviews
+scheduled". A secondary Google calendar is invited to an event as an ordinary
+attendee — it is not flagged `resource`, the way a meeting room is — so it
+arrived with a display name and a plausible-looking domain and the sync did
+exactly what it does for a stranger at a customer: made a person, made a
+company, and queued research on both.
+
+- **A machine domain never becomes a company.** `isMachineDomain` in
+  `apps/api/src/companies/domain.ts` sits beside `FREE_EMAIL_DOMAINS` because
+  the two answer the same question — *is this host a company* — and
+  `domainFromEmail` returns `null` for both. That is the load-bearing half:
+  `companyForEmail` is the only way a company is derived from an address, so a
+  caller that never heard of this rule still cannot create one.
+  `.calendar.google.com` covers the shared calendars, the rooms, the imported
+  ICS feeds and the holiday calendars in one entry.
+- **It matches the *host*, never a substring.** `calendar.acme.com` and
+  `sendgrid.com` are somebody's real company; only the exact hosts and the
+  listed suffixes are refused.
+- **An opaque local part is the second door.** `c_f5ec…@` and a bare UUID are
+  identifiers, not names, and they come from providers whose infrastructure
+  hostname we have not learned yet. The patterns are deliberately narrow — 24
+  hex characters or a formatted UUID — because the cost of a false positive
+  here is a real customer who is silently never filed.
+- **It is not a suppression, and it leaves no row.** A rep can still type any of
+  these into the quick-add form; the rule is only that the *inbox* may not
+  decide they are worth a record. `SuppressedContact` is for a person a rep
+  deleted, and writing one for a calendar id would be recording a decision
+  nobody made.
+- **The attendee list is filtered too.** `syncAttendees` drops the same
+  addresses beside `attendee.resource`, so a shared calendar is not listed as
+  somebody who came to the meeting.
+
+Shared inboxes and the machines that send invitations are a separate list,
+`isAutomatedAddress` — `sales@`, `noreply@`, `bookings@`. That one is about the
+*local part*, and it is the reason `support@acme.com` never becomes a lead at a
+company we do genuinely sell to.
+
+## Deleting a record is a decision the sync has to respect
+
+Each of the three records can be deleted from the three-dot menu in its sheet —
+`contacts.delete`, `companies.delete`, `deals.delete`, one confirm dialog each.
+There is no soft delete and no archive: a row a rep meant to be gone that is
+still in every list, facet and count is worse than either.
+
+**A deleted contact is remembered by address.** Deleting the row is not enough,
+because the Gmail and Calendar sync creates contacts from whoever is on a thread
+— so the next message from that person put them straight back, with a fresh
+`identify` task behind them, and the rep's only recourse was to delete them
+again every few days. `ContactsService.delete` writes a `SuppressedContact` row
+keyed on the email, and `externalParticipants`
+(`apps/api/src/google/participants.ts`) drops that address exactly as it drops a
+domain in `SuppressedDomain` — one filter, one place, so the address is
+invisible to contact creation, company auto-creation and thread attribution at
+once.
+
+- **It suppresses the address, not the person.** A contact with no email cannot
+  be recreated by the sync in the first place — the sync only knows people by
+  address — so there is nothing to write down.
+- **The key is the address as the sync will see it: lower case.**
+  `parseAddress` lower-cases everything Google hands us, so a rep who typed
+  `Paula.Marchetti@Fernhill.com` into the quick-add form and then deleted the
+  contact left a suppression nothing would ever match, and the next thread put
+  them straight back — the exact loop the row exists to break. `normalizeEmail`
+  (`apps/api/src/crm/values.ts`) is the one canonicaliser, applied where a rep's
+  typing enters the system: `contacts.create`, `contacts.update` and the
+  suppression written by `contacts.delete`. The conflict check on create and
+  `allowAgain` both match case-insensitively so a row written before this rule
+  still answers.
+- **The address is taken from the delete itself, not from a read before it.**
+  `contacts.delete` runs `tx.contact.delete({ select: { email: true } })` inside
+  the transaction and suppresses what comes back, so the row it writes down is
+  the address the contact had at the moment it ceased to exist. A pre-check read
+  is a different question asked earlier: a rep correcting the address in one tab
+  while another deletes the record left the old address suppressed and the new
+  one open, which is the same recreated-contact loop wearing a different hat.
+  It is also what supplies the name in the `reason`, and the 404 — a missing
+  contact is now the delete's own `P2025` through `translate`, rather than a
+  pre-check that a concurrent delete could pass.
+- **The colleagues are untouched.** Only the deleted address is filtered, so a
+  thread with three other people at that company still files against them. A
+  thread where the deleted person was the *only* outsider files against nobody,
+  which is the correct reading of "we do not track this person".
+- **A rep can always add them back, and doing so lifts the suppression.**
+  `allowAgain` runs on `contacts.create` and on an `update` that sets the email,
+  **inside the same transaction as the write**. Outside it, a database blip
+  between the two left a contact the sync still ignores, and the retry hit the
+  "already uses that email" conflict — a record a rep can see and cannot fix.
+  The rule is *not added back automatically* — somebody typing the address in is
+  not the inbox making the decision for them.
+- **Deleting a company does not suppress its domain.** Its people survive the
+  delete with no company, and a domain-wide suppression would silently stop
+  filing their email too. Turning off a whole domain stays the explicit control
+  on Settings → Connections, where it says what it does.
+
+**What the database does not cascade, the service does.** `AgentTask` and
+`AgentEvent` carry a `contactId` and a `companyId` as plain columns with no
+foreign key — they outlive the records they name on purpose, so the queue
+survives a redeploy — which means a delete has to clear them itself. Leaving
+them behind queues research about a person who no longer exists, and the
+dispatcher spends a session finding that out.
+
+**The stamps are then recomputed on the records the delete actually reached,
+and no others.** Deleting a record deletes its activities, and `lastActivityAt`
+on whatever else those activities touched is a cached maximum that nothing else
+recomputes — a company whose only recent activity was on a deleted deal would
+sort as though the work were still fresh, forever.
+
+- **The affected set is read before the rows go, inside the delete's own
+  transaction.** `ActivityStampService.targetsOf(where)` groups the activities a
+  delete is about to destroy by each of their three foreign keys and hands back
+  the ids; `recomputeMany` restamps exactly those rows, one `UPDATE … SET
+  lastActivityAt = (SELECT MAX(…))` per table, which covers "has newer
+  activities" and "has none left, so null" in the same statement. Reading it
+  after the delete is not an option — the evidence is what was deleted.
+- **A company's `where` follows the deals it takes with it**, `{ OR: [{
+  companyId }, { deal: { companyId } }] }`. Deleting a company cascades to its
+  deals and those cascade to their activities, so a surviving contact whose only
+  activity hung off one of those deals would keep a stamp for work that no
+  longer exists. `test/record-delete.spec.ts` pins that branch specifically.
+- **`recomputeAll()` is still there and is still right for a purge.** It rebuilds
+  every stamp in the CRM with six full-table statements, which is what
+  disconnecting Google and dropping everything it synced needs. It is the wrong
+  tool for deleting one record: it made the cost of removing a contact a
+  function of the size of the entire CRM, and it repaired rows the rep's action
+  never touched.
+
+**Recomputing runs after the delete has committed, so it logs rather than
+throws.** The
+row is already gone by the time the stamps are rebuilt; letting that failure out
+reports a completed destructive action as a failure, the browser never
+invalidates its caches, and the rep's retry answers `No contact with id …`. A
+stale sort order is a smaller wrong than that, and the next delete or
+reconnection recomputes it. The delete itself is still translated: a record
+removed between the pre-check and the delete is the documented 404, not a P2025
+escaping as a 500.
+
 ## Freshness: invalidate the query, don't disable the cache
 
 There is no HTTP response cache in front of tRPC. Freshness is TanStack Query's
@@ -298,6 +443,20 @@ job: a mutation invalidates the query keys it affected, and the list refetches.
   timeline entry it writes, creating a deal did not refresh the board, and nothing
   refreshed the overview, so a rep could close a deal and watch their own numbers
   not move. **A new mutation adds a call there, not a new list of keys.**
+- **A deletion is `cache.removed(ref)`, and it is the one call that skips a
+  key.** Everything a deletion can reach is refreshed together — the lists, the
+  timeline, the dashboard, and the other records that named this one, since a
+  colleague list and a deal's attendees both go stale the moment a contact goes.
+  The deleted record's *own* `byId` entry is invalidated with
+  `refetchType: "none"`, which is the one place that option is right: its query
+  is still mounted for the moment it takes the sheet to animate shut, so a
+  refetch asks the API for a row that no longer exists and the sheet reads the
+  404 as "this record could not be loaded" on its way out. Marking it stale
+  without refetching keeps the closing sheet quiet *and* stops the entry being
+  served from cache — `staleTime` is 30 seconds, so leaving it untouched meant a
+  rep who reopened the record from a stale link or the back button read half a
+  minute of a record that no longer exists. One wide fan-out is right here
+  because deleting is rare and touches more than any edit does.
 - **Pass `{ settle: "record" }`** when the caller is an inline editor. The
   default waits for every affected view to refetch, which is right when the point
   of the action *is* the view changing (a card moving between board columns);

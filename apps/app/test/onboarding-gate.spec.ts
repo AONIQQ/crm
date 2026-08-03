@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { AUTH_COOKIE_PREFIX } from "@crm/auth/cookies";
 import { NextRequest } from "next/server";
 import { ONBOARDING_COOKIE, readOnboardingGate } from "../lib/onboarding";
 import { proxy } from "../proxy";
 
-const SESSION_COOKIE = "better-auth.session_token=abc.def";
+const SESSION_COOKIE = `${AUTH_COOKIE_PREFIX}.session_token=abc.def`;
 
 const realFetch = globalThis.fetch;
 
@@ -82,6 +83,19 @@ describe("proxy", () => {
 	it("sends a stranger to sign in, and leaves them there", async () => {
 		expect(redirectedTo(await proxy(request("/companies")))).toBe("/sign-in");
 		expect(redirectedTo(await proxy(request("/sign-in")))).toBeNull();
+	});
+
+	it("ignores a neighbour's cookie from the parent domain", async () => {
+		expect(AUTH_COOKIE_PREFIX).not.toBe("better-auth");
+		answerWith(workspace({ onboarded: true, canRename: true }));
+
+		expect(
+			redirectedTo(
+				await proxy(
+					request("/companies", ["better-auth.session_token=someone.else"]),
+				),
+			),
+		).toBe("/sign-in");
 	});
 
 	it("gates a signed-in rep who has not answered the form", async () => {
