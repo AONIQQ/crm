@@ -27,11 +27,25 @@ import { useTRPC } from "@/lib/trpc/client";
 
 type User = { name: string; email: string; image: string | null };
 
+/**
+ * The workspace arrives named `CRM` until somebody types something else — the
+ * deliberate placeholder — so appending the product name to it read "CRM CRM".
+ * A workspace genuinely called "Acme CRM" has the same problem, which is why
+ * this tests the name rather than comparing it to the default.
+ */
+export function workspaceLabel(name: string | undefined): string {
+	const trimmed = name?.trim();
+
+	if (!trimmed) return "CRM";
+
+	return /\bcrm$/i.test(trimmed) ? trimmed : `${trimmed} CRM`;
+}
+
 export function AppHeader({ user }: { user: User }) {
 	const { setOpen: setMobileNavOpen } = useMobileNav();
 	const trpc = useTRPC();
 	const workspace = useQuery(trpc.workspace.get.queryOptions());
-	const name = workspace.data?.name;
+	const label = workspaceLabel(workspace.data?.name);
 
 	async function handleSignOut() {
 		const { error } = await signOut();
@@ -64,9 +78,7 @@ export function AppHeader({ user }: { user: User }) {
 					<Logo className="size-5" />
 				</Link>
 				<Separator orientation="vertical" className="mx-1 h-5 bg-transparent" />
-				<span className="min-w-0 truncate font-medium text-sm">
-					{name ? `${name} CRM` : "CRM"}
-				</span>
+				<span className="min-w-0 truncate font-medium text-sm">{label}</span>
 			</div>
 
 			<div className="ml-auto flex shrink-0 items-center gap-1.5">

@@ -136,32 +136,41 @@ called, who works here, and what do we sell — and for nothing else.
   [`@crm/db/workspace`](../packages/db/src/workspace.ts) are the only readers
   and the only writer; `markOnboarded` keeps the first answer and preserves
   every other key, because the blob is the plugin's, not ours.
-- **The gate is `proxy.ts`, and it is answered once per browser.** It used to
-  live in `(app)/layout.tsx`, which meant a `workspace.get` round trip on every
-  navigation into the app to re-establish a fact that changes once in the life
-  of an install — and a second, opposing redirect on the `/onboarding` page to
-  stop the first one looping. Two redirects pointing at each other is not a
-  gate, it is a latch waiting for the two reads to disagree.
+- **The gate is `proxy.ts`, and it asks the server every time.** It used to
+  live in `(app)/layout.tsx`, with a second, opposing redirect on the
+  `/onboarding` page to stop the first one looping — two redirects pointing at
+  each other is not a gate, it is a latch waiting for the two reads to
+  disagree.
   - **`getSessionCookie()` decides signed-in, not a session lookup.** That is
     Better Auth's documented optimistic check for proxy, and it is all a
     redirect needs; every page behind it still resolves the real session
     server-side through `requireGoogleAccess()`.
-  - **The answer is cached in an httpOnly `crm.onboarded` cookie**, so the
-    common path costs nothing and the tRPC read happens once — twice for the
-    person who actually fills the form in, since the cookie lands on the
-    navigation after the mutation. The proxy is the only writer; the form does
-    not set it, because two writers is how this went wrong in the first place.
-    Forging the cookie skips a setup form and grants nothing, which is why it
-    can be a cookie at all.
+  - **Nothing is cached in a cookie, and that is the second thing this got
+    wrong.** The answers were kept in httpOnly `crm.onboarded` and
+    `crm.research` markers with a year's life, on the reasoning that they
+    change once in the life of an install. They do not: reset the database and
+    both facts revert while the browser goes on insisting the gate was
+    satisfied — so a fresh workspace was never asked to name itself and never
+    asked for a key, and nothing anywhere said why. A cache with no
+    invalidation is only correct for a fact that cannot go back, and neither of
+    these is one.
+  - **Both reads run concurrently**, so asking every time costs one round trip
+    rather than two. Which question is asked *first* is still decided in order
+    — a rep who has not named the workspace is sent to `/onboarding`, not to
+    the key form — but there is no reason to wait for that answer before
+    starting the other read.
+  - **If the cost ever matters, cache it in the API**, where there is a place
+    to invalidate from: `settings.setResearchKey` and `WorkspaceService.update`
+    are the only two writers, and `cache-manager` is already the documented
+    pattern for exactly that shape. Do not put it back in the browser.
   - **`/sign-in`, `/grant-access` and `/eve` are ungated.**
     `requireGoogleAccess()` redirects to `/grant-access`, so gating it would
     ping-pong against the onboarding redirect for anyone who signed in without
     both scopes.
-  - **An unreachable API fails open.** `readOnboardingGate` returns `unknown`
-    on a non-200, a timeout or a parse failure, and an unknown gate lets the
-    request through without writing the cookie. The alternative is an install
-    that cannot reach its own API redirecting every request to a form that
-    cannot be submitted.
+  - **An unreachable API fails open.** Each read returns `unknown` on a
+    non-200, a timeout or a parse failure, and an unknown gate lets the request
+    through. The alternative is an install that cannot reach its own API
+    redirecting every request to a form that cannot be submitted.
 - **There is a second gate behind the first**, `/onboarding/research`, which
   asks for the Context API key that gives the agent somewhere to look — see
   [the environment rules](./environment.md#the-context-key-is-asked-for-not-configured).
@@ -196,6 +205,12 @@ called, who works here, and what do we sell — and for nothing else.
   is empty with that behind it. It used to be derived from the sign-in domain,
   which put `Trycomp` in the box as though somebody had typed it, and a guess
   presented as an answer is a guess that gets accepted.
+  - **Anything printing the name beside the product name has to allow for
+    that.** The header renders `<name> CRM`, so the placeholder read `CRM CRM`
+    until somebody typed something else. `workspaceLabel` in
+    `components/app-header.tsx` tests the name rather than comparing it to the
+    default, because a workspace genuinely called `Acme CRM` has the same
+    problem and no comparison to `DEFAULT_WORKSPACE_NAME` would catch it.
 - **The website is the field with a consequence.** Saving it queues the agent's
   `workspace-profile` task, and what comes back is read into the opening context
   of every session the agent runs — see
