@@ -167,10 +167,20 @@ called, who works here, and what do we sell — and for nothing else.
     `requireGoogleAccess()` redirects to `/grant-access`, so gating it would
     ping-pong against the onboarding redirect for anyone who signed in without
     both scopes.
-  - **`/` and `/sign-in` are the only two paths a stranger may read**, and they
-    are a different list from the ungated one. `/` is the landing page in
-    `app/(landing)` — the marketing front of a clone, served to somebody who has
-    no account yet. Everything else still goes to `/sign-in`.
+  - **`/sign-in` is the only path a stranger may read**, and that list is a
+    different one from the ungated paths above. `/` joins it only when
+    `IS_MARKETING` is set: the landing page in `app/(landing)` markets *this*
+    product, so an install that is somebody else's sends a stranger arriving at
+    the root to `/sign-in` rather than to a page selling them a CRM they are
+    already running. See
+    [the environment rules](./environment.md#the-landing-page-is-a-flag-and-it-is-off).
+    - **The flag is read per request, not captured at import.** `isMarketing()`
+      in `apps/app/lib/env.ts` is a function for that reason — `proxy.ts` runs
+      in the Node runtime, so the variable is a live read, and a deployment that
+      changes it does not need a rebuild to be believed.
+    - **It changes nothing for anyone signed in.** A rep at `/` is sent to their
+      workspace by `appPath` either way, so the flag is exactly one decision:
+      what a stranger at the root is shown.
   - **An unreachable API fails open.** Each read returns `unknown` on a
     non-200, a timeout or a parse failure, and an unknown gate lets the request
     through. The alternative is an install that cannot reach its own API
