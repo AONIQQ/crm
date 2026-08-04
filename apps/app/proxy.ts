@@ -14,21 +14,21 @@ const LANDING_PATH = "/";
 
 const SIGN_IN_PATH = "/sign-in";
 
-const PUBLIC = [SIGN_IN_PATH];
-
-const UNGATED = [SIGN_IN_PATH, "/grant-access", "/eve"];
+const UNGATED = ["/grant-access", "/eve"];
 
 const SECTIONS = ["/companies", "/contacts", "/deals", "/settings"];
 
 export async function proxy(request: NextRequest) {
 	const { pathname } = request.nextUrl;
 
+	if (pathname === SIGN_IN_PATH) return NextResponse.next();
+
 	if (
 		getSessionCookie(request, { cookiePrefix: AUTH_COOKIE_PREFIX }) === null
 	) {
 		return isPublic(pathname)
 			? NextResponse.next()
-			: sendTo(SIGN_IN_PATH, request);
+			: NextResponse.redirect(new URL(SIGN_IN_PATH, request.nextUrl));
 	}
 
 	if (isUngated(pathname)) return NextResponse.next();
@@ -71,9 +71,7 @@ function isUnder(pathname: string, prefix: string): boolean {
 }
 
 function isPublic(pathname: string): boolean {
-	if (pathname === LANDING_PATH) return isMarketing();
-
-	return PUBLIC.some((prefix) => isUnder(pathname, prefix));
+	return pathname === LANDING_PATH && isMarketing();
 }
 
 function isUngated(pathname: string): boolean {
