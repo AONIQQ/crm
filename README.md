@@ -7,6 +7,10 @@
   </a>
 </p>
 
+<p align="center">
+  <img alt="stars" height="21" src="https://afterglow.watch/badge/trycompai/crm">
+</p>
+
 <h1 align="center">CRM</h1>
 
 <p align="center">

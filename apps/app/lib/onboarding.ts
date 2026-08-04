@@ -1,15 +1,9 @@
-import type { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { API_URL } from "@/lib/env";
 
 export const ONBOARDING_PATH = "/onboarding";
 
 export const RESEARCH_PATH = "/onboarding/research";
-
-export const ONBOARDING_COOKIE = "crm.onboarded";
-
-export const RESEARCH_COOKIE = "crm.research";
-
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 const GATE_TIMEOUT_MS = 2_000;
 
@@ -26,6 +20,7 @@ async function read<T>(
 	try {
 		const response = await fetch(`${API_URL}/api/trpc/${procedure}`, {
 			headers: { cookie },
+			cache: "no-store",
 			signal: AbortSignal.timeout(GATE_TIMEOUT_MS),
 		});
 
@@ -59,18 +54,4 @@ export async function readResearchGate(request: NextRequest): Promise<Gate> {
 	if (typeof key?.configured !== "boolean") return "unknown";
 
 	return key.configured ? "settled" : "required";
-}
-
-export function settle(
-	request: NextRequest,
-	response: NextResponse,
-	name: string,
-): void {
-	response.cookies.set(name, "1", {
-		httpOnly: true,
-		sameSite: "lax",
-		secure: request.nextUrl.protocol === "https:",
-		path: "/",
-		maxAge: COOKIE_MAX_AGE,
-	});
 }

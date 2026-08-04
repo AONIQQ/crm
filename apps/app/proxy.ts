@@ -2,14 +2,10 @@ import { AUTH_COOKIE_PREFIX } from "@crm/auth/cookies";
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 import {
-	type Gate,
-	ONBOARDING_COOKIE,
 	ONBOARDING_PATH,
-	RESEARCH_COOKIE,
 	RESEARCH_PATH,
 	readOnboardingGate,
 	readResearchGate,
-	settle,
 } from "@/lib/onboarding";
 
 const SIGN_IN_PATH = "/sign-in";
@@ -29,27 +25,21 @@ export async function proxy(request: NextRequest) {
 
 	if (isUngated(pathname)) return NextResponse.next();
 
-	const onboarding = request.cookies.has(ONBOARDING_COOKIE)
-		? "settled"
-		: await readOnboardingGate(request);
+	// Both answers, every time, and concurrently — so the gate costs one round
+	// trip rather than two, and neither answer can be stale.
+	const [onboarding, research] = await Promise.all([
+		readOnboardingGate(request),
+		readResearchGate(request),
+	]);
 
-	const settled = onboarding === "settled" ? [ONBOARDING_COOKIE] : [];
+	if (onboarding === "required") return sendTo(ONBOARDING_PATH, request);
+	if (research === "required") return sendTo(RESEARCH_PATH, request);
 
-	if (onboarding === "required") {
-		return remember(request, sendTo(ONBOARDING_PATH, request), ...settled);
-	}
+	const settled = onboarding === "settled" && research === "settled";
 
-	const research = request.cookies.has(RESEARCH_COOKIE)
-		? "settled"
-		: await readResearchGate(request);
-
-	if (research === "required") {
-		return remember(request, sendTo(RESEARCH_PATH, request), ...settled);
-	}
-
-	if (research === "settled") settled.push(RESEARCH_COOKIE);
-
-	return remember(request, past(request, onboarding, research), ...settled);
+	return settled && isSetup(pathname)
+		? NextResponse.redirect(new URL("/", request.nextUrl))
+		: NextResponse.next();
 }
 
 function isUngated(pathname: string): boolean {
@@ -58,38 +48,14 @@ function isUngated(pathname: string): boolean {
 	);
 }
 
-function home(request: NextRequest): NextResponse {
-	return NextResponse.redirect(new URL("/", request.nextUrl));
+function isSetup(pathname: string): boolean {
+	return pathname === ONBOARDING_PATH || pathname === RESEARCH_PATH;
 }
 
 function sendTo(path: string, request: NextRequest): NextResponse {
 	return request.nextUrl.pathname === path
 		? NextResponse.next()
 		: NextResponse.redirect(new URL(path, request.nextUrl));
-}
-
-function past(
-	request: NextRequest,
-	onboarding: Gate,
-	research: Gate,
-): NextResponse {
-	const done = onboarding === "settled" && research === "settled";
-
-	const setup =
-		request.nextUrl.pathname === ONBOARDING_PATH ||
-		request.nextUrl.pathname === RESEARCH_PATH;
-
-	return done && setup ? home(request) : NextResponse.next();
-}
-
-function remember(
-	request: NextRequest,
-	response: NextResponse,
-	...cookies: string[]
-): NextResponse {
-	for (const name of cookies) settle(request, response, name);
-
-	return response;
 }
 
 export const config = {
