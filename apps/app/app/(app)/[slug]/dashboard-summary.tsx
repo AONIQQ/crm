@@ -44,6 +44,7 @@ import { useOpenRecord } from "@/components/crm/record-sheet/record-stack";
 import { activityLabel } from "@/components/crm/timeline/activity-icon";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
+import { useWorkspaceUrl } from "@/lib/use-workspace-url";
 import { overviewParsers } from "./overview-search-params";
 import { SalesDashboard } from "./sales-dashboard";
 
@@ -53,6 +54,7 @@ export function DashboardSummary() {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
 	const openRecord = useOpenRecord();
+	const workspaceUrl = useWorkspaceUrl();
 
 	const [scope] = useQueryState("scope", overviewParsers.scope);
 
@@ -121,7 +123,7 @@ export function DashboardSummary() {
 						</CardDescription>
 						<CardAction>
 							<Button asChild variant="contrast" size="sm">
-								<Link href="/deals">Open deals</Link>
+								<Link href={workspaceUrl("/deals")}>Open deals</Link>
 							</Button>
 						</CardAction>
 					</CardHeader>
@@ -240,7 +242,7 @@ export function DashboardSummary() {
 					</CardDescription>
 					<CardAction>
 						<Button asChild variant="contrast" size="sm">
-							<Link href="/companies">All companies</Link>
+							<Link href={workspaceUrl("/companies")}>All companies</Link>
 						</Button>
 					</CardAction>
 				</CardHeader>

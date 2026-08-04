@@ -4,6 +4,8 @@ import { Button } from "@crm/ui/components/button";
 import { cn } from "@crm/ui/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo } from "react";
+import { useWorkspaceUrl } from "@/lib/use-workspace-url";
 
 type SettingsNavItem = {
 	title: string;
@@ -19,8 +21,8 @@ const ITEMS: SettingsNavItem[] = [
 	{ title: "Connections", href: `${ROOT}/connections` },
 ];
 
-function isActive(href: string, pathname: string): boolean {
-	return href === ROOT ? pathname === href : pathname.startsWith(href);
+function isActive(href: string, root: string, pathname: string): boolean {
+	return href === root ? pathname === href : pathname.startsWith(href);
 }
 
 function NavLink({
@@ -56,6 +58,13 @@ function NavLink({
 
 export function SettingsSidebar() {
 	const pathname = usePathname();
+	const workspaceUrl = useWorkspaceUrl();
+
+	const root = workspaceUrl(ROOT);
+	const items = useMemo(
+		() => ITEMS.map((item) => ({ ...item, href: workspaceUrl(item.href) })),
+		[workspaceUrl],
+	);
 
 	return (
 		<>
@@ -64,11 +73,11 @@ export function SettingsSidebar() {
 					aria-label="Workspace settings"
 					className="flex flex-col gap-0.5 p-3"
 				>
-					{ITEMS.map((item) => (
+					{items.map((item) => (
 						<NavLink
 							key={item.href}
 							item={item}
-							active={isActive(item.href, pathname)}
+							active={isActive(item.href, root, pathname)}
 							className="w-full px-3"
 						/>
 					))}
@@ -79,11 +88,11 @@ export function SettingsSidebar() {
 				aria-label="Workspace settings"
 				className="flex gap-1 overflow-x-auto border-b p-2 md:hidden [view-transition-name:settings-sidebar]"
 			>
-				{ITEMS.map((item) => (
+				{items.map((item) => (
 					<NavLink
 						key={item.href}
 						item={item}
-						active={isActive(item.href, pathname)}
+						active={isActive(item.href, root, pathname)}
 						className="shrink-0 px-3"
 					/>
 				))}

@@ -20,6 +20,7 @@ import type { ReactNode } from "react";
 import { dealStageColor, dealStageLabel } from "@/components/crm/deal-stage";
 import { AreaTrend, DonutStat } from "@/components/dashboard-charts";
 import type { RouterOutputs } from "@/lib/trpc/types";
+import { useWorkspaceUrl } from "@/lib/use-workspace-url";
 
 type Summary = RouterOutputs["dashboard"]["summary"];
 
@@ -43,6 +44,8 @@ function changeDelta(
 }
 
 export function SalesDashboard({ summary }: { summary: Summary }) {
+	const workspaceUrl = useWorkspaceUrl();
+
 	const {
 		pipeline,
 		wonThisMonth,
@@ -154,7 +157,7 @@ export function SalesDashboard({ summary }: { summary: Summary }) {
 								{stageSlices.map((slice) => (
 									<li key={slice.key} className="border-t first:border-t-0">
 										<Link
-											href={`/deals?stage=${slice.key}`}
+											href={`${workspaceUrl("/deals")}?stage=${slice.key}`}
 											className="flex items-center gap-2.5 py-2 text-xs hover:underline"
 										>
 											<span

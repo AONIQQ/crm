@@ -24,14 +24,19 @@ import {
 } from "@crm/ui/components/input-group";
 import { Spinner } from "@crm/ui/components/spinner";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { useCrmCache } from "@/lib/trpc/cache";
 import { useTRPC } from "@/lib/trpc/client";
+import { useWorkspaceSlug } from "@/lib/use-workspace-url";
+import { workspaceUrl } from "@/lib/workspace-url";
 
 export function WorkspaceForm() {
 	const trpc = useTRPC();
 	const cache = useCrmCache();
+	const router = useRouter();
+	const slug = useWorkspaceSlug();
 
 	const nameId = useId();
 	const websiteId = useId();
@@ -44,10 +49,14 @@ export function WorkspaceForm() {
 
 	const save = useMutation(
 		trpc.workspace.update.mutationOptions({
-			onSuccess: async () => {
+			onSuccess: async (saved) => {
 				await cache.workspace();
 				setDraft(null);
 				toast.success("Workspace saved.");
+
+				if (saved.slug !== slug) {
+					router.replace(workspaceUrl(saved.slug, "/settings"));
+				}
 			},
 			onError: (error) => toast.error(error.message),
 		}),
