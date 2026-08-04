@@ -1,6 +1,7 @@
 import { AUTH_COOKIE_PREFIX } from "@crm/auth/cookies";
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
+import { isMarketing } from "@/lib/env";
 import {
 	ONBOARDING_PATH,
 	RESEARCH_PATH,
@@ -13,7 +14,7 @@ const LANDING_PATH = "/";
 
 const SIGN_IN_PATH = "/sign-in";
 
-const PUBLIC = [LANDING_PATH, SIGN_IN_PATH];
+const PUBLIC = [SIGN_IN_PATH];
 
 const UNGATED = [SIGN_IN_PATH, "/grant-access", "/eve"];
 
@@ -70,6 +71,8 @@ function isUnder(pathname: string, prefix: string): boolean {
 }
 
 function isPublic(pathname: string): boolean {
+	if (pathname === LANDING_PATH) return isMarketing();
+
 	return PUBLIC.some((prefix) => isUnder(pathname, prefix));
 }
 
