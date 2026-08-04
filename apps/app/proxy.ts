@@ -28,7 +28,7 @@ export async function proxy(request: NextRequest) {
 	) {
 		return isPublic(pathname)
 			? NextResponse.next()
-			: NextResponse.redirect(new URL(SIGN_IN_PATH, request.nextUrl));
+			: sendTo(SIGN_IN_PATH, request);
 	}
 
 	if (isUngated(pathname)) return NextResponse.next();
