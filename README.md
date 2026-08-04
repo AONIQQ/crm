@@ -1,11 +1,14 @@
 <p align="center">
-  <img alt="stars" align="middle" height="23" src="https://afterglow.watch/badge/trycompai/crm">
   <a href="https://link.context.dev/crm">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="./docs/images/powered-by-context-dark.png">
-      <img alt="Powered by Context" align="middle" height="23" src="./docs/images/powered-by-context.png">
+      <img alt="Powered by Context" height="23" src="./docs/images/powered-by-context.png">
     </picture>
   </a>
+</p>
+
+<p align="center">
+  <img alt="stars" height="21" src="https://afterglow.watch/badge/trycompai/crm">
 </p>
 
 <h1 align="center">CRM</h1>
