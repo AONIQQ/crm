@@ -22,7 +22,9 @@ import {
 import { cn } from "@crm/ui/lib/utils";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo } from "react";
 import { useMobileNav } from "@/components/mobile-nav";
+import { useWorkspaceUrl } from "@/lib/use-workspace-url";
 
 type RailItem = {
 	title: string;
@@ -113,7 +115,13 @@ function MobileRailLink({
 
 export function AppIconRail() {
 	const pathname = usePathname();
+	const workspaceUrl = useWorkspaceUrl();
 	const { open, setOpen } = useMobileNav();
+
+	const items = useMemo(
+		() => ITEMS.map((item) => ({ ...item, href: workspaceUrl(item.href) })),
+		[workspaceUrl],
+	);
 
 	return (
 		<>
@@ -121,7 +129,7 @@ export function AppIconRail() {
 				aria-label="Primary"
 				className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r py-3 md:flex [view-transition-name:app-rail]"
 			>
-				{ITEMS.map((item) => (
+				{items.map((item) => (
 					<RailLink
 						key={item.href}
 						item={item}
@@ -136,7 +144,7 @@ export function AppIconRail() {
 						<SheetTitle>Navigation</SheetTitle>
 					</SheetHeader>
 					<nav aria-label="Primary" className="flex flex-1 flex-col gap-1 p-2">
-						{ITEMS.map((item) => (
+						{items.map((item) => (
 							<MobileRailLink
 								key={item.href}
 								item={item}
