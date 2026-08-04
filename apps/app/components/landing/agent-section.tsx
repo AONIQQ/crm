@@ -8,7 +8,6 @@ import Time from "@carbon/icons-react/es/Time";
 import SlackLogo from "@crm/ui/components/brand-logos/slack";
 import { cn } from "@crm/ui/lib/utils";
 import Image from "next/image";
-import Link from "next/link";
 import type * as React from "react";
 import { Chip } from "./chip";
 import { SectionHeading } from "./section-heading";
