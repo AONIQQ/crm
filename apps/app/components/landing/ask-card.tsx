@@ -1,7 +1,6 @@
 "use client";
 
 import { cn } from "@crm/ui/lib/utils";
-import Link from "next/link";
 import { useState } from "react";
 import { BentoCard, CardHeading } from "./bento-card";
 import { SendArrow } from "./send-arrow";
@@ -15,9 +14,9 @@ const QUESTIONS = [
 const PLACEHOLDER = "What do they sell?";
 
 /**
- * The one card a reader can actually drive. Picking a question loads it into
- * the composer, and sending it is the sign-in — the answer needs a record, and
- * a record needs an account.
+ * The one card a reader can actually drive: picking a question loads it into
+ * the composer. It goes no further on purpose — the answer needs a record, and
+ * the homepage does not send anybody to a sign-in form to see one.
  */
 export function AskCard() {
 	const [asked, setAsked] = useState<string | null>(null);
@@ -60,13 +59,9 @@ export function AskCard() {
 				>
 					{asked ?? PLACEHOLDER}
 				</span>
-				<Link
-					href="/sign-in"
-					aria-label="Ask this question in the CRM"
-					className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-primary transition-transform hover:scale-105 active:scale-95"
-				>
+				<span className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-primary">
 					<SendArrow className="size-3.5 text-primary-foreground" />
-				</Link>
+				</span>
 			</div>
 		</BentoCard>
 	);

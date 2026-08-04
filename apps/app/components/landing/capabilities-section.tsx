@@ -124,19 +124,15 @@ function AgentBuilderCard() {
 			<div className="flex select-none flex-col">
 				<MonoLabel className="h-[26px] shrink-0">SUGGESTED AGENTS</MonoLabel>
 				{SUGGESTED_AGENTS.map((agent) => (
-					<Link
+					<div
 						key={agent}
-						href="/sign-in"
-						className="group/agent -mx-2 flex h-11 shrink-0 items-center gap-3 rounded-sm border-border border-t px-2 transition-colors hover:bg-muted/50"
+						className="flex h-11 shrink-0 items-center gap-3 border-border border-t"
 					>
 						<span className="min-w-0 grow font-medium text-[13px]/[18px]">
 							{agent}
 						</span>
-						<ArrowRight
-							size={14}
-							className="shrink-0 text-muted-foreground transition-transform group-hover/agent:translate-x-0.5"
-						/>
-					</Link>
+						<ArrowRight size={14} className="shrink-0 text-muted-foreground" />
+					</div>
 				))}
 			</div>
 		</BentoCard>

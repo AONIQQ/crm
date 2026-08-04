@@ -127,23 +127,17 @@ function SuggestedAction({
 	children: React.ReactNode;
 }) {
 	return (
-		<Link
-			href="/sign-in"
-			className="group/action -mx-2 flex items-center gap-3 rounded-sm border-border border-t px-2 py-[13px] text-[13px]/4 transition-colors hover:bg-accent/40"
-		>
+		<div className="flex items-center gap-3 border-border border-t py-[13px] text-[13px]/4">
 			<span
 				className={cn(
-					"flex min-w-0 grow flex-wrap items-center gap-y-2 gap-x-1.5",
+					"flex min-w-0 grow flex-wrap items-center gap-x-1.5 gap-y-2",
 					className,
 				)}
 			>
 				{children}
 			</span>
-			<ArrowRight
-				size={16}
-				className="shrink-0 text-muted-foreground transition-transform group-hover/action:translate-x-0.5"
-			/>
-		</Link>
+			<ArrowRight size={16} className="shrink-0 text-muted-foreground" />
+		</div>
 	);
 }
 
