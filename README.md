@@ -5,6 +5,7 @@
       <img alt="Powered by Context" height="23" src="./docs/images/powered-by-context.png">
     </picture>
   </a>
+  <img alt="stars" height="23" src="https://afterglow.watch/badge/trycompai/crm">
 </p>
 
 <h1 align="center">CRM</h1>
