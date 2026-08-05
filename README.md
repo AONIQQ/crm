@@ -66,11 +66,9 @@ because nobody can tell it is wrong.
   <tr>
     <td width="50%">
       <img alt="Agents that automate your CRM: a composer describing an agent in one sentence, with suggested actions beneath it" src="./docs/images/landing-agents.png">
-      <p align="center"><sub><b>Agents</b> — describe a process in a sentence and it runs on its own queue.</sub></p>
     </td>
     <td width="50%">
       <img alt="What it actually does: records fill themselves in, agents that build agents, it books its own follow-ups, and a question box on every record" src="./docs/images/landing-capabilities.png">
-      <p align="center"><sub><b>What it does</b> — enrichment that arrives on its own, and a question box on every record.</sub></p>
     </td>
   </tr>
 </table>
