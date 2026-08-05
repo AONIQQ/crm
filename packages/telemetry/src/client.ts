@@ -24,6 +24,8 @@ let client: PostHog | null = null;
 
 let built = false;
 
+let failures = 0;
+
 function posthog(): PostHog | null {
 	if (built) return client;
 	built = true;
@@ -47,6 +49,7 @@ function posthog(): PostHog | null {
 		}
 
 		client.on("error", (error: unknown) => {
+			failures += 1;
 			debug(
 				`PostHog could not send: ${
 					error instanceof Error ? error.message : String(error)
@@ -68,6 +71,7 @@ function posthog(): PostHog | null {
 export function resetTelemetryClient(): void {
 	client = null;
 	built = false;
+	failures = 0;
 }
 
 async function payload(
@@ -103,8 +107,8 @@ export async function captureNow(
 	event: string,
 	properties: Properties = {},
 	at?: Date,
-): Promise<void> {
-	await send(event, properties, true, at);
+): Promise<boolean> {
+	return send(event, properties, true, at);
 }
 
 async function send(
@@ -112,15 +116,15 @@ async function send(
 	properties: Properties,
 	immediate = false,
 	at?: Date,
-): Promise<void> {
+): Promise<boolean> {
 	try {
-		if (telemetryDisabled()) return;
+		if (telemetryDisabled()) return false;
 
 		const posted = posthog();
-		if (!posted) return;
+		if (!posted) return false;
 
 		const message = await payload(properties);
-		if (!message) return;
+		if (!message) return false;
 
 		const full = {
 			...message,
@@ -129,17 +133,22 @@ async function send(
 		} as Parameters<PostHog["capture"]>[0];
 
 		if (immediate) {
+			const before = failures;
 			await posted.captureImmediate(full);
-			return;
+
+			return failures === before;
 		}
 
 		posted.capture(full);
+		return true;
 	} catch (error) {
 		debug(
 			`Telemetry could not capture ${event}: ${
 				error instanceof Error ? error.message : String(error)
 			}`,
 		);
+
+		return false;
 	}
 }
 

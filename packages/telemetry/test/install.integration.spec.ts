@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import { db } from "@crm/db";
 import {
@@ -7,6 +7,7 @@ import {
 	INSTALL_ID,
 	reachMilestone,
 	readInstall,
+	restoreCounters,
 	syncVersion,
 } from "../src/install";
 
@@ -66,16 +67,22 @@ describe("the install row", () => {
 	it("keeps the UUID when a boot writes a new version", async () => {
 		const before = await readInstall();
 
-		const updated = await syncVersion("9.9.9-test");
-		expect(updated?.version).toBe("9.9.9-test");
-		expect(updated?.uuid).toBe(before?.uuid as string);
-
-		await syncVersion(before?.version ?? "unknown");
+		try {
+			const updated = await syncVersion("9.9.9-test");
+			expect(updated?.version).toBe("9.9.9-test");
+			expect(updated?.uuid).toBe(before?.uuid as string);
+		} finally {
+			await syncVersion(before?.version ?? "unknown");
+		}
 	});
 });
 
 describe("milestones", () => {
 	const step = "first_fact_applied" as const;
+
+	afterEach(async () => {
+		await db.telemetryMilestone.deleteMany({ where: { step } });
+	});
 
 	it("reports the first arrival and nothing after it", async () => {
 		await db.telemetryMilestone.deleteMany({ where: { step } });
@@ -83,13 +90,15 @@ describe("milestones", () => {
 		expect(await reachMilestone(step)).toBe(true);
 		expect(await reachMilestone(step)).toBe(false);
 		expect(await reachMilestone(step)).toBe(false);
-
-		await db.telemetryMilestone.deleteMany({ where: { step } });
 	});
 });
 
 describe("counters", () => {
 	const name = "budget_exhausted";
+
+	afterEach(async () => {
+		await db.telemetryCounter.deleteMany({ where: { name } });
+	});
 
 	it("adds up and then drains to nothing", async () => {
 		await db.telemetryCounter.deleteMany({ where: { name } });
@@ -98,9 +107,17 @@ describe("counters", () => {
 		await bumpCounter(name);
 		await bumpCounter(name, 3);
 
-		const drained = await drainCounters();
-		expect(drained[name]).toBe(5);
+		expect((await drainCounters())[name]).toBe(5);
+		expect(await drainCounters()).not.toHaveProperty(name);
+	});
 
-		expect(await drainCounters()).toEqual({});
+	it("puts back what a rollup could not send", async () => {
+		await db.telemetryCounter.deleteMany({ where: { name } });
+
+		await bumpCounter(name, 2);
+		const drained = await drainCounters();
+
+		await restoreCounters(drained);
+		expect((await drainCounters())[name]).toBe(2);
 	});
 });

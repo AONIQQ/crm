@@ -12,17 +12,18 @@ import { readAgentModel } from "@crm/db/settings";
 import { WORKSPACE_ID } from "@crm/db/workspace";
 import {
 	bucket,
+	claimRollup,
 	dayBucket,
 	drainCounters,
 	installDaily,
-	markRollup,
 	type Properties,
 	permittedEvidenceKind,
 	permittedMethod,
 	permittedTaskKind,
 	permittedTool,
-	readInstall,
-	sameUtcDay,
+	releaseRollup,
+	restoreCounters,
+	telemetryDisabled,
 } from "@crm/telemetry";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
@@ -61,24 +62,30 @@ export class RollupService {
 	) {}
 
 	async run(force = false): Promise<RollupOutcome> {
-		const milestones = await this.funnel.sweep();
-
-		const install = await readInstall();
-		if (!install) {
-			return { sent: false, reason: "no install row", milestones };
+		if (telemetryDisabled()) {
+			return { sent: false, reason: "telemetry is off", milestones: [] };
 		}
 
+		const milestones = await this.funnel.sweep();
+
 		const now = new Date();
-		if (!force && sameUtcDay(install.lastRollupAt, now)) {
-			return { sent: false, reason: "already sent today", milestones };
+		const claim = await claimRollup(now, force);
+		if (!claim.claimed) {
+			return { sent: false, reason: claim.reason, milestones };
 		}
 
 		const since = new Date(now.getTime() - WINDOW_HOURS * HOUR_MS);
+		let counters: Record<string, number> = {};
 
 		try {
-			const properties = await this.gather(since);
-			await installDaily(properties);
-			await markRollup(now);
+			const gathered = await this.gather(since);
+			counters = gathered.counters;
+
+			if (!(await installDaily(gathered.properties))) {
+				await this.giveBack(claim.previous, counters);
+
+				return { sent: false, reason: "not delivered", milestones };
+			}
 
 			this.logger.log({
 				message: "Telemetry rollup sent",
@@ -88,6 +95,8 @@ export class RollupService {
 
 			return { sent: true, milestones };
 		} catch (error) {
+			await this.giveBack(claim.previous, counters);
+
 			this.logger.debug({
 				message: "Telemetry rollup could not be built",
 				reason: error instanceof Error ? error.message : String(error),
@@ -97,15 +106,30 @@ export class RollupService {
 		}
 	}
 
-	private async gather(since: Date): Promise<Properties> {
+	private async giveBack(
+		previous: Date | null,
+		counters: Record<string, number>,
+	): Promise<void> {
+		await releaseRollup(previous);
+		await restoreCounters(counters);
+	}
+
+	private async gather(
+		since: Date,
+	): Promise<{ properties: Properties; counters: Record<string, number> }> {
+		const counters = await drainCounters();
+
 		const [shape, agent, ledger, crm] = await Promise.all([
 			this.shape(),
-			this.agent(since),
+			this.agent(since, counters),
 			this.ledger(),
 			this.crm(since),
 		]);
 
-		return { ...shape, ...agent, ...ledger, ...crm };
+		return {
+			properties: { ...shape, ...agent, ...ledger, ...crm },
+			counters,
+		};
 	}
 
 	private async shape(): Promise<Properties> {
@@ -157,24 +181,19 @@ export class RollupService {
 		}
 	}
 
-	private async agent(since: Date): Promise<Properties> {
-		const [
-			tools,
-			sessions,
-			tasks,
-			attempts,
-			rechecks,
-			counters,
-			conversations,
-		] = await Promise.all([
-			this.toolCalls(since),
-			this.sessions(since),
-			this.tasks(since),
-			this.attempts(since),
-			this.rechecks(since),
-			drainCounters(),
-			this.db.agentConversation.count(),
-		]);
+	private async agent(
+		since: Date,
+		counters: Record<string, number>,
+	): Promise<Properties> {
+		const [tools, sessions, tasks, attempts, rechecks, conversations] =
+			await Promise.all([
+				this.toolCalls(since),
+				this.sessions(since),
+				this.tasks(since),
+				this.attempts(since),
+				this.rechecks(since),
+				this.db.agentConversation.count(),
+			]);
 
 		const total = Object.values(tools.calls).reduce((sum, n) => sum + n, 0);
 

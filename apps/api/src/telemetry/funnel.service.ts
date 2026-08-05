@@ -9,6 +9,7 @@ import {
 } from "@crm/telemetry";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
+import { GOOGLE_PROVIDER_ID } from "../google/google.constants";
 import { SEED_OWNER_PREFIX } from "./seed";
 
 @Injectable()
@@ -55,11 +56,24 @@ export class FunnelService {
 					(row) => row.createdAt,
 				);
 
-			case "google_oauth_configured":
-				return process.env.GOOGLE_CLIENT_ID?.trim() &&
-					process.env.GOOGLE_CLIENT_SECRET?.trim()
-					? new Date()
-					: null;
+			case "google_oauth_configured": {
+				const configured =
+					process.env.GOOGLE_CLIENT_ID?.trim() &&
+					process.env.GOOGLE_CLIENT_SECRET?.trim();
+
+				if (!configured) return null;
+
+				const linked = await this.earliest(
+					this.db.account.findFirst({
+						where: { providerId: GOOGLE_PROVIDER_ID },
+						orderBy: { createdAt: "asc" },
+						select: { createdAt: true },
+					}),
+					(row) => row.createdAt,
+				);
+
+				return linked ?? new Date();
+			}
 
 			case "first_mailbox_sync":
 				return this.earliest(
@@ -107,15 +121,35 @@ export class FunnelService {
 				);
 
 			case "first_fact_applied":
-				return this.earliest(
-					this.db.contactFact.findFirst({
-						where: { status: FactStatus.APPLIED },
-						orderBy: { observedAt: "asc" },
-						select: { observedAt: true, decidedAt: true },
-					}),
-					(row) => row.decidedAt ?? row.observedAt,
-				);
+				return this.firstApplied();
 		}
+	}
+
+	private async firstApplied(): Promise<Date | null> {
+		const everApplied = {
+			status: { in: [FactStatus.APPLIED, FactStatus.SUPERSEDED] },
+		};
+
+		const [decided, undecided] = await Promise.all([
+			this.db.contactFact.findFirst({
+				where: { ...everApplied, decidedAt: { not: null } },
+				orderBy: { decidedAt: "asc" },
+				select: { decidedAt: true },
+			}),
+			this.db.contactFact.findFirst({
+				where: { ...everApplied, decidedAt: null },
+				orderBy: { observedAt: "asc" },
+				select: { observedAt: true },
+			}),
+		]);
+
+		const applied = [decided?.decidedAt, undecided?.observedAt].filter(
+			(at): at is Date => at instanceof Date,
+		);
+
+		if (applied.length === 0) return null;
+
+		return new Date(Math.min(...applied.map((at) => at.getTime())));
 	}
 
 	private async earliest<T>(

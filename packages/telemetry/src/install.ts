@@ -21,8 +21,13 @@ const SELECT = {
 
 let cached: Install | null = null;
 
+const MISSING_FOR_MS = 30_000;
+
+let missingSince = 0;
+
 export async function readInstall(): Promise<Install | null> {
 	if (cached) return cached;
+	if (missingSince && Date.now() - missingSince < MISSING_FOR_MS) return null;
 
 	try {
 		const row = await db.install.findUnique({
@@ -31,14 +36,18 @@ export async function readInstall(): Promise<Install | null> {
 		});
 
 		if (row) cached = row;
+		missingSince = row ? 0 : Date.now();
+
 		return row;
 	} catch {
+		missingSince = Date.now();
 		return null;
 	}
 }
 
 export function forgetInstall(): void {
 	cached = null;
+	missingSince = 0;
 }
 
 export async function syncVersion(
@@ -54,6 +63,8 @@ export async function syncVersion(
 		});
 
 		cached = row;
+		missingSince = 0;
+
 		return row;
 	} catch {
 		return readInstall();
@@ -134,15 +145,62 @@ export async function drainCounters(): Promise<Record<string, number>> {
 	}
 }
 
-export async function markRollup(at: Date): Promise<void> {
+export async function restoreCounters(
+	counts: Record<string, number>,
+): Promise<void> {
+	for (const [name, count] of Object.entries(counts)) {
+		if (count > 0) await bumpCounter(name, count);
+	}
+}
+
+export type RollupRefusal = "no install row" | "already sent today" | "failed";
+
+export type RollupClaim =
+	| { claimed: true; previous: Date | null }
+	| { claimed: false; reason: RollupRefusal };
+
+export async function claimRollup(
+	at: Date,
+	force = false,
+): Promise<RollupClaim> {
 	try {
-		const row = await db.install.update({
+		return await db.$transaction(async (tx): Promise<RollupClaim> => {
+			const locked = await tx.$queryRaw<{ lastRollupAt: Date | null }[]>`
+				SELECT "lastRollupAt"
+				FROM "install"
+				WHERE "id" = ${INSTALL_ID}
+				FOR UPDATE;
+			`;
+
+			if (locked.length === 0) {
+				return { claimed: false, reason: "no install row" };
+			}
+
+			const previous = locked[0]?.lastRollupAt ?? null;
+			if (!force && sameUtcDay(previous, at)) {
+				return { claimed: false, reason: "already sent today" };
+			}
+
+			cached = await tx.install.update({
+				where: { id: INSTALL_ID },
+				data: { lastRollupAt: at },
+				select: SELECT,
+			});
+
+			return { claimed: true, previous };
+		});
+	} catch {
+		return { claimed: false, reason: "failed" };
+	}
+}
+
+export async function releaseRollup(previous: Date | null): Promise<void> {
+	try {
+		cached = await db.install.update({
 			where: { id: INSTALL_ID },
-			data: { lastRollupAt: at },
+			data: { lastRollupAt: previous },
 			select: SELECT,
 		});
-
-		cached = row;
 	} catch {}
 }
 

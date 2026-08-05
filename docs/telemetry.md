@@ -29,6 +29,9 @@ a fork somewhere else by editing those two constants. Nothing is sent while `NOD
   rather than "do not keep". Point this at a different project and you must set it there too.
 - **Never blocks and never throws.** Every send is fire-and-forget behind a swallowed handler; a
   telemetry failure logs at debug and is invisible everywhere else.
+- **Off leaves no marks.** With telemetry disabled the rollup route returns before the funnel
+  sweep runs: no milestone is recorded, no counter is drained, no rollup day is claimed. Turn it
+  back on and the funnel is still whole, because nothing was quietly consumed while it was off.
 - **Nothing is sent from a test run.** `NODE_ENV=test` disables it, and `apps/api` and `apps/agent`
   additionally set `CRM_TELEMETRY_DISABLED=1` in their `test` scripts — because a spec is allowed
   to reassign `process.env.NODE_ENV`, and one that does was enough to let a real event out.
@@ -42,6 +45,11 @@ a fork somewhere else by editing those two constants. Nothing is sent while `NOD
 
 Once per install per day, from `POST /internal/telemetry/rollup` on the API's cron. Counts and
 distributions from grouped queries. Never a value from a row.
+
+The day is claimed under a row lock on `install` before anything is gathered, so two crons that
+fire at once produce one event rather than two — and the second does not find the counters
+already drained. A rollup that fails to send hands the day and the counters back, so tomorrow's
+run is not suppressed by a send that never happened.
 
 #### The install
 
@@ -79,7 +87,7 @@ Each is only whether the key is set. `cap_context_dev` is whether an `AppSetting
 | `tools_per_session_mean` | Tool calls divided by sessions that made one |
 | `tasks_claimed` / `tasks_completed` / `tasks_retired` | `AgentTask` counts keyed by `kind` |
 | `task_attempts_mean` / `task_attempts_max` | Attempts per kind |
-| `budget_exhausted` | Sessions that stopped because the research budget ran out |
+| `budget_exhausted` | Sessions that stopped because the research budget ran out. Once per session, not once per blocked tool call |
 | `recheck_scheduled` | `recheck` tasks queued in the window |
 | `recheck_interval_days` | Their intervals, in day bands |
 | `agent_conversations` | How many `AgentConversation` rows exist |
@@ -136,6 +144,23 @@ job is what sends it.
 They carry no properties of their own beyond the common ones — version, days since install,
 whether this is Vercel.
 
+`google_oauth_configured` is the one step with no row to read a time off: two environment
+variables leave no timestamp behind. It is stamped from the first Google `account` row when
+one exists — configuration must have come before the account did — and otherwise from the
+moment the sweep first saw the variables set. That sweep runs on every API boot, not only on
+the cron, so an install that arrives configured is stamped on its first boot.
+
+`first_fact_applied` is the earliest `decidedAt` of any fact a human accepted, or the earliest
+`observedAt` of any fact the agent applied itself, whichever came first. Facts that were
+applied and later superseded still count — being replaced later does not make the first
+application not have happened.
+
+A step is only recorded as reached once the event has actually left, so a failed send is tried
+again on the next sweep rather than being consumed and lost forever. The cost of that ordering
+is that a crash between the send and the write — or two processes sweeping at the same instant
+— can repeat a step. A one-shot event that arrives twice is a rounding error in a funnel; one
+that never arrives cannot be recovered. Nothing is recorded at all while telemetry is off.
+
 ### Errors
 
 Error **class** and where it came from. Never a message, never a stack trace, never a payload:
@@ -178,7 +203,7 @@ actually drops it. See `adrs/telemetry.md`.
 | `packages/telemetry` | The only place `posthog-node` is imported. Allowlist, install accessor, event builders |
 | `install` table | The UUID, the version, and when the last rollup went. One row, made by the migration |
 | `telemetryMilestone` table | Which funnel steps have fired |
-| `telemetryCounter` table | The two runtime numbers no other row records, drained by each rollup |
+| `telemetryCounter` table | The one runtime number no other row records — `budget_exhausted` — drained by each rollup and put back if the send fails |
 | `apps/api/src/telemetry` | The daily rollup, the funnel sweep, the cron route |
 | `apps/agent/agent/hooks/telemetry.ts` | Tool, turn and session failures |
 

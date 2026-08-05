@@ -19,15 +19,15 @@ CREATE TABLE "install" (
     "version" TEXT NOT NULL,
     "lastRollupAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "install_pkey" PRIMARY KEY ("id")
 );
 
 CREATE UNIQUE INDEX "install_uuid_key" ON "install"("uuid");
 
-INSERT INTO "install" ("id", "uuid", "version")
-VALUES ('install', gen_random_uuid()::text, 'unknown');
+INSERT INTO "install" ("id", "uuid", "version", "updatedAt")
+VALUES ('install', gen_random_uuid()::text, 'unknown', CURRENT_TIMESTAMP);
 
 -- The setup funnel is one-shot: each step fires once per install, ever. A
 -- boolean column read and then written races between the API and the agent;
@@ -39,17 +39,20 @@ CREATE TABLE "telemetryMilestone" (
     CONSTRAINT "telemetryMilestone_pkey" PRIMARY KEY ("step")
 );
 
--- Counters for the two things the daily rollup wants that leave no other row:
--- a session that stopped because its research budget ran out, and a tool that
--- returned an error. Everything else the rollup reports is already in the
--- schema and is counted there.
+-- Counters for what the daily rollup wants that leaves no other row: today
+-- that is a session that stopped because its research budget ran out, and
+-- nothing else. Everything else the rollup reports is already in the schema
+-- and is counted there.
 --
--- Drained with UPDATE … SET count = 0 … RETURNING, so an increment landing
--- mid-drain is counted tomorrow rather than lost.
+-- Drained with DELETE … RETURNING and recreated by the next `upsert`, so a row
+-- holds only what has arrived since the last rollup. An increment landing
+-- mid-drain waits on the row lock and then inserts a fresh row, so it is
+-- counted tomorrow rather than lost. A rollup that fails to send puts the
+-- counts back.
 CREATE TABLE "telemetryCounter" (
     "name" TEXT NOT NULL,
     "count" INTEGER NOT NULL DEFAULT 0,
-    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "telemetryCounter_pkey" PRIMARY KEY ("name")
 );

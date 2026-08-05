@@ -1,5 +1,4 @@
 import {
-	crmVersion,
 	flushTelemetry,
 	onTelemetryProblem,
 	shutdownTelemetry,
@@ -30,7 +29,7 @@ export class TelemetryService implements OnModuleInit, OnApplicationShutdown {
 			return;
 		}
 
-		const install = await syncVersion(crmVersion() ?? undefined);
+		const install = await syncVersion();
 
 		this.logger.log({
 			message: "Anonymous usage telemetry is on. See docs/telemetry.md.",

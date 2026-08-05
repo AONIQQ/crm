@@ -47,6 +47,7 @@ export {
 export {
 	bumpCounter,
 	COUNTERS,
+	claimRollup,
 	daysSince,
 	drainCounters,
 	forgetInstall,
@@ -54,11 +55,13 @@ export {
 	type Install,
 	MILESTONES,
 	type Milestone,
-	markRollup,
+	type RollupClaim,
 	reachedMilestones,
 	reachMilestone,
 	readInstall,
+	releaseRollup,
+	restoreCounters,
 	sameUtcDay,
 	syncVersion,
 } from "./install";
-export { commitSha, crmVersion, UNKNOWN_VERSION } from "./version";
+export { commitSha, crmVersion } from "./version";

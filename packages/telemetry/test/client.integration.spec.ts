@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { db } from "@crm/db";
 import { captureNow, POSTHOG_HOST, resetTelemetryClient } from "../src/client";
+import { milestone } from "../src/events";
 import { forgetInstall, readInstall } from "../src/install";
 
 const real = {
@@ -104,15 +106,22 @@ describe("capture", () => {
 		const { properties } = eventOf(calls[0]?.body);
 
 		expect(properties.$ip).toBeNull();
-		expect(properties.$geoip_disable ?? true).toBeTruthy();
+		expect(properties.$geoip_disable).toBe(true);
+	});
+
+	it("reports a delivered event", async () => {
+		expect(await captureNow("install_daily", { crm_version: "1.0.0" })).toBe(
+			true,
+		);
 	});
 
 	it("makes no network call at all when CRM_TELEMETRY_DISABLED is set", async () => {
 		process.env.CRM_TELEMETRY_DISABLED = "1";
 		resetTelemetryClient();
 
-		await captureNow("install_daily", { crm_version: "1.0.0" });
-
+		expect(await captureNow("install_daily", { crm_version: "1.0.0" })).toBe(
+			false,
+		);
 		expect(calls.length).toBe(0);
 	});
 
@@ -120,8 +129,9 @@ describe("capture", () => {
 		process.env.DO_NOT_TRACK = "1";
 		resetTelemetryClient();
 
-		await captureNow("install_daily", { crm_version: "1.0.0" });
-
+		expect(await captureNow("install_daily", { crm_version: "1.0.0" })).toBe(
+			false,
+		);
 		expect(calls.length).toBe(0);
 	});
 
@@ -129,19 +139,74 @@ describe("capture", () => {
 		process.env.NODE_ENV = "test";
 		resetTelemetryClient();
 
-		await captureNow("install_daily", { crm_version: "1.0.0" });
-
+		expect(await captureNow("install_daily", { crm_version: "1.0.0" })).toBe(
+			false,
+		);
 		expect(calls.length).toBe(0);
 	});
 
-	it("stays silent when the host refuses the send", async () => {
+	it("stays silent but reports the failure when the host refuses the send", async () => {
 		globalThis.fetch = (async () => {
 			throw new Error("network is down");
 		}) as typeof fetch;
 
-		expect(
-			captureNow("install_daily", { crm_version: "1.0.0" }),
-		).resolves.toBeUndefined();
+		expect(await captureNow("install_daily", { crm_version: "1.0.0" })).toBe(
+			false,
+		);
+	});
+});
+
+describe("milestone", () => {
+	const step = "first_sign_in" as const;
+
+	let existing: { step: string; reachedAt: Date } | null = null;
+
+	beforeEach(async () => {
+		existing = await db.telemetryMilestone.findUnique({ where: { step } });
+		await db.telemetryMilestone.deleteMany({ where: { step } });
+	});
+
+	afterEach(async () => {
+		await db.telemetryMilestone.deleteMany({ where: { step } });
+		if (existing) await db.telemetryMilestone.create({ data: existing });
+	});
+
+	it("records the step once the event has left", async () => {
+		expect(await milestone(step)).toBe(true);
+		expect(await db.telemetryMilestone.count({ where: { step } })).toBe(1);
+	});
+
+	it("leaves the step unreached when the send fails", async () => {
+		globalThis.fetch = (async () => {
+			throw new Error("network is down");
+		}) as typeof fetch;
+
+		expect(await milestone(step)).toBe(false);
+		expect(await db.telemetryMilestone.count({ where: { step } })).toBe(0);
+	});
+
+	it("sends the step again on the attempt after a failed send", async () => {
+		globalThis.fetch = (async () => {
+			throw new Error("network is down");
+		}) as typeof fetch;
+
+		expect(await milestone(step)).toBe(false);
+
+		stubFetch();
+		resetTelemetryClient();
+
+		expect(await milestone(step)).toBe(true);
+		expect(eventOf(calls[0]?.body).event).toBe(step);
+		expect(await db.telemetryMilestone.count({ where: { step } })).toBe(1);
+	});
+
+	it("leaves the step unreached when telemetry is off", async () => {
+		process.env.CRM_TELEMETRY_DISABLED = "1";
+		resetTelemetryClient();
+
+		expect(await milestone(step)).toBe(false);
+		expect(await db.telemetryMilestone.count({ where: { step } })).toBe(0);
+		expect(calls.length).toBe(0);
 	});
 });
 
