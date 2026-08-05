@@ -35,10 +35,7 @@
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/images/overview-dark.png">
-    <img alt="The CRM overview: closed-won and open pipeline, pipeline by stage, deals in progress and overdue tasks" src="./docs/images/overview.png">
-  </picture>
+  <img alt="The CRM built for Agents — the companies list with an account open on its Agent tab" src="./docs/images/landing-hero.png">
 </p>
 
 ---
@@ -65,40 +62,17 @@ because nobody can tell it is wrong.
 
 ## Screenshots
 
-<table>
-  <tr>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./docs/images/deals-dark.png">
-        <img alt="Deals list with stage, amount, owner and close date" src="./docs/images/deals.png">
-      </picture>
-      <p align="center"><sub><b>Deals</b> — filters, sort and page live in the URL, so a view is a link.</sub></p>
-    </td>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./docs/images/contacts-dark.png">
-        <img alt="Contacts list with title, email, company and owner" src="./docs/images/contacts.png">
-      </picture>
-      <p align="center"><sub><b>Contacts</b> — most of these were created by the mailbox sync, not typed.</sub></p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./docs/images/companies-dark.png">
-        <img alt="Companies list with domain, industry, open pipeline and owner" src="./docs/images/companies.png">
-      </picture>
-      <p align="center"><sub><b>Companies</b> — logo, industry and location arrive on their own.</sub></p>
-    </td>
-    <td width="50%">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="./docs/images/overview-dark.png">
-        <img alt="Overview dashboard" src="./docs/images/overview.png">
-      </picture>
-      <p align="center"><sub><b>Overview</b> — yours or the whole team's, toggled in the URL.</sub></p>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img alt="Agents that automate your CRM: a composer describing an agent in one sentence, with suggested actions beneath it" src="./docs/images/landing-agents.png">
+</p>
+
+<p align="center"><sub><b>Agents that automate your CRM</b> — describe a process in a sentence and it runs on its own queue.</sub></p>
+
+<p align="center">
+  <img alt="What it actually does: records fill themselves in, agents that build agents, it books its own follow-ups, and a question box on every record" src="./docs/images/landing-capabilities.png">
+</p>
+
+<p align="center"><sub><b>What it actually does</b> — enrichment that arrives on its own, follow-ups it books itself, and a question box on every record.</sub></p>
 
 ## The agent
 
