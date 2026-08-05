@@ -383,6 +383,7 @@ model Deal {
   id            String              @id @default(cuid())
   conversations AgentConversation[]
   name          String
+  description   String?
   companyId     String
   company       Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   ownerId       String
@@ -396,6 +397,11 @@ model Deal {
   closedAt          DateTime?
   closedReason      String?
 
+  baseAmount   Decimal?  @db.Decimal(24, 4)
+  baseCurrency String?
+  fxRate       Decimal?  @db.Decimal(20, 10)
+  fxRateAt     DateTime?
+
   lastActivityAt DateTime?
 
   contacts   DealContact[]
@@ -408,7 +414,30 @@ model Deal {
   @@index([stage])
   @@index([expectedCloseDate])
   @@index([lastActivityAt])
+  @@index([baseAmount])
+  @@index([currency])
   @@map("deal")
+}
+
+enum RateSource {
+  FETCHED
+  MANUAL
+}
+
+model ExchangeRate {
+  id            String     @id @default(cuid())
+  baseCurrency  String
+  quoteCurrency String
+  rate          Decimal    @db.Decimal(20, 10)
+  asOf          DateTime
+  source        RateSource
+  provider      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([baseCurrency, quoteCurrency, source])
+  @@index([baseCurrency, quoteCurrency])
+  @@map("exchangeRate")
 }
 
 model DealContact {
@@ -619,6 +648,10 @@ model AppSetting {
   agentModelContextWindow Int?
 
   contextDevApiKey String?
+
+  reportingCurrency String?
+
+  ratesRefreshedAt DateTime?
 
   updatedAt DateTime @updatedAt
 

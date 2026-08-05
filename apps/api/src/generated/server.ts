@@ -17,6 +17,7 @@ import { timelineInput, timelineCountsInput, myTasksInput, activityCreateInput, 
 import { companyListInput, companyIdInput, companyOptionsInput, companyCreateInput, companyUpdateArgs, setPrimaryContactInput } from "../companies/companies.contracts";
 import { contactListInput, contactIdInput, contactCreateInput, contactUpdateArgs, factDecisionInput } from "../contacts/contacts.contracts";
 import { conversationListInput, conversationEventsInput, conversationSaveInput, conversationIdInput } from "../conversations/conversations.contracts";
+import { setReportingCurrencyInput, setManualRateInput, removeManualRateInput } from "../currency/currency.contracts";
 import { dashboardSummaryInput } from "../dashboard/dashboard.contracts";
 import { dealListInput, dealIdInput, dealCreateInput, dealUpdateArgs, setStageInput } from "../deals/deals.contracts";
 import { setAutoCreateInput, suppressDomainInput, threadInput, calendarEventInput } from "../google/google.contracts";
@@ -27,6 +28,7 @@ import type { ActivitiesRouter } from "../activities/activities.router";
 import type { CompaniesRouter } from "../companies/companies.router";
 import type { ContactsRouter } from "../contacts/contacts.router";
 import type { ConversationsRouter } from "../conversations/conversations.router";
+import type { CurrencyRouter } from "../currency/currency.router";
 import type { DashboardRouter } from "../dashboard/dashboard.router";
 import type { DealsRouter } from "../deals/deals.router";
 import type { GoogleRouter } from "../google/google.router";
@@ -119,6 +121,21 @@ const appRouter = t.router({
     remove: publicProcedure
       .input(conversationIdInput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<ConversationsRouter["remove"]>>)
+    }),
+  currency: t.router({
+    settings: publicProcedure
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CurrencyRouter["settings"]>>),
+    setReportingCurrency: publicProcedure
+      .input(setReportingCurrencyInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CurrencyRouter["setReportingCurrency"]>>),
+    setManualRate: publicProcedure
+      .input(setManualRateInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CurrencyRouter["setManualRate"]>>),
+    removeManualRate: publicProcedure
+      .input(removeManualRateInput)
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CurrencyRouter["removeManualRate"]>>),
+    refreshRates: publicProcedure
+      .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<CurrencyRouter["refreshRates"]>>)
     }),
   dashboard: t.router({
     summary: publicProcedure
