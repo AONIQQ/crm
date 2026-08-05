@@ -55,12 +55,6 @@ against its own work queue. It decides what to look at next, books its own follo
 spends a research budget, and stops when the budget runs out. Nothing about it is
 request-response: close the browser and it keeps going.
 
-The API deliberately has no intelligence in it at all. NestJS reports that *something
-happened* — a thread was ingested, a company was created, an attendee is unknown — by
-writing a row to a queue. The agent leases that row and decides what it means. A Nest
-service that calls an enrichment API is treated as a bug, and
-[`docs/api.md`](./docs/api.md) explains the outage that made that a rule.
-
 The rule the agent itself never breaks: **nothing about a person is guessed.** No tool
 accepts a confidence score, because a model asked to grade its own certainty will, and
 it will be wrong in the direction that makes it look useful. Tools report what they
@@ -68,11 +62,6 @@ it will be wrong in the direction that makes it look useful. Tools report what t
 evidence. Strong evidence writes to the record. Weak evidence becomes a suggestion a
 human settles. A confidently wrong fact about a customer is worse than a blank field,
 because nobody can tell it is wrong.
-
-It is single-tenant and internal by design. Sign-in is Google, the allow-list is one
-environment variable, and everyone who gets in can see everything. That is the whole
-authorisation model — see [SECURITY.md](./SECURITY.md) before you point it at real
-customer data.
 
 ## Screenshots
 
@@ -301,6 +290,7 @@ short version:
 | `AGENT_BRIDGE_SECRET` | Lets a rep talk to the agent from a contact's **Agent** tab. |
 | `REDIS_URL` | A shared cache. Without it, per-instance and in-memory. |
 | `CRON_SECRET` | Guards the Gmail/Calendar sync route. Required to use it. |
+| `CRM_TELEMETRY_DISABLED` | Set to `1` and this install reports nothing. `DO_NOT_TRACK` too. |
 
 ## Tasks
 

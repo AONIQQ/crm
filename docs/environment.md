@@ -131,6 +131,27 @@ feature is only ever wrong), **no `GOOGLE_WORKSPACE_DOMAIN`** (`ALLOWED_SIGN_IN`
 says who is internal — two sources is how a colleague becomes a lead), **no
 `GMAIL_BACKFILL_DAYS`**, **no rate provider variable**.
 
+## Telemetry is on, and turning it off is one variable
+
+`CRM_TELEMETRY_DISABLED="1"` — or `DO_NOT_TRACK=1`, honoured identically — and nothing
+is sent. No client is constructed, so there is no queue waiting to flush later.
+
+- **Server side only**, `posthog-node` in the API and the agent. **`posthog-js`
+  appears once, on the `trycrm.ai` landing page**, and nowhere a record can be
+  reached: autocapture on a CRM would lift contact names and deal amounts out of
+  somebody else's database. That one import is gated on
+  `window.location.hostname`, not on `IS_MARKETING` — turning the landing page on
+  for your own domain never loads it. `docs/telemetry.md`.
+- **There is no variable for the destination.** The project key and host are
+  constants in `packages/telemetry/src/project.ts`. A `phc_` key is write-only —
+  it can send events and read nothing back — so making it configurable would
+  only imply it were a secret. Edit the constants to point somewhere else.
+- **The install ID is a row, not a file** — `install`, one row, UUID written by
+  the migration. Vercel's filesystem is ephemeral, so `~/.crm/telemetry-id`
+  would count containers.
+- Declared in `env.validation.ts` as optional, like everything else here. Every
+  event and the never-sent list are in **`docs/telemetry.md`**.
+
 ## Not env vars
 
 - **Cache TTL** — `DEFAULT_TTL_MS` (60s) in `cache.module.ts`; `CACHE_TTL_MS` overrides.

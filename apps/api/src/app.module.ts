@@ -22,6 +22,7 @@ import { logAuthRoute } from "./logging/request-logger.middleware";
 import { SearchModule } from "./search/search.module";
 import { SettingsModule } from "./settings/settings.module";
 import { SsoModule } from "./sso/sso.module";
+import { TelemetryModule } from "./telemetry/telemetry.module";
 import { TrpcModule } from "./trpc/trpc.module";
 import { UsersModule } from "./users/users.module";
 import { WorkspaceModule } from "./workspace/workspace.module";
@@ -55,6 +56,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		WorkspaceModule,
 		SsoModule,
 		BackfillModule,
+		TelemetryModule,
 	],
 })
 export class AppModule {}
