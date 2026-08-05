@@ -6,6 +6,7 @@
 		"dev": "next dev",
 		"build": "next build",
 		"start": "next start",
+		"typegen": "next typegen",
 		"check-types": "tsc --noEmit",
 		"test": "bun test",
 		"lint": "biome check ."
