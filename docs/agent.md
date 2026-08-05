@@ -2,7 +2,8 @@
 
 An [eve](https://eve.dev/docs) app, its **own deployment**, owning every piece of
 intelligence in this repo. Read with `api.md`, whose first rule is that none of this
-may move into the API.
+may move into the API. Local dev, the bridge env vars and the manual dispatch command
+are in `docs/setup.md`.
 
 **Read the eve guide before writing eve code** —
 `apps/agent/node_modules/eve/docs/README.md` matches the installed version;
@@ -17,8 +18,7 @@ agent and the API both need it.
   Open conversations keep their model — prompt caches are per model.
 - **`lib/model.ts` always sends `modelContextWindowTokens`**; eve never inherits it.
 - **A failed read logs and keeps the compiled fallback.** Never throws.
-- **The chooser offers only `tool-use` models** (`ModelCatalogService`); an
-  unreachable gateway makes it read-only.
+- **The chooser offers only `tool-use` models** (`ModelCatalogService`).
 - **Not a frontier model, deliberately** — refusing wrong answers is enforced by the
   tools and evidence model, not model strength.
 
@@ -35,14 +35,13 @@ agent and the API both need it.
 - **`isOptimizable` (`@crm/db/images`) is the whole rule**: `next.config.ts`
   allow-lists only our Blob host (a wildcard makes us an open image proxy), and a
   mirrored **SVG is still refused**.
-- **Faces are not optimized** — `AvatarImage` skips `<Image>` because Radix probes
-  the URL itself, doubling fetches.
+- **Faces are not optimized** — `AvatarImage` skips `<Image>` because Radix probes the
+  URL itself, doubling fetches.
 - **A photograph only comes from a source already tied to this person** —
-  `lib/portrait-sources.ts`: their LinkedIn, their GitHub, their employer's team
-  page, each keyed on an identifier already on the record.
-- **There is no image search by name, and there must never be.** Nobody audits a
-  face. **Guess where to look, never what you will find.**
-- `get_linkedin_profile` stores the picture in code at `isSamePerson`.
+  `lib/portrait-sources.ts`: their LinkedIn, their GitHub, their employer's team page,
+  each keyed on an identifier already on the record.
+- **There is no image search by name, and there must never be.** Nobody audits a face.
+  **Guess where to look, never what you will find.**
 
 ## Two lanes
 
@@ -54,40 +53,39 @@ agent and the API both need it.
 | **Research** | everything else | One eve session per row | 12 |
 
 **Neither visible kind has anything to decide**, and through a session they queued
-behind sixty LLM runs for 25 minutes. `test/lanes.integration.spec.ts` pins it. **The
-row says what the work is; the lane only says whether it needs a conversation.**
+behind sixty LLM runs for 25 minutes (`test/lanes.integration.spec.ts`). **The row says
+what the work is; the lane only says whether it needs a conversation.**
 
-**Priority** (`@crm/db/agent-tasks`): `brand` 900 · `portrait` 800 · `workspace` 500
-· `requested` 300 · `meeting` 200 · `identify` 100 · `sweep` 50 · `companyProfile` 40
-· `recheck` 0. The top two are what a rep reads *before* deciding what to open.
+**Priority**: `brand` 900 · `portrait` 800 · `workspace` 500 · `requested` 300 ·
+`meeting` 200 · `identify` 100 · `sweep` 50 · `companyProfile` 40 · `recheck` 0. The
+top two are what a rep reads *before* deciding what to open.
 
 **`claimDue` sorts what it claims** — Postgres does not order `UPDATE … RETURNING` by
 its sub-select's `ORDER BY`.
 
 ### Dispatch on demand
 
-`POST /internal/crm/dispatch` drains **both lanes**; `AgentTriggerService.poke()`
-calls it after writing any `AgentTask`.
+`POST /internal/crm/dispatch` drains **both lanes**; `AgentTriggerService.poke()` calls
+it after writing any `AgentTask`.
 
 - **Fire-and-forget, never awaited** — the row is still the message.
 - **Both lanes.** Visible-only made them diverge under `eve dev`, where there is no
   cron: logos resolved instantly while `identify` sat at `attempts = 0` forever.
-- **Calls the channel's own `send`, not `receive`** — it is already on the crm
-  channel. Principal from `APP_AUTH` (`lib/app-auth.ts`); `taskAuth()` keeps schedule
-  and route from drifting.
-- **`drainAll` collapses** via `collapsing()` (`lib/pool.ts`) — forty new contacts
-  poke forty times, and `claimDue` hands each a disjoint batch. Per-process;
-  cross-process overlap is leases and `FOR UPDATE SKIP LOCKED`.
+- **Calls the channel's own `send`, not `receive`** — it is already on the crm channel.
+  Principal from `APP_AUTH` (`lib/app-auth.ts`); `taskAuth()` keeps schedule and route
+  from drifting.
+- **`drainAll` collapses** via `collapsing()` (`lib/pool.ts`) — forty new contacts poke
+  forty times, and `claimDue` hands each a disjoint batch. Per-process; cross-process
+  overlap is leases and `FOR UPDATE SKIP LOCKED`.
 - **`AGENT_BRIDGE_SECRET` unset refuses rather than opens.**
 
 ### `POST /internal/crm/verify-key`
 
-Probes a candidate Context key → `valid`/`invalid`/`unknown`. No session, no model,
-no task row; exists because the API may not call Context.
+Probes a candidate Context key → `valid`/`invalid`/`unknown`. No session, no model, no
+task row; exists because the API may not call Context.
 
-- **The probe is free and chosen to be** — a free-provider address gets a `422`
-  before billable resolution. **Do not point it at a real domain**: ten credits per
-  typo correction.
+- **The probe is free and chosen to be** — a free-provider address gets a `422` before
+  billable resolution. **Do not point it at a real domain**: ten credits per typo.
 - **`classifyKey` rejects on `401` and nothing else.**
 - **The candidate key, never the stored one.**
 
@@ -99,22 +97,22 @@ Sign-in sweep covers records never looked up (10 credits/company);
 
 - **The image sweep keeps "every picture is ours" true**, not true-since-Tuesday.
   25 rows/table/sweep.
-- **A finished `portrait` task stands that contact down for thirty days** — that
-  third source costs credits and usually finds nothing.
+- **A finished `portrait` task stands that contact down for thirty days** — that third
+  source costs credits and usually finds nothing.
 - **No button, deliberately** — a rep cannot know which records predate a resolver.
 - **The trigger is signing in**, via `databaseHooks.session.create.after` in
   `packages/auth`; `BackfillService` subscribes with `onSignedIn` and has no router
   (`@crm/auth` must not import a Nest provider). Five-minute stand-down, and `auto()`
   returns before work starts.
-- **The 500-row cap is on the pass, not each query in it.** Deduplicate the union,
-  cut to 500, count `remaining` against the union.
+- **The 500-row cap is on the pass, not each query in it.** Deduplicate the union, cut
+  to 500, count `remaining` against the union.
 
 ## Evidence, not confidence
 
 **No tool accepts a confidence, a score, or a `sourceUrl` offered as proof.** Tools
 report what they *observed* (`crm.signature-block`, `github.account-identity`) and
-`lib/evidence.ts` prices it. A model asked to grade its own certainty will, and will
-be wrong in the direction that looks useful.
+`lib/evidence.ts` prices it. A model asked to grade its own certainty will, and will be
+wrong in the direction that looks useful.
 
 - **`lib/facts.ts` is the only write path to a contact's fields.** Applies at
   `VERIFIED`, proposes below it, and enforces three things a prompt cannot: never
@@ -131,9 +129,8 @@ retrying will not help" result — **checked before the research budget is charg
 missing key removes a place to look. **Never an error, never throws.**
 
 **`capabilities()` is async** because the Context key is a row;
-`capabilitiesFrom()`/`markdownFor()` are the pure halves. `contextDevKey()` is the
-only resolver, and `lib/context-dev.ts` memoises its client on the key string with no
-cache in front of the read.
+`capabilitiesFrom()`/`markdownFor()` are the pure halves. `contextDevKey()` is the only
+resolver, and `lib/context-dev.ts` memoises its client on the key string.
 
 ## Budget and scheduling
 
@@ -145,8 +142,8 @@ cache in front of the read.
 
 ## Three records, no dead ends
 
-**Every read hands back the ids of neighbouring records.** Breaking this made the
-agent ask a rep who had a company open, contacts on screen, to paste an email.
+**Every read hands back the ids of neighbouring records.** Breaking this made the agent
+ask a rep who had a company open, contacts on screen, to paste an email.
 
 | Read (all free) | Hands back |
 | --- | --- |
@@ -157,8 +154,8 @@ agent ask a rep who had a company open, contacts on screen, to paste an email.
 
 **A preamble or tool result naming a record without its id is a bug** — the only
 recovery is asking the human. Ambiguity is fine: four Marchettis is four rows with
-titles. **`search_crm` does no fuzzy matching** — "Marchetti" reaching "Marchetta" is
-a wrong record about a real person.
+titles. **`search_crm` does no fuzzy matching** — "Marchetti" reaching "Marchetta" is a
+wrong record about a real person.
 
 ### Preambles
 
@@ -167,10 +164,8 @@ points at the read to start from) and **who opened it** — a dispatched task is
 research pass with a budget, a rep in the sheet is a conversation. Told neither, the
 agent answered a question with a work plan. `taskKind` is the tell.
 
-Prose lives in `lib/preamble.ts` so `test/preamble.integration.spec.ts` can assert a
-company session names its own contacts. `task.ts` is the resolver and owns one side
-effect: seeding `lib/focus.ts`, without which the audit hook files events against
-nothing.
+`task.ts` is the resolver and owns one side effect: seeding `lib/focus.ts`, without
+which the audit hook files events against nothing.
 
 **A fourth record kind** = `sessionPreamble` entry + a read + a `TOOL_VERBS` line
 (`apps/app/lib/agent-transcript.ts`) + a `COPY` entry (`lib/agent-record.ts`).
@@ -185,14 +180,14 @@ preamble; `lib/workspace.ts` is the only renderer.
 - **It says what the context is for** — fit, competitor, partner, or nothing — and
   **never a pitch**, or the model sells our own product back to us.
 - **No profile still gets the name line**, plus *do not guess at what we sell*.
-- **The profile dies with its website** — `readWorkspaceIdentity` returns it only
-  while `website` matches.
+- **The profile dies with its website** — `readWorkspaceIdentity` returns it only while
+  `website` matches.
 - **Not a `Company` row** — that needs excluding from every list, facet and join. One
   `WorkspaceProfile` keyed on `WORKSPACE_ID`.
 
 The pass is a `workspace-profile` task using `web_fetch` (no credits), filed only via
-`write_workspace_profile`, queued by `WorkspaceService.update` on a website change.
-**A finished attempt stands the sweep down for seven days.**
+`write_workspace_profile`, queued by `WorkspaceService.update` on a website change. **A
+finished attempt stands the sweep down for seven days.**
 
 ## What may be read, and what may leave
 
@@ -239,69 +234,12 @@ browser → /eve/v1/*  (same origin, session cookie, x-crm-contact header)
 
 ### The panel
 
-`lib/agent-record.ts` maps a record kind to everything downstream: the header sent,
-the claim minted, the field a conversation is filed under, the empty-thread questions.
-`AgentConversation` holds only the handle (session id + cursor); the transcript is in
-`AgentEvent` from the audit hook.
+`lib/agent-record.ts` maps a record kind to everything downstream. The panel's own
+rules — snapshot loading, composer state, thread capture, scrolling — are in
+**`docs/agent-panel.md`**. It lives in the API and is not a breach of rule one:
+listing history decides nothing.
 
-- **Load with `session.snapshot()`, never by hand** — one call returns the event
-  prefix, the cursor, and a continuation token *iff* eve will accept another turn.
-  Hand-rolling the stream produced every panel bug this thing has had.
-- **The token is the authority on whether a message can be sent**, not our reading of
-  the events.
-- **`streamIndex: 0` on resume** — the saved index is where the last *reader* stopped.
-- **Quiet for 90 seconds is over, not working** — restarted agents leave sessions with
-  no closing boundary, which would lock the thread forever.
-- **An unreachable agent is `offline`, not `working`** — fall back to the `AgentEvent`
-  archive and keep the composer usable.
-- **An ended thread gets a Start-a-new-conversation button, not a locked box**;
-  `composerState()` keeps ended and working apart.
-- **Nothing mounts until the list has loaded**, or a new session starts and remounts.
-- **The landed thread is captured once** (`resolveThread`), or the first save swaps the
-  open conversation out from under a live answer. It lives in `?thread=`.
-- **`keepMounted` on the tab descriptor** (`detail-sheet.tsx`) — Radix drops an
-  inactive tab, aborting the stream mid-answer.
-- **`autoScroll` and nothing else**; `scrollAnchor` stops it following the bottom.
-- **One `MessageScrollerItem` per message, not per part**; ids prefer `toolCallId`.
-- **Scoped to the rep** — a session id in a body decides which row, never whose.
-- Cached per `api.md`: read through `cache-manager`, invalidate on save.
-
-This lives in the API and is not a breach of rule one: listing history decides nothing.
-
-## Dev
-
-```sh
-AGENT_URL="http://127.0.0.1:2000"   # 127.0.0.1, not localhost: eve dev is IPv4-only
-AGENT_BRIDGE_SECRET="$(openssl rand -base64 32)"
-```
-
-`503` = secret unset in the app · `401` = the two processes differ, or `turbo.json`
-`passThroughEnv` is missing the pair (Turbo is strict-env) · `502` = agent down or
-wrong URL.
-
-**`bun run dev` is `eve dev --no-ui`** (turbo's pty makes the TUI unreadable);
-`dev:tui` keeps the interactive one, and only that writes `.eve/logs/` for `eve logs`.
-`hooks/activity.ts` is the replacement narration, **to stderr**, printing shape
-everywhere and argument contents outside production only. It is **not the audit
-trail** — `hooks/audit.ts` writes `AgentEvent` regardless. A second `bun run dev`
-fails the whole turbo run; an orphaned agent holds the port
-(`lsof -nP -iTCP:2000 -sTCP:LISTEN`).
-
-**`eve dev` never fires schedules on their cron cadence**, and everything visible
-still works — the row is written, the sheet says *Queued*, and `dispatch.ts` is never
-called. **The poke covers this only when `AGENT_BRIDGE_SECRET` is set**; unset,
-`poke()` returns silently and the queue looks exactly like a slow agent. Tasks the API
-did not write (`schedule_recheck`) and anything queued while the agent was down still
-need `bun run --filter=agent dispatch` — the exact production path, both lanes, real
-credits. Its printed `sessionIds` are research rows only, so a run that resolved forty
-logos prints an empty list and was not idle. `eve start` and Vercel do run the
-schedule.
-
-`localDev()` accepts any loopback request, so `curl 127.0.0.1` proves nothing about
-the bridge — send `-H 'Host: agent.example.com'`. `GET /eve/v1/info` is the whole
-inventory, including a `diagnostics` count that finds files eve ignored.
-
-### Continuation tokens are namespaced
+## Continuation tokens are namespaced
 
 **eve prefixes them with the channel name.** `channels/crm.ts` mints `task:<id>`;
 `session.waiting` returns `crm:task:<id>`. Minting the prefix ourselves meant matching
@@ -313,8 +251,3 @@ sat on "Researching" forever. Hidden because the archived event's
 **`taskFromToken` keys on the `task:` marker, not a fixed prefix**
 (`test/crm-token.spec.ts`). **A channel handler must not assume the token it receives
 is byte-identical to the one it sent.**
-
-## Tests
-
-`bun run --filter=agent test`. Integration specs need `DATABASE_URL` and a real
-Postgres — "never overwrite a human" is only true if the transaction says so.

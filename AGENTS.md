@@ -6,10 +6,13 @@ context until you read them, and the rules in them are not optional.
 
 | Working on | Read first |
 | --- | --- |
-| Anything in `apps/api` — tRPC, auth, logging, sync, currency, deletes, caching | `docs/api.md` |
-| `apps/agent` — the eve research agent, tools, tasks, the Agent panel | `docs/agent.md` |
-| `.env`, configuration, deployment, Google/Gmail setup, secrets | `docs/environment.md` |
+| Anything in `apps/api` — tRPC, auth, logging, sync, deletes, caching | `docs/api.md` |
+| `apps/agent` — the eve research agent, tools, tasks, dispatch | `docs/agent.md` |
+| `.env`, configuration, which variables exist and why | `docs/environment.md` |
 | UI in `apps/app` or `packages/ui` | `docs/design.md` (below) |
+| Deal amounts, totals, charts, exchange rates | `docs/currency.md` |
+| The record sheet's Agent tab | `docs/agent-panel.md` |
+| Running it locally, Google Cloud, DB commands, secrets | `docs/setup.md` |
 
 Also check `.agents/skills/` for a relevant skill before starting — better-auth,
 prisma, nestjs-trpc, eve, shadcn, nuqs and others have one. Tell the user which

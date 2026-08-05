@@ -1,6 +1,6 @@
 # Environment
 
-Setup, local dev and the `vercel env pull` hazard are in `docs/setup.md`.
+Setup, DB commands, Google Cloud and the `vercel env pull` hazard: `docs/setup.md`.
 
 ## One `.env`, at the repo root
 
@@ -25,29 +25,26 @@ localhost default or is genuinely optional.
 Gmail/Calendar sync — optional, so an SSO-only install needn't create a Google project,
 but **set together or not at all** (`packages/auth/src/env.ts` throws on one).
 
-**`ALLOWED_SIGN_IN`** — comma-separated whole domains or single addresses. Bare
-addresses exist for a solo self-hoster where `gmail.com` would be an open door. **One
+**`ALLOWED_SIGN_IN`** — comma-separated whole domains or single addresses (bare
+addresses exist for a solo self-hoster, where `gmail.com` would be an open door). **One
 list, read by the sign-in guard *and* the sync's "which side is external" decision** —
 if they drifted a colleague would be refused at the door or filed as a lead. **An empty
-list fails closed.** Parsed on demand, not at import.
-`packages/auth/src/workspace.ts`.
+list fails closed.** Parsed on demand. `packages/auth/src/workspace.ts`.
 
 ## Where things are
 
 - **`API_URL`** (`:3001`) mints session cookies and serves `/api/auth/*`;
   `next.config.ts` republishes it as `NEXT_PUBLIC_API_URL`, so one variable does both
   sides. `BETTER_AUTH_URL` is a legacy fallback.
-- **`APP_URL`** (`:3000`) is also the trusted-origin and `callbackURL` allow-list;
-  comma-separate if multi-origin, first is canonical.
+- **`APP_URL`** (`:3000`) is also the trusted-origin and `callbackURL` allow-list.
 - **`AUTH_COOKIE_DOMAIN`** only for API and app on different subdomains of one parent.
 - **`AGENT_URL`** is the agent's deployment, server-side only, and **must include the
   scheme** — validated at boot, or it throws when a task is queued instead.
 - **`AUTH_COOKIE_PREFIX` is `crm`** (`@crm/auth/cookies`), set on **both**
   `advanced.cookiePrefix` in `auth.ts` and `getSessionCookie(request, { cookiePrefix })`
   in `proxy.ts` — one alone redirects every signed-in request. Better Auth's default
-  collides with any neighbour on a shared parent domain, and the failure is silent:
-  sign-in completes, the row is written, every reader resolves `null`. **Changing it
-  signs everybody out**, once.
+  collides with any neighbour on a shared parent domain, silently: sign-in completes,
+  the row is written, every reader resolves `null`. **Changing it signs everybody out.**
 
 ## `IS_MARKETING` — landing page flag, off by default
 
@@ -61,19 +58,18 @@ list fails closed.** Parsed on demand, not at import.
 
 ## Typed, validated env
 
-`apps/api/src/config/env.validation.ts` runs via `ConfigModule.forRoot({ validate })`.
-It lists every variable the API reads and nothing else.
+`apps/api/src/config/env.validation.ts` runs via `ConfigModule.forRoot({ validate })`,
+and lists every variable the API reads and nothing else.
 
 - **Validation runs while `AppModule` is evaluated** — a test must set variables before
   importing it (see the dynamic `import()` in `test/auth.e2e.spec.ts`).
-- **The schema is the API's, not the repo's** — `@crm/auth` and the agent read their own
-  values.
+- **The schema is the API's, not the repo's** — `@crm/auth` and the agent read their own.
 
 ## Optional: what the agent can do
 
 Every outside source is optional and the agent runs with none. A missing key removes a
-place to look; **never an error, never throws**.
-`apps/agent/agent/lib/capabilities.ts` is the single place that knows what is set.
+place to look; **never an error, never throws**. `agent/lib/capabilities.ts` is the
+single place that knows what is set.
 
 | Variable | What it adds |
 | --- | --- |
@@ -91,7 +87,7 @@ excluded — recognising our URL for the image optimizer needs no token.
 ### The Context key is asked for, not configured
 
 **`CONTEXT_DEV_API_KEY` is not a variable here and must not become one.** The key lives
-in `AppSetting`, is asked for at `/onboarding/research`, and is changed on Settings →
+in `AppSetting`, is asked for at `/onboarding/research`, and changes on Settings →
 General — an admin who cannot redeploy cannot set a variable.
 
 - **An install that had the variable is asked again**: no migration, no fallback, and
@@ -100,48 +96,44 @@ General — an admin who cannot redeploy cannot set a variable.
   anything marks the row `RUNNING`, and `settle` only overwrites `RUNNING` — so the
   company stays `PENDING`, which the sweep re-queues
   (`test/keyless-brand.integration.spec.ts`).
-- **Saving the key runs the company sweep immediately** (fire-and-forget). Contacts wait
-  for the next sign-in — only one of three portrait sources is Context.
+- **Saving the key runs the company sweep immediately** (fire-and-forget).
 - **`readContextDevKey` (`@crm/db/settings`) is the only reader**, read live with no
   cache. An unreadable database is a capability that is off, not an exception.
 - **The key is never read back** — only whether one is set, and its last four.
 - **The agent checks it, not the API** (a vendor client in the API is a bug):
   `settings.setResearchKey` calls `POST /internal/crm/verify-key` and writes unless the
-  answer is *invalid*. **`401` is the only answer meaning the key is wrong.** **A check
-  that cannot be made is not a failed check** — agent down or timeout → `unknown` →
-  save anyway and log it unverified.
+  answer is *invalid*. **`401` is the only answer meaning the key is wrong**, and **a
+  check that cannot be made is not a failed check** — `unknown` saves anyway and logs it
+  unverified.
 
 ## Gmail and Calendar sync
 
-Always on. Same OAuth client and callback — the two read-only scopes go on the existing
-Google provider, so there is no extra redirect URI.
-
-Scopes are requested at sign-in and gated by `requireGoogleAccess()`, because granular
-consent lets a user untick one and still sign in. Missing either → `/grant-access`.
+Always on, on the existing Google provider, so there is no extra redirect URI. Scopes
+are requested at sign-in and gated by `requireGoogleAccess()`, because granular consent
+lets a user untick one and still sign in.
 
 **An SSO rep is not gated** — `needsGoogleGrant` (`@crm/auth`) walls only an account
 whose *sole* sign-in row is Google. It cannot be "has the scopes": an SSO rep has no
 Google account to grant on, and `revoke()` keeps the `account` row, so trying the
-optional feature and revoking would lock them out. They connect from **Settings →
-Connections**, posting the same `linkSocial` call.
+optional feature and revoking would lock them out. They connect from Settings →
+Connections, posting the same `linkSocial` call.
 
-**Sync is forward-only.** Gmail records the current `historyId` on its first pass and
+**Sync is forward-only** — Gmail records the current `historyId` on its first pass and
 imports nothing; Calendar reads from `now`.
 
 **`CRON_SECRET`** (min 16 chars) guards `POST /internal/sync/google` and
-`POST /internal/sync/rates`; both **fail closed when unset**. **Crons live in
+`/internal/sync/rates`; both **fail closed when unset**. **Crons live in
 `apps/api/vercel.json`** — Google `*/5 * * * *`, rates daily. Minute-level schedules
 need a Pro plan; on Hobby it silently becomes daily.
 
 Deliberate absences: **no `GOOGLE_SYNC_ENABLED`** (a switch that can disable a mandatory
 feature is only ever wrong), **no `GOOGLE_WORKSPACE_DOMAIN`** (`ALLOWED_SIGN_IN` already
 says who is internal — two sources is how a colleague becomes a lead), **no
-`GMAIL_BACKFILL_DAYS`**, **no rate provider variable** (`open.er-api.com` is a keyless
-constant).
+`GMAIL_BACKFILL_DAYS`**, **no rate provider variable**.
 
 ## Not env vars
 
 - **Cache TTL** — `DEFAULT_TTL_MS` (60s) in `cache.module.ts`; `CACHE_TTL_MS` overrides.
-- **Redis** — optional. Without `REDIS_URL` the cache is per-instance in-memory: fine
-  locally, wrong for multi-instance.
+- **Redis** — optional; without `REDIS_URL` the cache is per-instance in-memory, which
+  is wrong for multi-instance.
 - **Sign-in method** — Google is in code; an IdP is a row (SSO, in `api.md`).
