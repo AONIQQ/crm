@@ -165,7 +165,7 @@ export function CurrencySettings() {
 					<CardTitle>Exchange rates</CardTitle>
 					<CardDescription>
 						How many {reportingCurrency} one unit of each currency buys. Fetched
-						daily from the European Central Bank; a rate you enter here wins.
+						daily from open.er-api.com; a rate you enter here wins.
 					</CardDescription>
 					<CardAction>
 						<Button

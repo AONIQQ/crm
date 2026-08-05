@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Db } from "../src/client";
 import {
+	CURRENCIES,
 	currencyName,
 	isCurrencyCode,
 	isWellFormedCurrency,
@@ -59,7 +60,23 @@ describe("normalizeCurrency and isCurrencyCode", () => {
 		}
 	});
 
-	it("refuses a three-letter string that is not a currency", () => {
+	it("offers only the ten currencies most of the world trades in", () => {
+		expect(CURRENCIES.map((entry) => entry.code)).toEqual([
+			"USD",
+			"EUR",
+			"JPY",
+			"GBP",
+			"CNY",
+			"AUD",
+			"CAD",
+			"CHF",
+			"HKD",
+			"SGD",
+		]);
+	});
+
+	it("refuses a real currency it does not offer, and anything that is not one", () => {
+		expect(isCurrencyCode("SEK")).toBe(false);
 		expect(isCurrencyCode("ZZZ")).toBe(false);
 		expect(isCurrencyCode("QQ")).toBe(false);
 		expect(isCurrencyCode("")).toBe(false);
@@ -81,14 +98,12 @@ describe("normalizeCurrency and isCurrencyCode", () => {
 describe("minorUnitsOf", () => {
 	it("knows the currencies that are not two-decimal", () => {
 		expect(minorUnitsOf("JPY")).toBe(0);
-		expect(minorUnitsOf("KRW")).toBe(0);
-		expect(minorUnitsOf("KWD")).toBe(3);
-		expect(minorUnitsOf("BHD")).toBe(3);
 	});
 
 	it("assumes two for anything else, so an amount still round-trips", () => {
 		expect(minorUnitsOf("USD")).toBe(2);
 		expect(minorUnitsOf("ZZZ")).toBe(2);
+		expect(minorUnitsOf("SEK")).toBe(2);
 	});
 });
 

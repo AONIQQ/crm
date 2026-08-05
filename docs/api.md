@@ -612,6 +612,36 @@ call site — one place to be wrong instead of six.
   `isWellFormedCurrency` exists because `Intl.NumberFormat` throws a
   `RangeError` on anything that is not three letters, so a *formatter* has to
   check shape even where membership is not its business.
+- **`CURRENCIES` is ten currencies, and that is the whole of what this CRM
+  supports.** The world's ten most-traded — USD, EUR, JPY, GBP, CNY, AUD, CAD,
+  CHF, HKD, SGD — in that order, and the pickers render it in array order rather
+  than alphabetically so the answer is usually the first or second row. It
+  started as fifty-three, which is a scroll bar in front of a decision that is
+  `USD` nine times out of ten.
+  - **Supported means supported everywhere**, and `isCurrencyCode` is the single
+    gate: it is what `deals.contracts.ts` refines on, what `RatesService` filters
+    the feed through, and what `readReportingCurrency` requires of a stored
+    value. Offering ten and converting a hundred and sixty-five was two answers
+    to one question — the picker said one thing and the rate table another.
+  - **Everything offered is therefore convertible.** The feed covers all ten, so
+    choosing from a picker cannot produce the unconverted deal the disclosure
+    above exists to explain. That disclosure stays, because two things can still
+    reach it: a row written before the list shrank, and a reporting-currency
+    change made while the feed is unreachable.
+  - **A refresh prunes as well as writes**, deleting `FETCHED` rows for the
+    current base whose quote currency is not in the ten. Without that, an install
+    that ran the old code keeps a hundred and fifty-six rates nothing will ever
+    refresh, and a legacy deal stays convertible at a frozen number — which is
+    the split this rule just removed, surviving in the data. It leaves `MANUAL`
+    rows alone: a rate a person typed is not ours to delete, and the form can no
+    longer create one outside the ten anyway.
+  - **A deal in an unsupported currency is disclosed, not hidden.** Its
+    `baseAmount` goes null on the next re-rate, which takes it out of every total
+    and puts it in `unconverted` — so the dashboard says *N deals in SEK are not
+    included* rather than quietly counting or quietly dropping them. Editing such
+    a deal's currency is the fix, and the picker offers only the ten.
+  - **There is no three-decimal currency left in the ten**, so the KWD caveat
+    below is now only about a legacy row rather than anything a rep can enter.
 - **`minorUnitsOf` is why conversion rounds correctly.** JPY has no decimal
   places and KWD has three; `applyRate` rounds to the *reporting* currency's
   own units rather than to two. The `×100` cents transport across tRPC is
@@ -619,6 +649,28 @@ call site — one place to be wrong instead of six.
   claim about decimals — but note it cannot represent a three-decimal currency's
   minor unit, and neither can `Decimal(14, 2)`. A KWD deal is stored to the
   fils, not the fils-tenth.
+
+**One feed, keyless: `open.er-api.com`.** It answers
+`GET /v6/latest/{BASE}` with `{ result, base_code, time_last_update_unix, rates }`
+and needs no account, which is what keeps it out of `.env` entirely.
+
+- **It replaced `api.frankfurter.dev`, for coverage as much as uptime.**
+  Frankfurter is ECB-backed and publishes 29 currencies and — the part that
+  actually bit — could not be asked for a base outside its own set, so a
+  workspace reporting in a currency it does not quote got nothing at all. It was
+  also timing out intermittently on an 8-second budget. The replacement quotes
+  166 and accepts any of them as the base, which covers all ten of ours with
+  room for the list to grow.
+- **`result` is checked, not just the status code.** An unsupported base comes
+  back **HTTP 200** with `{"result":"error","error-type":"unsupported-code"}`, so
+  `response.ok` alone would read a refusal as success, find no `rates`, and log
+  the misleading "carried no usable rates" instead of the reason the provider
+  gave.
+- **Two attempts, 6 seconds each.** The failure that prompted this was a
+  transient timeout on a single try, and one retry costs a few hundred
+  milliseconds against a request that normally answers in under 150ms. The
+  ceiling stays low enough for the interactive Refresh button on the settings
+  page to be worth pressing.
 
 **The fetcher is in the API, and that is a deliberate exception to the rule at
 the top of this file.** A daily rate is not intelligence: it decides nothing

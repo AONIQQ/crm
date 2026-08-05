@@ -1,6 +1,10 @@
 import type { Db } from "@crm/db";
 import { Prisma, RateSource } from "@crm/db";
-import { isCurrencyCode, normalizeCurrency } from "@crm/db/currency";
+import {
+	CURRENCY_CODES,
+	isCurrencyCode,
+	normalizeCurrency,
+} from "@crm/db/currency";
 import {
 	readRatesRefreshedAt,
 	readReportingCurrency,
@@ -9,11 +13,15 @@ import {
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 
-export const RATES_PROVIDER = "frankfurter.dev";
+export const RATES_PROVIDER = "open.er-api.com";
 
-const RATES_URL = "https://api.frankfurter.dev/v1/latest";
+const RATES_URL = "https://open.er-api.com/v6/latest";
 
-const RATES_TIMEOUT_MS = 8_000;
+const RATES_TIMEOUT_MS = 6_000;
+
+const RATES_ATTEMPTS = 2;
+
+const RETRY_DELAY_MS = 400;
 
 export interface RateRefresh {
 	ok: boolean;
@@ -23,16 +31,22 @@ export interface RateRefresh {
 	reason: string | null;
 }
 
-interface FrankfurterResponse {
-	base?: unknown;
-	date?: unknown;
+interface OpenExchangeResponse {
+	result?: unknown;
+	base_code?: unknown;
+	time_last_update_unix?: unknown;
 	rates?: Record<string, unknown>;
+	"error-type"?: unknown;
 }
 
 function parseAsOf(value: unknown): Date | null {
-	if (typeof value !== "string") return null;
-	const date = new Date(`${value}T00:00:00.000Z`);
+	if (typeof value !== "number" || !Number.isFinite(value)) return null;
+	const date = new Date(value * 1000);
 	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function wait(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 @Injectable()
@@ -109,32 +123,76 @@ export class RatesService {
 			written += 1;
 		}
 
+		const supported = [...CURRENCY_CODES];
+
+		const stale = await this.db.exchangeRate.deleteMany({
+			where: {
+				source: RateSource.FETCHED,
+				OR: [
+					{ baseCurrency: { notIn: supported } },
+					{ quoteCurrency: { notIn: supported } },
+				],
+			},
+		});
+
+		if (stale.count > 0) {
+			this.logger.log({
+				message: "Dropped fetched rates for currencies that are not supported",
+				base,
+				dropped: stale.count,
+			});
+		}
+
 		return written;
 	}
 
 	private async fetch(
 		base: string,
 	): Promise<{ rates: Map<string, Prisma.Decimal>; asOf: Date } | null> {
+		for (let attempt = 1; attempt <= RATES_ATTEMPTS; attempt += 1) {
+			const quotes = await this.attempt(base, attempt);
+			if (quotes) return quotes;
+
+			if (attempt < RATES_ATTEMPTS) await wait(RETRY_DELAY_MS);
+		}
+
+		return null;
+	}
+
+	private async attempt(
+		base: string,
+		attempt: number,
+	): Promise<{ rates: Map<string, Prisma.Decimal>; asOf: Date } | null> {
 		try {
-			const response = await fetch(
-				`${RATES_URL}?base=${encodeURIComponent(base)}`,
-				{
-					headers: { accept: "application/json" },
-					signal: AbortSignal.timeout(RATES_TIMEOUT_MS),
-				},
-			);
+			const response = await fetch(`${RATES_URL}/${encodeURIComponent(base)}`, {
+				headers: { accept: "application/json" },
+				signal: AbortSignal.timeout(RATES_TIMEOUT_MS),
+			});
 
 			if (!response.ok) {
 				this.logger.warn({
 					message: "Exchange rate request failed",
 					status: response.status,
 					base,
+					attempt,
 				});
 				return null;
 			}
 
-			const body = (await response.json()) as FrankfurterResponse;
-			const asOf = parseAsOf(body.date) ?? new Date();
+			const body = (await response.json()) as OpenExchangeResponse;
+
+			if (body.result !== "success") {
+				this.logger.warn({
+					message: "Exchange rate provider refused the request",
+					base,
+					attempt,
+					errorType:
+						typeof body["error-type"] === "string" ? body["error-type"] : null,
+				});
+				return null;
+			}
+
+			const asOf = parseAsOf(body.time_last_update_unix) ?? new Date();
 			const rates = new Map<string, Prisma.Decimal>();
 
 			for (const [code, value] of Object.entries(body.rates ?? {})) {
@@ -155,6 +213,7 @@ export class RatesService {
 				this.logger.warn({
 					message: "Exchange rate response carried no usable rates",
 					base,
+					attempt,
 				});
 				return null;
 			}
@@ -164,6 +223,7 @@ export class RatesService {
 			this.logger.warn({
 				message: "Exchange rates unavailable",
 				base,
+				attempt,
 				reason: error instanceof Error ? error.message : String(error),
 			});
 			return null;

@@ -361,9 +361,10 @@ The absences are deliberate:
   internal, and it is seeded into the sync's "us" set alongside the `User`
   table. Two sources for one fact is how a colleague becomes a lead.
 - **No `GMAIL_BACKFILL_DAYS`.** There is no backfill.
-- **No exchange-rate provider variable.** The rate feed is a constant in
-  `apps/api/src/currency/rates.service.ts` and needs no key; an install that
-  cannot reach it types its own rates on Settings → Currencies instead. See
+- **No exchange-rate provider variable.** The rate feed is `open.er-api.com`, a
+  constant in `apps/api/src/currency/rates.service.ts`, and it needs no account;
+  an install that cannot reach it types its own rates on Settings → Currencies
+  instead. See
   [the currency rules](./api.md#a-deal-is-sold-in-one-currency-and-reported-in-another).
   `POST /internal/sync/rates` wants a **daily** schedule beside the five-minute
   Google one.

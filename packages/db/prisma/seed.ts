@@ -484,14 +484,26 @@ const SEED_RATES: Record<string, number> = {
 
 const DEAL_CURRENCIES = ["USD", "USD", "USD", "EUR", "GBP", "JPY", "CAD"];
 
+let seedBaseIsUsd = true;
+
 async function seedRates(): Promise<number> {
 	const asOf = daysFromNow(-1);
 
-	await db.appSetting.upsert({
+	const setting = await db.appSetting.upsert({
 		where: { id: "app" },
 		create: { id: "app", reportingCurrency: "USD" },
-		update: { reportingCurrency: "USD" },
+		update: {},
+		select: { reportingCurrency: true },
 	});
+
+	seedBaseIsUsd = (setting.reportingCurrency ?? "USD").toUpperCase() === "USD";
+
+	if (!seedBaseIsUsd) {
+		console.log(
+			`Reporting currency is ${setting.reportingCurrency} — seeding amounts ` +
+				"without a converted figure; the rates cron will fill them in.",
+		);
+	}
 
 	for (const [quoteCurrency, rate] of Object.entries(SEED_RATES)) {
 		await db.exchangeRate.upsert({
@@ -521,6 +533,10 @@ function money(usdAmount: number, currency: string) {
 	const rate = SEED_RATES[currency] ?? 1;
 	const places = currency === "JPY" ? 0 : 2;
 	const amount = Number((usdAmount / rate).toFixed(places));
+
+	if (!seedBaseIsUsd) {
+		return { amount, currency, baseAmount: null, fxRate: null };
+	}
 
 	return {
 		amount,
@@ -578,7 +594,7 @@ async function seedDeals(
 							currency,
 							baseAmount,
 							fxRate,
-							fxRateAt: daysFromNow(-1),
+							fxRateAt: fxRate === null ? null : daysFromNow(-1),
 						};
 					})(),
 					expectedCloseDate: daysFromNow(
