@@ -1,0 +1,168 @@
+import "@crm/env/load";
+
+import { PostHog } from "posthog-node";
+import { type Properties, permitted } from "./allowlist";
+import { telemetryDisabled } from "./disabled";
+import { daysSince, readInstall } from "./install";
+import { commitSha } from "./version";
+
+export const POSTHOG_KEY = "phc_xKYTYbcX9bEB7sEaCpfZUCqV7HBxZw3QQVztuXf86Q9N";
+
+export const POSTHOG_HOST = "https://k.trycomp.ai";
+
+const FLUSH_TIMEOUT_MS = 3_000;
+
+type Debug = (message: string) => void;
+
+let debug: Debug = () => {};
+
+export function onTelemetryProblem(sink: Debug | null): void {
+	debug = sink ?? (() => {});
+}
+
+let client: PostHog | null = null;
+
+let built = false;
+
+function posthog(): PostHog | null {
+	if (built) return client;
+	built = true;
+
+	const off = telemetryDisabled();
+
+	try {
+		client = new PostHog(POSTHOG_KEY, {
+			host: POSTHOG_HOST,
+			flushAt: 1,
+			flushInterval: 0,
+			disabled: off,
+			disableGeoip: true,
+			enableExceptionAutocapture: false,
+			fetchRetryCount: 1,
+		});
+
+		if (off) {
+			void client.disable().catch(() => {});
+			debug("Telemetry is disabled — every capture is a no-op.");
+		}
+
+		client.on("error", (error: unknown) => {
+			debug(
+				`PostHog could not send: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			);
+		});
+	} catch (error) {
+		debug(
+			`PostHog could not start: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+		client = null;
+	}
+
+	return client;
+}
+
+export function resetTelemetryClient(): void {
+	client = null;
+	built = false;
+}
+
+async function payload(
+	properties: Properties,
+): Promise<Record<string, unknown> | null> {
+	const install = await readInstall();
+	if (!install) return null;
+
+	const sha = commitSha();
+
+	return {
+		distinctId: install.uuid,
+		properties: {
+			...permitted({
+				crm_version: install.version,
+				days_since_install: daysSince(install.createdAt),
+				is_vercel: Boolean(process.env.VERCEL),
+				...(sha ? { git_commit_sha: sha } : {}),
+				...properties,
+			}),
+			$ip: null,
+			$process_person_profile: false,
+		},
+		disableGeoip: true,
+	};
+}
+
+export function capture(event: string, properties: Properties = {}): void {
+	void send(event, properties);
+}
+
+export async function captureNow(
+	event: string,
+	properties: Properties = {},
+	at?: Date,
+): Promise<void> {
+	await send(event, properties, true, at);
+}
+
+async function send(
+	event: string,
+	properties: Properties,
+	immediate = false,
+	at?: Date,
+): Promise<void> {
+	try {
+		if (telemetryDisabled()) return;
+
+		const posted = posthog();
+		if (!posted) return;
+
+		const message = await payload(properties);
+		if (!message) return;
+
+		const full = {
+			...message,
+			event,
+			...(at ? { timestamp: at } : {}),
+		} as Parameters<PostHog["capture"]>[0];
+
+		if (immediate) {
+			await posted.captureImmediate(full);
+			return;
+		}
+
+		posted.capture(full);
+	} catch (error) {
+		debug(
+			`Telemetry could not capture ${event}: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+}
+
+export async function flushTelemetry(): Promise<void> {
+	try {
+		await client?.flush();
+	} catch (error) {
+		debug(
+			`Telemetry could not flush: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+}
+
+export async function shutdownTelemetry(): Promise<void> {
+	try {
+		await client?._shutdown(FLUSH_TIMEOUT_MS);
+	} catch (error) {
+		debug(
+			`Telemetry could not shut down: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+}

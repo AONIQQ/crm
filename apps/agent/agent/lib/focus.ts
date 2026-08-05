@@ -1,3 +1,4 @@
+import { bumpCounter, COUNTERS } from "@crm/telemetry";
 import { defineState } from "eve/context";
 
 export const focus = defineState("crm.focus", () => ({
@@ -37,6 +38,8 @@ export function spend(units = 1): { ok: true } | { ok: false; reason: string } {
 	const { spent, budget } = focus.get();
 
 	if (spent + units > budget) {
+		void bumpCounter(COUNTERS.budgetExhausted);
+
 		return {
 			ok: false,
 			reason:

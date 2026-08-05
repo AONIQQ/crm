@@ -658,6 +658,35 @@ model AppSetting {
   @@map("appSetting")
 }
 
+model Install {
+  id String @id
+
+  uuid    String @unique
+  version String
+
+  lastRollupAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("install")
+}
+
+model TelemetryMilestone {
+  step      String   @id
+  reachedAt DateTime @default(now())
+
+  @@map("telemetryMilestone")
+}
+
+model TelemetryCounter {
+  name      String   @id
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("telemetryCounter")
+}
+
 model Organization {
   id          String       @id
   name        String

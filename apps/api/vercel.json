@@ -8,6 +8,10 @@
 		{
 			"path": "/internal/sync/rates",
 			"schedule": "0 6 * * *"
+		},
+		{
+			"path": "/internal/telemetry/rollup",
+			"schedule": "0 7 * * *"
 		}
 	]
 }

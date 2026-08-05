@@ -35,6 +35,7 @@ import type { GoogleRouter } from "../google/google.router";
 import type { SearchRouter } from "../search/search.router";
 import type { SettingsRouter } from "../settings/settings.router";
 import type { SsoRouter } from "../sso/sso.router";
+import type { TelemetryRouter } from "../telemetry/telemetry.router";
 import type { UsersRouter } from "../users/users.router";
 import type { WorkspaceRouter } from "../workspace/workspace.router";
 
@@ -217,6 +218,10 @@ const appRouter = t.router({
     remove: publicProcedure
       .input(deleteSsoProviderInput)
       .mutation(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<SsoRouter["remove"]>>)
+    }),
+  telemetry: t.router({
+    status: publicProcedure
+      .query(async () => "PLACEHOLDER_DO_NOT_REMOVE" as unknown as Awaited<ReturnType<TelemetryRouter["status"]>>)
     }),
   users: t.router({
     me: publicProcedure

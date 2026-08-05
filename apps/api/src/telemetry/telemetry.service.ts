@@ -1,0 +1,64 @@
+import {
+	crmVersion,
+	flushTelemetry,
+	onTelemetryProblem,
+	readInstall,
+	shutdownTelemetry,
+	syncVersion,
+	telemetryDisabled,
+} from "@crm/telemetry";
+import {
+	Injectable,
+	Logger,
+	type OnApplicationShutdown,
+	type OnModuleInit,
+} from "@nestjs/common";
+import { FunnelService } from "./funnel.service";
+
+@Injectable()
+export class TelemetryService implements OnModuleInit, OnApplicationShutdown {
+	private readonly logger = new Logger(TelemetryService.name);
+
+	constructor(private readonly funnel: FunnelService) {}
+
+	async onModuleInit(): Promise<void> {
+		onTelemetryProblem((message) => this.logger.debug({ message }));
+
+		if (telemetryDisabled()) {
+			this.logger.log({
+				message: "Anonymous usage telemetry is off for this install.",
+			});
+			return;
+		}
+
+		const install = await syncVersion(crmVersion() ?? undefined);
+
+		this.logger.log({
+			message: "Anonymous usage telemetry is on. See docs/telemetry.md.",
+			crmVersion: install?.version,
+		});
+
+		void this.funnel.sweep().catch(() => {});
+	}
+
+	async status(): Promise<{
+		enabled: boolean;
+		installId: string | null;
+		crmVersion: string | null;
+		lastSentAt: string | null;
+	}> {
+		const install = await readInstall();
+
+		return {
+			enabled: !telemetryDisabled(),
+			installId: install?.uuid ?? null,
+			crmVersion: install?.version ?? null,
+			lastSentAt: install?.lastRollupAt?.toISOString() ?? null,
+		};
+	}
+
+	async onApplicationShutdown(): Promise<void> {
+		await flushTelemetry();
+		await shutdownTelemetry();
+	}
+}
