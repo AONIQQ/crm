@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img alt="The CRM built for Agents — the companies list with an account open on its Agent tab" src="./docs/images/landing-hero.png">
+  <img alt="The companies list with an account open on its Agent tab" src="./docs/images/product-shot.png">
 </p>
 
 ---
