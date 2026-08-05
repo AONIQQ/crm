@@ -4,7 +4,8 @@ What this install reports about itself, in full. The decisions behind it are in
 `adrs/telemetry.md`; this file is the list.
 
 **Turn it off** with `CRM_TELEMETRY_DISABLED="1"` or `DO_NOT_TRACK=1` in the root `.env`, then
-restart. Settings → Telemetry shows your install ID and the same lists in the app.
+restart. This file is the full account of what is sent; there is no settings page for it, so
+this is the thing to read.
 
 **Where it goes** is not configurable and deliberately so: the project key and host are constants
 in `packages/telemetry/src/client.ts`. A `phc_` key is write-only — it sends events and reads

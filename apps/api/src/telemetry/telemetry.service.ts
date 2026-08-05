@@ -2,7 +2,6 @@ import {
 	crmVersion,
 	flushTelemetry,
 	onTelemetryProblem,
-	readInstall,
 	shutdownTelemetry,
 	syncVersion,
 	telemetryDisabled,
@@ -39,22 +38,6 @@ export class TelemetryService implements OnModuleInit, OnApplicationShutdown {
 		});
 
 		void this.funnel.sweep().catch(() => {});
-	}
-
-	async status(): Promise<{
-		enabled: boolean;
-		installId: string | null;
-		crmVersion: string | null;
-		lastSentAt: string | null;
-	}> {
-		const install = await readInstall();
-
-		return {
-			enabled: !telemetryDisabled(),
-			installId: install?.uuid ?? null,
-			crmVersion: install?.version ?? null,
-			lastSentAt: install?.lastRollupAt?.toISOString() ?? null,
-		};
 	}
 
 	async onApplicationShutdown(): Promise<void> {

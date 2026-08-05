@@ -20,7 +20,6 @@ const ITEMS: SettingsNavItem[] = [
 	{ title: "Members", href: `${ROOT}/members` },
 	{ title: "SSO", href: `${ROOT}/sso` },
 	{ title: "Connections", href: `${ROOT}/connections` },
-	{ title: "Telemetry", href: `${ROOT}/telemetry` },
 ];
 
 function isActive(href: string, root: string, pathname: string): boolean {
