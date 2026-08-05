@@ -199,9 +199,26 @@ the same two origins, so replay and heatmaps are declined for any other page tha
 key.
 
 **It shares the install's project, key and host**, and the two do not mix: the landing page
-sends `$pageview`, `$pageleave`, `$autocapture` and `$web_vitals` about a browser, an install
-sends `install_daily` and its funnel about a database. Install events set
-`$process_person_profile: false`, so they never become a person and never join one.
+sends `$pageview`, `$pageleave`, `$autocapture`, `$web_vitals` and the two CTA events below
+about a browser, an install sends `install_daily` and its funnel about a database. Install
+events set `$process_person_profile: false`, so they never become a person and never join one.
+
+### The two CTA events
+
+| Event | When |
+| --- | --- |
+| `setup_prompt_copied` | The setup prompt reached the clipboard — after the write resolves, so a refused clipboard is not counted as a copy |
+| `github_star_clicked` | The **Star on GitHub** button was clicked. A click on the way to GitHub, not a star: whether one was given happens on a page we cannot see |
+
+Both carry one property, `cta_location` — `hero` or `closing` — because both buttons appear
+twice on the page and which one a stranger reaches is the only interesting thing about them.
+Nothing else is attached.
+
+They go through `captureLanding` in `components/landing/analytics.tsx`, behind the same
+hostname gate and the same dynamic `import()` as `init`. On any other hostname the SDK is never
+fetched, so the click is not sent and then dropped — there is nothing there to send it. Both
+sends are fire-and-forget behind a swallowed handler; neither delays the copy or the
+navigation.
 
 **`anonymize_ips` stays on**, and that costs something here: PostHog drops the address before
 geoip runs, so the landing page has no country, region or city. That setting is what makes the
@@ -244,7 +261,7 @@ actually drops it. See `adrs/telemetry.md`.
 | `apps/api/src/telemetry` | The daily rollup, the funnel sweep, the cron route |
 | `apps/agent/agent/hooks/telemetry.ts` | Tool, turn and session failures |
 | `apps/app/lib/analytics.ts` | The two hostnames the landing page may report from |
-| `apps/app/components/landing/analytics.tsx` | The only `posthog-js` import in the repo, behind that gate and a dynamic `import()` |
+| `apps/app/components/landing/analytics.tsx` | The only `posthog-js` import in the repo, behind that gate and a dynamic `import()`. `init` on mount, `captureLanding` for the two CTA events |
 
 Nothing is instrumented inside `apps/agent/agent/sandbox`, which runs `deny-all` egress by
 design. A capture in there would hang and then fail.

@@ -8,6 +8,8 @@ import {
 import { useMountEffect } from "@crm/ui/hooks/use-mount-effect";
 import { analyticsAllowed } from "@/lib/analytics";
 
+export type CtaLocation = "hero" | "closing";
+
 export function LandingAnalytics() {
 	useMountEffect(() => {
 		if (!analyticsAllowed(window.location.hostname)) return;
@@ -24,4 +26,18 @@ export function LandingAnalytics() {
 	});
 
 	return null;
+}
+
+export function captureLanding(
+	event: "setup_prompt_copied" | "github_star_clicked",
+	location: CtaLocation,
+): void {
+	if (typeof window === "undefined") return;
+	if (!analyticsAllowed(window.location.hostname)) return;
+
+	import("posthog-js")
+		.then(({ default: posthog }) => {
+			posthog.capture(event, { cta_location: location });
+		})
+		.catch(() => {});
 }
