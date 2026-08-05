@@ -86,7 +86,11 @@ export class ConversionService {
 	pendingWhere(base: string): PrismaTypes.DealWhereInput {
 		return {
 			amount: { not: null },
-			OR: [{ baseAmount: null }, { baseCurrency: { not: base } }],
+			OR: [
+				{ baseAmount: null },
+				{ baseCurrency: null },
+				{ baseCurrency: { not: base } },
+			],
 		};
 	}
 

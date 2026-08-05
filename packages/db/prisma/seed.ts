@@ -484,7 +484,7 @@ const SEED_RATES: Record<string, number> = {
 
 const DEAL_CURRENCIES = ["USD", "USD", "USD", "EUR", "GBP", "JPY", "CAD"];
 
-let seedBaseIsUsd = true;
+let seedBase = "USD";
 
 async function seedRates(): Promise<number> {
 	const asOf = daysFromNow(-1);
@@ -496,12 +496,12 @@ async function seedRates(): Promise<number> {
 		select: { reportingCurrency: true },
 	});
 
-	seedBaseIsUsd = (setting.reportingCurrency ?? "USD").toUpperCase() === "USD";
+	seedBase = (setting.reportingCurrency ?? "USD").trim().toUpperCase() || "USD";
 
-	if (!seedBaseIsUsd) {
+	if (seedBase !== "USD") {
 		console.log(
-			`Reporting currency is ${setting.reportingCurrency} — seeding amounts ` +
-				"without a converted figure; the rates cron will fill them in.",
+			`Reporting currency is ${seedBase} — seeding a converted figure only for ` +
+				`deals already in ${seedBase}; the rates cron converts the rest.`,
 		);
 	}
 
@@ -534,15 +534,19 @@ function money(usdAmount: number, currency: string) {
 	const places = currency === "JPY" ? 0 : 2;
 	const amount = Number((usdAmount / rate).toFixed(places));
 
-	if (!seedBaseIsUsd) {
-		return { amount, currency, baseAmount: null, fxRate: null };
-	}
+	const converted =
+		currency === seedBase
+			? { baseAmount: amount, fxRate: 1 }
+			: seedBase === "USD"
+				? { baseAmount: Number((amount * rate).toFixed(2)), fxRate: rate }
+				: null;
 
 	return {
 		amount,
 		currency,
-		baseAmount: Number((amount * rate).toFixed(2)),
-		fxRate: rate,
+		baseAmount: converted?.baseAmount ?? null,
+		baseCurrency: converted ? seedBase : null,
+		fxRate: converted?.fxRate ?? null,
 	};
 }
 
@@ -585,14 +589,13 @@ async function seedDeals(
 					stage,
 					stageChangedAt,
 					...(() => {
-						const { amount, currency, baseAmount, fxRate } = money(
-							integer(6, 90) * 1000,
-							pick(DEAL_CURRENCIES),
-						);
+						const { amount, currency, baseAmount, baseCurrency, fxRate } =
+							money(integer(6, 90) * 1000, pick(DEAL_CURRENCIES));
 						return {
 							amount,
 							currency,
 							baseAmount,
+							baseCurrency,
 							fxRate,
 							fxRateAt: fxRate === null ? null : daysFromNow(-1),
 						};

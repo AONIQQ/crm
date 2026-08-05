@@ -273,6 +273,43 @@ describe("a converted figure knows which currency it is in", () => {
 		await db.deal.delete({ where: { id: deal.id } });
 	});
 
+	it("never lets a converted figure with no currency on it go unnoticed", async () => {
+		await writeReportingCurrency(db, "USD");
+		await conversion.rerateAll();
+
+		const before = await pipelineCents();
+
+		const orphan = await db.deal.create({
+			data: {
+				name: `Orphan ${suffix}`,
+				companyId,
+				ownerId: userId,
+				amount: 50_000,
+				currency: "USD",
+				baseAmount: 50_000,
+				fxRate: 1,
+				fxRateAt: new Date(),
+			},
+			select: { id: true },
+		});
+
+		expect(await pipelineCents()).toBe(before);
+
+		const summary = await dashboard.summary(userId, { scope: "me" });
+		expect(summary.unconverted.count).toBe(1);
+
+		await conversion.fillMissing();
+
+		const healed = await db.deal.findUnique({
+			where: { id: orphan.id },
+			select: { baseCurrency: true },
+		});
+		expect(healed?.baseCurrency).toBe("USD");
+		expect(await pipelineCents()).toBe(before + 5_000_000);
+
+		await db.deal.delete({ where: { id: orphan.id } });
+	});
+
 	it("counts a currency once however it was cased or padded", async () => {
 		const rows = await Promise.all(
 			[" usd ", "Usd"].map((currency, index) =>

@@ -574,6 +574,21 @@ So there are now two amounts on a deal, and only one of them is ever summed.
   - **It is composed with `AND`, never spread.** `pendingWhere` contains an `OR`,
     and the deals list's own `where` already carries one from the search filter —
     spreading the two would silently drop the caller's search.
+  - **`pendingWhere` matches a null `baseCurrency` explicitly**, and leaving that
+    clause out was a hole rather than a rounding error. `{ baseCurrency: { not:
+    base } }` compiles to `baseCurrency <> 'USD'`, which is `NULL` — not true —
+    for a row where the column is null. So a row carrying a `baseAmount` with no
+    currency beside it was excluded from every total by `countedWhere` *and*
+    invisible to the disclosure: it did not appear anywhere, and nothing would
+    ever repair it.
+  - **Anything that writes `baseAmount` writes `baseCurrency` in the same
+    statement.** `ConversionService` is the only writer in the app, but
+    `packages/db/prisma/seed.ts` is a second one, and it was setting the amount
+    and not the currency — so a freshly seeded clone had twenty-three deals with
+    converted figures and a pipeline of zero. The seed also converts at an
+    identity rate when a deal is already in the reporting currency, which needs
+    no rate table at all; only a genuine cross-currency deal under a non-USD base
+    is left for the cron.
 
 **The rate is resolved once, at the moment the amount is set, and then frozen.**
 `DealsService.create` and `.update` call `ConversionService.dealFields` whenever
