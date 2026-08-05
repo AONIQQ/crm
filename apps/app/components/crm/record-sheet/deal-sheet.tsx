@@ -1,7 +1,7 @@
 "use client";
 
 import UserMultiple from "@carbon/icons-react/es/UserMultiple";
-import { CURRENCIES } from "@crm/db/currency";
+import { CURRENCIES, normalizeCurrency } from "@crm/db/currency";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import {
 	EntityLogo,
@@ -54,6 +54,10 @@ const CURRENCY_OPTIONS = CURRENCIES.map((entry) => ({
 	label: `${entry.code} · ${entry.name}`,
 }));
 
+function dealCurrency(currency: string) {
+	return normalizeCurrency(currency) || currency;
+}
+
 function currencyOptions(currency: string) {
 	if (CURRENCY_OPTIONS.some((option) => option.value === currency)) {
 		return CURRENCY_OPTIONS;
@@ -66,14 +70,16 @@ function currencyOptions(currency: string) {
 }
 
 function ReportedValue({ deal }: { deal: Deal }) {
-	if (deal.currency === deal.reportingCurrency) return null;
+	const currency = dealCurrency(deal.currency);
+
+	if (currency === deal.reportingCurrency) return null;
 	if (deal.amountCents === null) return null;
 
 	return (
 		<DetailSheetProperty label={`In ${deal.reportingCurrency}`}>
 			{deal.baseAmountCents === null ? (
 				<span className="text-muted-foreground">
-					No {deal.currency} rate — left out of totals
+					No {currency} rate — left out of totals
 				</span>
 			) : (
 				<span className="tabular-nums text-muted-foreground">
@@ -183,7 +189,7 @@ export function DealSheet({ dealId }: { dealId: string }) {
 								<EmptyCellValue />
 							) : (
 								<span className="tabular-nums">
-									{formatMoney(deal.amountCents, deal.currency)}
+									{formatMoney(deal.amountCents, dealCurrency(deal.currency))}
 								</span>
 							)}
 						</DetailSheetStat>
@@ -227,6 +233,8 @@ function DealOverview({ deal }: { deal: Deal }) {
 	const save = (data: Parameters<typeof update.mutate>[0]["data"]) =>
 		update.mutate({ id: deal.id, data });
 
+	const currency = dealCurrency(deal.currency);
+
 	const isSaving = savingField(update);
 
 	return (
@@ -260,13 +268,13 @@ function DealOverview({ deal }: { deal: Deal }) {
 							save({ amountCents: Math.round(parsed * 100) });
 						}}
 						render={(value) =>
-							formatMoney(Math.round(Number(value) * 100), deal.currency)
+							formatMoney(Math.round(Number(value) * 100), currency)
 						}
 					/>
 					<InlineSelectField
 						label="Currency"
-						value={deal.currency}
-						options={currencyOptions(deal.currency)}
+						value={currency}
+						options={currencyOptions(currency)}
 						onSave={(currency) => save({ currency })}
 					/>
 					<ReportedValue deal={deal} />
