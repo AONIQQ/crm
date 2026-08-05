@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import {
 	AGENT_URL,
 	bridgeConfigured,
@@ -5,9 +6,9 @@ import {
 } from "@/lib/agent-bridge";
 import { getSession } from "@/lib/session";
 
-export const dynamic = "force-dynamic";
-
 async function handler(request: Request): Promise<Response> {
+	await connection();
+
 	if (!bridgeConfigured()) {
 		return Response.json(
 			{ error: "The research agent is not configured for this install." },
