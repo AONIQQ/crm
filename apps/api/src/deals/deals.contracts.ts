@@ -1,7 +1,17 @@
 import { DealStage } from "@crm/db";
-import { isCurrencyCode } from "@crm/db/currency";
 import { z } from "zod";
+import { currencyCode } from "../currency/currency.contracts";
 import { listInput } from "../trpc/list-input";
+
+export const MAX_AMOUNT_CENTS = 99_999_999_999_999;
+
+const amountCents = z
+	.number()
+	.int()
+	.min(0)
+	.max(MAX_AMOUNT_CENTS, "That amount is too large to record.")
+	.nullable()
+	.optional();
 
 export const CLOSING_WINDOWS = [
 	"overdue",
@@ -31,13 +41,8 @@ export const dealCreateInput = z.object({
 	companyId: z.string().min(1, "A deal belongs to a company."),
 	ownerId: z.string().min(1, "A deal needs an owner."),
 	stage: stageEnum.optional(),
-	amountCents: z.number().int().min(0).nullable().optional(),
-	currency: z
-		.string()
-		.trim()
-		.length(3, "A currency code is three letters, like USD.")
-		.refine(isCurrencyCode, "That is not a currency this CRM can convert.")
-		.optional(),
+	amountCents,
+	currency: currencyCode.optional(),
 	expectedCloseDate: z.string().nullable().optional(),
 });
 
@@ -48,13 +53,8 @@ const dealUpdateInput = z.object({
 	description: z.string().nullable().optional(),
 	companyId: z.string().optional(),
 	ownerId: z.string().optional(),
-	amountCents: z.number().int().min(0).nullable().optional(),
-	currency: z
-		.string()
-		.trim()
-		.length(3, "A currency code is three letters, like USD.")
-		.refine(isCurrencyCode, "That is not a currency this CRM can convert.")
-		.optional(),
+	amountCents,
+	currency: currencyCode.optional(),
 	expectedCloseDate: z.string().nullable().optional(),
 });
 

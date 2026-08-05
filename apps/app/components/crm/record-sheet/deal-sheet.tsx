@@ -256,6 +256,7 @@ function DealOverview({ deal }: { deal: Deal }) {
 						label="Currency"
 						value={deal.currency}
 						options={CURRENCY_OPTIONS}
+						placeholder={`${deal.currency} — no longer supported`}
 						onSave={(currency) => save({ currency })}
 					/>
 					<ReportedValue deal={deal} />

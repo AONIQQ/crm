@@ -14,6 +14,7 @@ export interface ResolvedRate {
 
 export interface Conversion {
 	baseAmount: Prisma.Decimal;
+	baseCurrency: string;
 	fxRate: Prisma.Decimal;
 	fxRateAt: Date;
 	origin: RateOrigin;
@@ -58,12 +59,15 @@ export async function resolveRate(
 export function applyRate(
 	amount: Prisma.Decimal,
 	rate: ResolvedRate,
-	baseCurrency: string,
+	base: string,
 ): Conversion {
+	const baseCurrency = normalizeCurrency(base);
+
 	return {
 		baseAmount: amount
 			.times(rate.rate)
 			.toDecimalPlaces(minorUnitsOf(baseCurrency)),
+		baseCurrency,
 		fxRate: rate.rate,
 		fxRateAt: rate.asOf,
 		origin: rate.origin,

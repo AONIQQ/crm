@@ -1,6 +1,14 @@
 import { Inject } from "@nestjs/common";
-import { Input, Mutation, Query, Router, UseMiddlewares } from "nestjs-trpc";
+import {
+	Ctx,
+	Input,
+	Mutation,
+	Query,
+	Router,
+	UseMiddlewares,
+} from "nestjs-trpc";
 import type { z } from "zod";
+import type { AuthedTrpcContext } from "../trpc/context.types";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import {
 	removeManualRateInput,
@@ -17,31 +25,36 @@ export class CurrencyRouter {
 	) {}
 
 	@Query()
-	async settings() {
-		return this.currency.settings();
+	async settings(@Ctx() ctx: AuthedTrpcContext) {
+		return this.currency.settings(ctx.user.id);
 	}
 
 	@Mutation({ input: setReportingCurrencyInput })
 	async setReportingCurrency(
+		@Ctx() ctx: AuthedTrpcContext,
 		@Input() input: z.infer<typeof setReportingCurrencyInput>,
 	) {
-		return this.currency.setReportingCurrency(input.currency);
+		return this.currency.setReportingCurrency(ctx.user.id, input.currency);
 	}
 
 	@Mutation({ input: setManualRateInput })
-	async setManualRate(@Input() input: z.infer<typeof setManualRateInput>) {
-		return this.currency.setManualRate(input.currency, input.rate);
+	async setManualRate(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof setManualRateInput>,
+	) {
+		return this.currency.setManualRate(ctx.user.id, input.currency, input.rate);
 	}
 
 	@Mutation({ input: removeManualRateInput })
 	async removeManualRate(
+		@Ctx() ctx: AuthedTrpcContext,
 		@Input() input: z.infer<typeof removeManualRateInput>,
 	) {
-		return this.currency.removeManualRate(input.currency);
+		return this.currency.removeManualRate(ctx.user.id, input.currency);
 	}
 
 	@Mutation()
-	async refreshRates() {
-		return this.currency.refresh();
+	async refreshRates(@Ctx() ctx: AuthedTrpcContext) {
+		return this.currency.refresh(ctx.user.id);
 	}
 }

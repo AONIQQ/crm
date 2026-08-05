@@ -47,20 +47,29 @@ export class DashboardService {
 		const trendStart = monthStart(now, -(TREND_MONTHS - 1));
 		const rateStart = new Date(now.getTime() - RATE_WINDOW_DAYS * DAY_MS);
 
+		const base = await this.conversion.reportingCurrency();
+		const counted = this.conversion.countedWhere(base);
+
 		const [
 			openByStage,
+			openValueByStage,
 			recentDeals,
 			closingThisMonthTotals,
 			biggestOpen,
 			overdueTasks,
 			recentActivity,
-			reportingCurrency,
 			unconverted,
 		] = await Promise.all([
 			this.db.deal.groupBy({
 				by: ["stage"],
 				where: { ...owned, stage: { in: [...OPEN_DEAL_STAGES] } },
 				_count: { _all: true },
+			}),
+			this.db.deal.groupBy({
+				by: ["stage"],
+				where: {
+					AND: [{ ...owned, stage: { in: [...OPEN_DEAL_STAGES] } }, counted],
+				},
 				_sum: { baseAmount: true },
 			}),
 			this.db.deal.findMany({
@@ -73,6 +82,7 @@ export class DashboardService {
 				},
 				select: {
 					baseAmount: true,
+					baseCurrency: true,
 					stage: true,
 					createdAt: true,
 					closedAt: true,
@@ -80,9 +90,14 @@ export class DashboardService {
 			}),
 			this.db.deal.aggregate({
 				where: {
-					...owned,
-					stage: { in: [...OPEN_DEAL_STAGES] },
-					expectedCloseDate: { gte: startOfMonth, lt: startOfNextMonth },
+					AND: [
+						{
+							...owned,
+							stage: { in: [...OPEN_DEAL_STAGES] },
+							expectedCloseDate: { gte: startOfMonth, lt: startOfNextMonth },
+						},
+						counted,
+					],
 				},
 				_count: { _all: true },
 				_sum: { baseAmount: true },
@@ -148,16 +163,16 @@ export class DashboardService {
 					deal: { select: { id: true, name: true } },
 				},
 			}),
-			this.conversion.reportingCurrency(),
 			this.conversion.unconverted(owned),
 		]);
 
 		const stages = OPEN_DEAL_STAGES.map((stage) => {
 			const group = openByStage.find((row) => row.stage === stage);
+			const value = openValueByStage.find((row) => row.stage === stage);
 			return {
 				stage: stage as DealStage,
 				count: group?._count._all ?? 0,
-				valueCents: toCents(group?._sum.baseAmount ?? null) ?? 0,
+				valueCents: toCents(value?._sum.baseAmount ?? null) ?? 0,
 			};
 		});
 
@@ -176,7 +191,8 @@ export class DashboardService {
 		let cycleDays = 0;
 
 		for (const deal of recentDeals) {
-			const cents = toCents(deal.baseAmount) ?? 0;
+			const cents =
+				deal.baseCurrency === base ? (toCents(deal.baseAmount) ?? 0) : 0;
 
 			const created = trend[monthKey(deal.createdAt) - firstBucket];
 			if (created) created.created += cents;
@@ -212,7 +228,7 @@ export class DashboardService {
 
 		return {
 			scope: input.scope,
-			reportingCurrency,
+			reportingCurrency: base,
 			unconverted,
 			pipeline: {
 				stages,

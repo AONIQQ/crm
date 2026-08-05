@@ -1,7 +1,7 @@
 import { isCurrencyCode } from "@crm/db/currency";
 import { z } from "zod";
 
-const currencyCode = z
+export const currencyCode = z
 	.string()
 	.trim()
 	.length(3, "A currency code is three letters, like USD.")

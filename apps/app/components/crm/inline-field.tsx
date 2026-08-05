@@ -96,6 +96,7 @@ export function InlineField({
 			variant="ghost"
 			size="sm"
 			className={CONTROL}
+			disabled={saving}
 			onClick={() => {
 				setDraft(value ?? "");
 				setEditing(true);
@@ -197,6 +198,7 @@ export function InlineTextArea({
 			size="sm"
 			aria-label={label}
 			className={BLOCK_CONTROL}
+			disabled={saving}
 			onClick={() => {
 				setDraft(value ?? "");
 				setEditing(true);

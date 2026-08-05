@@ -85,8 +85,8 @@ function CreateDealForm({ companyId }: { companyId?: string }) {
 	const currencies = useQuery(trpc.currency.settings.queryOptions());
 
 	const resolvedOwner = ownerId || me.data?.id || UNSET;
-	const resolvedCurrency =
-		currency || currencies.data?.reportingCurrency || "USD";
+	const workspaceCurrency = currencies.data?.reportingCurrency;
+	const resolvedCurrency = currency || workspaceCurrency || "USD";
 
 	const create = useMutation(
 		trpc.deals.create.mutationOptions({
@@ -134,7 +134,7 @@ function CreateDealForm({ companyId }: { companyId?: string }) {
 							amountCents: Number.isFinite(parsed)
 								? Math.round(parsed * 100)
 								: null,
-							currency: resolvedCurrency,
+							currency: currency || workspaceCurrency,
 							expectedCloseDate: closeDate || null,
 						});
 					}}

@@ -1,0 +1,13 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"crons": [
+		{
+			"path": "/internal/sync/google",
+			"schedule": "*/5 * * * *"
+		},
+		{
+			"path": "/internal/sync/rates",
+			"schedule": "0 6 * * *"
+		}
+	]
+}

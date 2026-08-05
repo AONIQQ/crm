@@ -554,6 +554,26 @@ So there are now two amounts on a deal, and only one of them is ever summed.
   the only column any total, chart, average or sort may touch.** `fxRate` and
   `fxRateAt` sit beside it saying how it got there, so a quarter's number can be
   explained a year later.
+- **`baseCurrency` says which currency `baseAmount` is denominated in, and
+  without it the invariant is unprovable.** Re-rating is a read of the distinct
+  currencies followed by an `UPDATE` per currency — not one atomic statement — so
+  a deal written concurrently with a reporting-currency change can commit a
+  figure converted against the *old* base. Nothing about the row said so: a
+  number with no currency attached cannot be told apart from a correct one, and
+  it would have sat in the pipeline total forever.
+  - **Every money aggregate filters on it**, through `countedWhere(base)`. A row
+    whose `baseCurrency` is not the current one is excluded rather than summed,
+    which is what stops the wrong figure being reported for the window before
+    anything fixes it. Counts are deliberately *not* filtered — a deal with no
+    amount is still an open deal — so the stage groups read their counts from one
+    query and their sums from another.
+  - **`pendingWhere(base)` is the other half**: null `baseAmount` *or* a
+    `baseCurrency` that is not the current one. It is what `unconverted` reports
+    and what `fillMissing()` repairs, so the daily cron heals a straggler and the
+    disclosure and the totals never disagree about which rows were counted.
+  - **It is composed with `AND`, never spread.** `pendingWhere` contains an `OR`,
+    and the deals list's own `where` already carries one from the search filter —
+    spreading the two would silently drop the caller's search.
 
 **The rate is resolved once, at the moment the amount is set, and then frozen.**
 `DealsService.create` and `.update` call `ConversionService.dealFields` whenever
@@ -597,6 +617,18 @@ call site — one place to be wrong instead of six.
   **Settings → Currencies** and everything downstream is identical.
 - **`resolveRate` refuses a rate of zero or less** instead of converting with
   it. A `baseAmount` of 0 is indistinguishable from a free deal.
+- **Re-rating groups by the raw column and then works in normalised codes.**
+  `currency` was free text once, so ` usd ` and `USD` are two groups that mean
+  one currency — and each pass matches on `upper(btrim(...))`, so every pass
+  updated every variant. The counts came back multiples too high (80 rows
+  reported for 28) and the same rows were written repeatedly. The codes are
+  deduplicated through a `Set` before any rate is resolved.
+- **An amount has an upper bound, and it is the column's.** `MAX_AMOUNT_CENTS`
+  in `deals.contracts.ts` is what `Decimal(14, 2)` can hold; without it a large
+  enough amount failed as a Postgres numeric overflow — a 500 on input that
+  passed validation. `baseAmount` is `Decimal(24, 4)` rather than `(18, 4)` for
+  the same reason from the other direction: the *product* of a legal amount and
+  a legal rate has to fit.
 - **The reporting currency is a row, not a variable** —
   `AppSetting.reportingCurrency`, read through `readReportingCurrency` in
   [`@crm/db/settings`](../packages/db/src/settings.ts), which is the only reader
@@ -672,6 +704,15 @@ and needs no account, which is what keeps it out of `.env` entirely.
   ceiling stays low enough for the interactive Refresh button on the settings
   page to be worth pressing.
 
+**Changing how money is reported is an owner-or-admin action.** `canManageCurrency`
+in [`@crm/auth`](../packages/auth/src/organization.ts) sits beside
+`canRenameWorkspace` and `canConfigureSso` and answers the same way, and
+`CurrencyService` enforces it on every mutation while `settings` returns
+`canManage` so the page disables the controls it would refuse — the button and
+the 403 cannot disagree. `AuthMiddleware` alone was not enough here: it proves
+who is asking, and this router can re-rate every deal in the CRM, which is not
+something any member should be able to do to everyone else's numbers.
+
 **The fetcher is in the API, and that is a deliberate exception to the rule at
 the top of this file.** A daily rate is not intelligence: it decides nothing
 about a person or a company, there is no confidence model, no identity to match
@@ -688,6 +729,12 @@ rate looks wrong — that part belongs in `apps/agent`.
   closed when the secret is unset**. It refreshes and then calls
   `fillMissing()`, so one daily hit both updates the rates and rescues the deals
   that were waiting on them.
+- **A route is not a schedule.** `apps/api/vercel.json` is what actually makes
+  either cron run, and it had been deleted — so the Gmail and Calendar sync had
+  not been firing on Vercel either, while this file went on documenting a
+  `*/5 * * * *` entry that no longer existed. Adding an internal route means
+  adding it there in the same change; nothing else in the repo will tell you it
+  is dead.
 - **An unreachable provider is not an error.** `RatesService.refresh` warns and
   returns `{ ok: false }`; nothing throws, no deal changes, and the manual rates
   keep working. Only the *interactive* refresh on the settings page turns that

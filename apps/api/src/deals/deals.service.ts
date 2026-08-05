@@ -95,44 +95,38 @@ export class DealsService {
 		const { skip, take } = paginate(input);
 
 		const openWhere = { ...where, stage: { in: [...OPEN_DEAL_STAGES] } };
+		const base = await this.conversion.reportingCurrency();
 
-		const [
-			rows,
-			total,
-			facetCounts,
-			openValue,
-			reportingCurrency,
-			unconverted,
-		] = await Promise.all([
-			this.db.deal.findMany({
-				where,
-				skip,
-				take,
-				orderBy: resolveOrderBy(input, SORTABLE, [{ createdAt: "desc" }]),
-				select: {
-					id: true,
-					name: true,
-					stage: true,
-					amount: true,
-					currency: true,
-					baseAmount: true,
-					expectedCloseDate: true,
-					closedAt: true,
-					company: { select: COMPANY_SELECT },
-					owner: { select: OWNER_SELECT },
-					lastActivityAt: true,
-					createdAt: true,
-				},
-			}),
-			this.db.deal.count({ where }),
-			this.facetCounts(input),
-			this.db.deal.aggregate({
-				where: openWhere,
-				_sum: { baseAmount: true },
-			}),
-			this.conversion.reportingCurrency(),
-			this.conversion.unconverted(openWhere),
-		]);
+		const [rows, total, facetCounts, openValue, unconverted] =
+			await Promise.all([
+				this.db.deal.findMany({
+					where,
+					skip,
+					take,
+					orderBy: resolveOrderBy(input, SORTABLE, [{ createdAt: "desc" }]),
+					select: {
+						id: true,
+						name: true,
+						stage: true,
+						amount: true,
+						currency: true,
+						baseAmount: true,
+						expectedCloseDate: true,
+						closedAt: true,
+						company: { select: COMPANY_SELECT },
+						owner: { select: OWNER_SELECT },
+						lastActivityAt: true,
+						createdAt: true,
+					},
+				}),
+				this.db.deal.count({ where }),
+				this.facetCounts(input),
+				this.db.deal.aggregate({
+					where: { AND: [openWhere, this.conversion.countedWhere(base)] },
+					_sum: { baseAmount: true },
+				}),
+				this.conversion.unconverted(openWhere),
+			]);
 
 		return {
 			rows: rows.map(
@@ -157,7 +151,7 @@ export class DealsService {
 			total,
 			facetCounts,
 			openValueCents: toCents(openValue._sum.baseAmount),
-			reportingCurrency,
+			reportingCurrency: base,
 			unconverted,
 		} satisfies ListResult<unknown> & {
 			openValueCents: number | null;

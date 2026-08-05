@@ -113,10 +113,17 @@ export function CurrencySettings() {
 
 	if (!settings.data) return null;
 
-	const { reportingCurrency, refreshedAt, rates, inUse, unconverted } =
-		settings.data;
+	const {
+		reportingCurrency,
+		refreshedAt,
+		rates,
+		inUse,
+		unconverted,
+		canManage,
+	} = settings.data;
 
 	const busy =
+		!canManage ||
 		setBase.isPending ||
 		setRate.isPending ||
 		removeRate.isPending ||
@@ -153,8 +160,9 @@ export function CurrencySettings() {
 							</SelectContent>
 						</Select>
 						<FieldDescription>
-							Changing this re-converts every deal at today's rates. Figures
-							already reported will move.
+							{canManage
+								? "Changing this re-converts every deal at today's rates. Figures already reported will move."
+								: "Only an owner or an admin can change how money is reported."}
 						</FieldDescription>
 					</Field>
 				</CardContent>

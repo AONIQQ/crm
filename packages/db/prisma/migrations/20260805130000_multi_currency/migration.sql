@@ -37,9 +37,16 @@ CREATE INDEX "deal_baseAmount_idx" ON "deal"("baseAmount");
 -- CreateIndex
 CREATE INDEX "deal_currency_idx" ON "deal"("currency");
 
--- Backfill: every deal already recorded is in the reporting currency, because
--- until now there was only one. Skipping this would drop every existing deal
--- out of every total the moment this migration lands.
+-- Backfill: convert the rows we can account for without inventing a rate, which
+-- is the ones already denominated in the reporting currency. Skipping this would
+-- drop every existing deal out of every total the moment this migration lands.
+--
+-- Rows in any other currency are deliberately left null rather than counted at
+-- 1:1 — the currency column has been free text until now, so a deal really can
+-- be sitting there in EUR, and calling that figure dollars would be worse than
+-- leaving it out. A null is excluded from every total AND reported by the
+-- unconverted disclosure, and the first rates refresh picks it up through
+-- fillMissing().
 UPDATE "deal"
 SET "baseAmount" = "amount",
     "fxRate" = 1,

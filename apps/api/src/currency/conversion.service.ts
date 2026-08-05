@@ -2,8 +2,8 @@ import type { Db, Prisma as PrismaTypes } from "@crm/db";
 import { Prisma } from "@crm/db";
 import { minorUnitsOf, normalizeCurrency } from "@crm/db/currency";
 import {
-	applyRate,
 	type Conversion,
+	convertToBase,
 	type ResolvedRate,
 	resolveRate,
 } from "@crm/db/fx";
@@ -13,6 +13,7 @@ import { InjectDatabase } from "../database/database.constants";
 
 export interface DealFxFields {
 	baseAmount: PrismaTypes.Decimal | null;
+	baseCurrency: string | null;
 	fxRate: PrismaTypes.Decimal | null;
 	fxRateAt: Date | null;
 }
@@ -47,12 +48,12 @@ export class ConversionService {
 		amount: PrismaTypes.Decimal | null,
 		currency: string,
 	): Promise<Conversion | null> {
-		if (amount === null) return null;
-
-		const base = await this.reportingCurrency();
-		const rate = await resolveRate(this.db, base, currency);
-
-		return rate ? applyRate(amount, rate, base) : null;
+		return convertToBase(
+			this.db,
+			amount,
+			currency,
+			await this.reportingCurrency(),
+		);
 	}
 
 	async dealFields(
@@ -62,22 +63,41 @@ export class ConversionService {
 		const converted = await this.convert(amount, currency);
 
 		if (!converted) {
-			return { baseAmount: null, fxRate: null, fxRateAt: null };
+			return {
+				baseAmount: null,
+				baseCurrency: null,
+				fxRate: null,
+				fxRateAt: null,
+			};
 		}
 
 		return {
 			baseAmount: converted.baseAmount,
+			baseCurrency: converted.baseCurrency,
 			fxRate: converted.fxRate,
 			fxRateAt: converted.fxRateAt,
+		};
+	}
+
+	countedWhere(base: string): PrismaTypes.DealWhereInput {
+		return { baseAmount: { not: null }, baseCurrency: base };
+	}
+
+	pendingWhere(base: string): PrismaTypes.DealWhereInput {
+		return {
+			amount: { not: null },
+			OR: [{ baseAmount: null }, { baseCurrency: { not: base } }],
 		};
 	}
 
 	async unconverted(
 		where: PrismaTypes.DealWhereInput = {},
 	): Promise<Unconverted> {
+		const base = await this.reportingCurrency();
+
 		const rows = await this.db.deal.groupBy({
 			by: ["currency"],
-			where: { ...where, amount: { not: null }, baseAmount: null },
+			where: { AND: [where, this.pendingWhere(base)] },
 			_count: { _all: true },
 		});
 
@@ -103,33 +123,31 @@ export class ConversionService {
 
 		const groups = await this.db.deal.groupBy({
 			by: ["currency"],
-			where: {
-				amount: { not: null },
-				...(onlyMissing ? { baseAmount: null } : {}),
-			},
+			where: onlyMissing ? this.pendingWhere(base) : { amount: { not: null } },
 			_count: { _all: true },
 		});
+
+		const codes = [
+			...new Set(groups.map((group) => normalizeCurrency(group.currency))),
+		];
 
 		const places = minorUnitsOf(base);
 		let converted = 0;
 		let cleared = 0;
 		const missing: string[] = [];
 
-		for (const group of groups) {
-			const code = normalizeCurrency(group.currency);
+		for (const code of codes) {
 			const rate = await resolveRate(this.db, base, code);
 
 			if (!rate) {
 				missing.push(code);
 
-				if (!onlyMissing) {
-					cleared += await this.clear(code);
-				}
+				cleared += await this.clear(code);
 
 				continue;
 			}
 
-			converted += await this.write(code, rate, places, onlyMissing);
+			converted += await this.write(base, code, rate, places, onlyMissing);
 		}
 
 		this.logger.log({
@@ -146,6 +164,7 @@ export class ConversionService {
 	}
 
 	private async write(
+		base: string,
 		code: string,
 		rate: ResolvedRate,
 		places: number,
@@ -154,12 +173,13 @@ export class ConversionService {
 		const value = new Prisma.Decimal(rate.rate).toString();
 
 		const filter = onlyMissing
-			? Prisma.sql`AND "baseAmount" IS NULL`
+			? Prisma.sql`AND ("baseAmount" IS NULL OR "baseCurrency" IS DISTINCT FROM ${base})`
 			: Prisma.empty;
 
 		return this.db.$executeRaw`
 			UPDATE "deal"
 			SET "baseAmount" = ROUND("amount" * ${value}::numeric, ${places}::int),
+			    "baseCurrency" = ${base},
 			    "fxRate" = ${value}::numeric,
 			    "fxRateAt" = ${rate.asOf}
 			WHERE "amount" IS NOT NULL
@@ -171,7 +191,10 @@ export class ConversionService {
 	private async clear(code: string): Promise<number> {
 		return this.db.$executeRaw`
 			UPDATE "deal"
-			SET "baseAmount" = NULL, "fxRate" = NULL, "fxRateAt" = NULL
+			SET "baseAmount" = NULL,
+			    "baseCurrency" = NULL,
+			    "fxRate" = NULL,
+			    "fxRateAt" = NULL
 			WHERE upper(btrim("currency")) = ${code}
 			  AND "baseAmount" IS NOT NULL
 		`;

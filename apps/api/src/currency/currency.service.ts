@@ -1,3 +1,9 @@
+import {
+	canManageCurrency,
+	isWorkspaceRole,
+	WORKSPACE_ID,
+	type WorkspaceRole,
+} from "@crm/auth";
 import type { Db } from "@crm/db";
 import { Prisma, RateSource } from "@crm/db";
 import {
@@ -7,7 +13,12 @@ import {
 	normalizeCurrency,
 } from "@crm/db/currency";
 import { writeReportingCurrency } from "@crm/db/settings";
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import {
+	BadRequestException,
+	ForbiddenException,
+	Injectable,
+	Logger,
+} from "@nestjs/common";
 import { InjectDatabase } from "../database/database.constants";
 import { ConversionService, type Unconverted } from "./conversion.service";
 import { RatesService } from "./rates.service";
@@ -36,6 +47,7 @@ export interface CurrencySettings {
 	inUse: CurrencyInUse[];
 	unconverted: Unconverted;
 	catalog: CurrencyMeta[];
+	canManage: boolean;
 }
 
 @Injectable()
@@ -48,7 +60,7 @@ export class CurrencyService {
 		private readonly rates: RatesService,
 	) {}
 
-	async settings(): Promise<CurrencySettings> {
+	async settings(actingUserId: string): Promise<CurrencySettings> {
 		const reportingCurrency = await this.conversion.reportingCurrency();
 
 		const [rows, refreshedAt, unconverted, usage] = await Promise.all([
@@ -121,14 +133,41 @@ export class CurrencyService {
 				),
 			unconverted,
 			catalog: [...CURRENCIES],
+			canManage: canManageCurrency(await this.roleOf(actingUserId)),
 		};
 	}
 
-	async setReportingCurrency(code: string): Promise<CurrencySettings> {
+	private async roleOf(userId: string): Promise<WorkspaceRole | null> {
+		const member = await this.db.member.findUnique({
+			where: {
+				organizationId_userId: { organizationId: WORKSPACE_ID, userId },
+			},
+			select: { role: true },
+		});
+
+		if (!member) return null;
+
+		return isWorkspaceRole(member.role) ? member.role : "member";
+	}
+
+	private async requireManager(userId: string): Promise<void> {
+		if (!canManageCurrency(await this.roleOf(userId))) {
+			throw new ForbiddenException(
+				"Only an owner or an admin can change how money is reported.",
+			);
+		}
+	}
+
+	async setReportingCurrency(
+		actingUserId: string,
+		code: string,
+	): Promise<CurrencySettings> {
+		await this.requireManager(actingUserId);
+
 		const currency = normalizeCurrency(code);
 		const current = await this.conversion.reportingCurrency();
 
-		if (currency === current) return this.settings();
+		if (currency === current) return this.settings(actingUserId);
 
 		await writeReportingCurrency(this.db, currency);
 
@@ -145,10 +184,16 @@ export class CurrencyService {
 			missing: rerated.missing,
 		});
 
-		return this.settings();
+		return this.settings(actingUserId);
 	}
 
-	async setManualRate(code: string, rate: number): Promise<CurrencySettings> {
+	async setManualRate(
+		actingUserId: string,
+		code: string,
+		rate: number,
+	): Promise<CurrencySettings> {
+		await this.requireManager(actingUserId);
+
 		const quoteCurrency = normalizeCurrency(code);
 		const baseCurrency = await this.conversion.reportingCurrency();
 
@@ -187,10 +232,15 @@ export class CurrencyService {
 			converted: filled.converted,
 		});
 
-		return this.settings();
+		return this.settings(actingUserId);
 	}
 
-	async removeManualRate(code: string): Promise<CurrencySettings> {
+	async removeManualRate(
+		actingUserId: string,
+		code: string,
+	): Promise<CurrencySettings> {
+		await this.requireManager(actingUserId);
+
 		const quoteCurrency = normalizeCurrency(code);
 		const baseCurrency = await this.conversion.reportingCurrency();
 
@@ -204,10 +254,12 @@ export class CurrencyService {
 			quoteCurrency,
 		});
 
-		return this.settings();
+		return this.settings(actingUserId);
 	}
 
-	async refresh(): Promise<CurrencySettings> {
+	async refresh(actingUserId: string): Promise<CurrencySettings> {
+		await this.requireManager(actingUserId);
+
 		const refresh = await this.rates.refresh();
 
 		if (!refresh.ok) {
@@ -216,6 +268,6 @@ export class CurrencyService {
 
 		await this.conversion.fillMissing();
 
-		return this.settings();
+		return this.settings(actingUserId);
 	}
 }

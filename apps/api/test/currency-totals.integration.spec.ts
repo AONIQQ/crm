@@ -91,10 +91,12 @@ afterAll(async () => {
 	await db.company.deleteMany({ where: { domain } });
 	await db.user.deleteMany({ where: { id: userId } });
 	await clearRates();
-	await db.appSetting.update({
-		where: { id: SETTINGS_ID },
-		data: { reportingCurrency: previousReportingCurrency },
-	});
+
+	if (previousReportingCurrency) {
+		await writeReportingCurrency(db, previousReportingCurrency);
+	} else {
+		await db.appSetting.updateMany({ data: { reportingCurrency: null } });
+	}
 
 	await conversion.rerateAll();
 });
@@ -231,5 +233,80 @@ describe("the deals list", () => {
 
 		const amounts = list.rows.map((row) => row.baseAmountCents);
 		expect(amounts).toEqual([...amounts].sort((a, b) => (b ?? 0) - (a ?? 0)));
+	});
+});
+
+describe("a converted figure knows which currency it is in", () => {
+	it("leaves a deal whose baseAmount predates a currency change out of totals", async () => {
+		await writeReportingCurrency(db, "USD");
+		await conversion.rerateAll();
+
+		const before = await pipelineCents();
+		const summary = await dashboard.summary(userId, { scope: "me" });
+		expect(summary.unconverted.count).toBe(0);
+
+		const deal = await deals.create({
+			name: `Stale ${suffix}`,
+			companyId,
+			ownerId: userId,
+			amountCents: MILLION,
+			currency: "USD",
+		});
+
+		expect(await pipelineCents()).toBe(before + MILLION);
+
+		await db.deal.update({
+			where: { id: deal.id },
+			data: { baseCurrency: "JPY" },
+		});
+
+		expect(await pipelineCents()).toBe(before);
+
+		const stale = await dashboard.summary(userId, { scope: "me" });
+		expect(stale.unconverted.count).toBe(1);
+
+		const filled = await conversion.fillMissing();
+		expect(filled.converted).toBeGreaterThan(0);
+
+		expect(await pipelineCents()).toBe(before + MILLION);
+
+		await db.deal.delete({ where: { id: deal.id } });
+	});
+
+	it("counts a currency once however it was cased or padded", async () => {
+		const rows = await Promise.all(
+			[" usd ", "Usd"].map((currency, index) =>
+				db.deal.create({
+					data: {
+						name: `Variant ${index} ${suffix}`,
+						companyId,
+						ownerId: userId,
+						amount: 1000,
+						currency,
+					},
+					select: { id: true },
+				}),
+			),
+		);
+
+		const rerated = await conversion.rerateAll();
+
+		const written = await db.deal.findMany({
+			where: { id: { in: rows.map((row) => row.id) } },
+			select: { baseAmount: true, baseCurrency: true },
+		});
+
+		for (const row of written) {
+			expect(row.baseCurrency).toBe("USD");
+			expect(row.baseAmount?.toNumber()).toBe(1000);
+		}
+
+		expect(rerated.converted).toBe(
+			await db.deal.count({ where: { amount: { not: null } } }),
+		);
+
+		await db.deal.deleteMany({
+			where: { id: { in: rows.map((row) => row.id) } },
+		});
 	});
 });

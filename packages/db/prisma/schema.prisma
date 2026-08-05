@@ -397,9 +397,10 @@ model Deal {
   closedAt          DateTime?
   closedReason      String?
 
-  baseAmount Decimal?  @db.Decimal(18, 4)
-  fxRate     Decimal?  @db.Decimal(20, 10)
-  fxRateAt   DateTime?
+  baseAmount   Decimal?  @db.Decimal(24, 4)
+  baseCurrency String?
+  fxRate       Decimal?  @db.Decimal(20, 10)
+  fxRateAt     DateTime?
 
   lastActivityAt DateTime?
 
