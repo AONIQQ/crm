@@ -1,11 +1,13 @@
 import { mirror } from "../src/blob";
 import { db } from "../src/client";
+import { DEFAULT_REPORTING_CURRENCY } from "../src/currency";
 import { resolveFavicon } from "../src/favicon";
 import {
 	ActivityType,
 	DealStage,
 	RateSource,
 } from "../src/generated/prisma/enums";
+import { readReportingCurrency, SETTINGS_ID } from "../src/settings";
 
 function makeRandom(seed: number): () => number {
 	let a = seed;
@@ -489,14 +491,17 @@ let seedBase = "USD";
 async function seedRates(): Promise<number> {
 	const asOf = daysFromNow(-1);
 
-	const setting = await db.appSetting.upsert({
-		where: { id: "app" },
-		create: { id: "app", reportingCurrency: "USD" },
+	await db.appSetting.upsert({
+		where: { id: SETTINGS_ID },
+		create: {
+			id: SETTINGS_ID,
+			reportingCurrency: DEFAULT_REPORTING_CURRENCY,
+		},
 		update: {},
-		select: { reportingCurrency: true },
+		select: { id: true },
 	});
 
-	seedBase = (setting.reportingCurrency ?? "USD").trim().toUpperCase() || "USD";
+	seedBase = await readReportingCurrency(db);
 
 	if (seedBase !== "USD") {
 		console.log(

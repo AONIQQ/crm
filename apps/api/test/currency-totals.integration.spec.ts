@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { db, RateSource } from "@crm/db";
+import { DealStage, db, RateSource } from "@crm/db";
 import { normalizeCurrency } from "@crm/db/currency";
 import { SETTINGS_ID, writeReportingCurrency } from "@crm/db/settings";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
@@ -412,5 +412,94 @@ describe("a converted figure knows which currency it is in", () => {
 			where: { id: { in: [deal.id, stranded.id] } },
 		});
 		await rate("EUR", "1.10", RateSource.FETCHED);
+	});
+});
+
+describe("the dashboard only values what it can convert", () => {
+	const analystId = `analyst-${suffix}`;
+
+	beforeAll(async () => {
+		await writeReportingCurrency(db, "USD");
+
+		await db.user.upsert({
+			where: { id: analystId },
+			create: {
+				id: analystId,
+				name: "Dashboard Tester",
+				email: `dashboard@${domain}`,
+				emailVerified: true,
+			},
+			update: {},
+		});
+	});
+
+	afterAll(async () => {
+		await db.deal.deleteMany({ where: { ownerId: analystId } });
+		await db.user.deleteMany({ where: { id: analystId } });
+	});
+
+	async function stale(name: string, stage: DealStage) {
+		const closed = stage === DealStage.CLOSED_WON;
+
+		return db.deal.create({
+			data: {
+				name: `${name} ${suffix}`,
+				companyId,
+				ownerId: analystId,
+				stage,
+				amount: 9_000,
+				currency: "USD",
+				baseAmount: 9_000,
+				baseCurrency: "JPY",
+				fxRate: 1,
+				fxRateAt: new Date(),
+				closedAt: closed ? new Date() : null,
+			},
+			select: { id: true },
+		});
+	}
+
+	it("does not average a won deal it cannot value into the rest", async () => {
+		const won = await deals.create({
+			name: `Valued win ${suffix}`,
+			companyId,
+			ownerId: analystId,
+			amountCents: 10_000,
+			currency: "USD",
+			stage: DealStage.CLOSED_WON,
+		});
+
+		const unvalued = await stale("Stale win", DealStage.CLOSED_WON);
+
+		const summary = await dashboard.summary(analystId, { scope: "me" });
+
+		expect(summary.performance.wins).toBe(2);
+		expect(summary.performance.avgDealCents).toBe(10_000);
+		expect(summary.unconverted.count).toBe(1);
+
+		await db.deal.deleteMany({ where: { id: { in: [won.id, unvalued.id] } } });
+	});
+
+	it("does not let a stale figure set the largest open deal", async () => {
+		const open = await deals.create({
+			name: `Valued open ${suffix}`,
+			companyId,
+			ownerId: analystId,
+			amountCents: 10_000,
+			currency: "USD",
+		});
+
+		const unvalued = await stale("Stale open", DealStage.DEMO_BOOKED);
+
+		const summary = await dashboard.summary(analystId, { scope: "me" });
+
+		expect(summary.biggestOpen[0]?.id).toBe(open.id);
+		expect(summary.biggestOpen[0]?.baseAmountCents).toBe(10_000);
+		expect(
+			summary.biggestOpen.find((deal) => deal.id === unvalued.id)
+				?.baseAmountCents,
+		).toBeNull();
+
+		await db.deal.deleteMany({ where: { id: { in: [open.id, unvalued.id] } } });
 	});
 });

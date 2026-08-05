@@ -116,6 +116,7 @@ export class DashboardService {
 					amount: true,
 					currency: true,
 					baseAmount: true,
+					baseCurrency: true,
 					expectedCloseDate: true,
 					stageChangedAt: true,
 					company: {
@@ -187,12 +188,14 @@ export class DashboardService {
 		const wonPrevMonth = { count: 0, valueCents: 0 };
 		let wins = 0;
 		let losses = 0;
+		let valuedWins = 0;
 		let wonCents = 0;
 		let cycleDays = 0;
 
 		for (const deal of recentDeals) {
-			const cents =
-				deal.baseCurrency === base ? (toCents(deal.baseAmount) ?? 0) : 0;
+			const valued =
+				deal.baseCurrency === base ? toCents(deal.baseAmount) : null;
+			const cents = valued ?? 0;
 
 			const created = trend[monthKey(deal.createdAt) - firstBucket];
 			if (created) created.created += cents;
@@ -217,7 +220,10 @@ export class DashboardService {
 			if (closedAt < rateStart) continue;
 			if (won) {
 				wins += 1;
-				wonCents += cents;
+				if (valued !== null) {
+					valuedWins += 1;
+					wonCents += cents;
+				}
 				cycleDays += (closedAt.getTime() - deal.createdAt.getTime()) / DAY_MS;
 			} else if (stage === DealStage.CLOSED_LOST) {
 				losses += 1;
@@ -242,7 +248,8 @@ export class DashboardService {
 				wins,
 				losses,
 				winRate: decided === 0 ? null : wins / decided,
-				avgDealCents: wins === 0 ? null : Math.round(wonCents / wins),
+				avgDealCents:
+					valuedWins === 0 ? null : Math.round(wonCents / valuedWins),
 				avgCycleDays: wins === 0 ? null : Math.round(cycleDays / wins),
 			},
 			trend,
@@ -250,21 +257,24 @@ export class DashboardService {
 				count: closingThisMonthTotals._count._all,
 				valueCents: toCents(closingThisMonthTotals._sum.baseAmount) ?? 0,
 			},
-			biggestOpen: biggestOpen.map(
-				({
-					amount,
-					baseAmount,
-					expectedCloseDate,
-					stageChangedAt,
-					...deal
-				}) => ({
-					...deal,
-					amountCents: toCents(amount),
-					baseAmountCents: toCents(baseAmount),
-					expectedCloseDate: expectedCloseDate?.toISOString() ?? null,
-					stageChangedAt: stageChangedAt.toISOString(),
-				}),
-			),
+			biggestOpen: biggestOpen
+				.map(
+					({
+						amount,
+						baseAmount,
+						baseCurrency,
+						expectedCloseDate,
+						stageChangedAt,
+						...deal
+					}) => ({
+						...deal,
+						amountCents: toCents(amount),
+						baseAmountCents: baseCurrency === base ? toCents(baseAmount) : null,
+						expectedCloseDate: expectedCloseDate?.toISOString() ?? null,
+						stageChangedAt: stageChangedAt.toISOString(),
+					}),
+				)
+				.sort((a, b) => (b.baseAmountCents ?? -1) - (a.baseAmountCents ?? -1)),
 			overdueTasks: overdueTasks.map(({ dueAt, ...task }) => ({
 				...task,
 				dueAt: dueAt?.toISOString() ?? null,
