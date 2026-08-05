@@ -2,12 +2,14 @@ import { db } from "@crm/db";
 import { defineHook } from "eve/hooks";
 import { currentFocus } from "../lib/focus";
 
+const CUMULATIVE_DELTAS = new Set(["reasoning.appended"]);
+
 export default defineHook({
 	events: {
 		async "*"(event, ctx) {
 			const id = event.meta?.id;
 
-			if (!id) return;
+			if (!id || CUMULATIVE_DELTAS.has(event.type)) return;
 
 			try {
 				await db.agentEvent.createMany({

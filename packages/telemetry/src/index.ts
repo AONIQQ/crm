@@ -25,8 +25,6 @@ export {
 	captureNow,
 	flushTelemetry,
 	onTelemetryProblem,
-	POSTHOG_HOST,
-	POSTHOG_KEY,
 	resetTelemetryClient,
 	shutdownTelemetry,
 } from "./client";
@@ -64,4 +62,5 @@ export {
 	sameUtcDay,
 	syncVersion,
 } from "./install";
+export { POSTHOG_HOST, POSTHOG_KEY, POSTHOG_UI_HOST } from "./project";
 export { commitSha, crmVersion } from "./version";

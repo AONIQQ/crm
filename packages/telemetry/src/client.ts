@@ -4,11 +4,8 @@ import { PostHog } from "posthog-node";
 import { type Properties, permitted } from "./allowlist";
 import { telemetryDisabled } from "./disabled";
 import { daysSince, readInstall } from "./install";
+import { POSTHOG_HOST, POSTHOG_KEY } from "./project";
 import { commitSha } from "./version";
-
-export const POSTHOG_KEY = "phc_xKYTYbcX9bEB7sEaCpfZUCqV7HBxZw3QQVztuXf86Q9N";
-
-export const POSTHOG_HOST = "https://k.trycomp.ai";
 
 const FLUSH_TIMEOUT_MS = 3_000;
 

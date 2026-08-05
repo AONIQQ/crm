@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@crm/db";
-import { captureNow, POSTHOG_HOST, resetTelemetryClient } from "../src/client";
+import { captureNow, resetTelemetryClient } from "../src/client";
 import { milestone } from "../src/events";
 import { forgetInstall, readInstall } from "../src/install";
+import { POSTHOG_HOST } from "../src/project";
 
 const real = {
 	fetch: globalThis.fetch,
