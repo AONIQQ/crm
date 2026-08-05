@@ -19,6 +19,7 @@ export type CrmCache = {
 	activity(options?: Options): Promise<void>;
 	google(options?: Options): Promise<void>;
 	settings(options?: Options): Promise<void>;
+	currency(options?: Options): Promise<void>;
 	workspace(options?: Options): Promise<void>;
 	sso(options?: Options): Promise<void>;
 	everything(): Promise<void>;
@@ -98,6 +99,7 @@ export function useCrmCache(): CrmCache {
 					trpc.companies.byId.queryKey(),
 					...activityKeys(),
 					trpc.dashboard.summary.queryKey(),
+					trpc.currency.settings.queryKey(),
 				],
 				options,
 			),
@@ -166,6 +168,18 @@ export function useCrmCache(): CrmCache {
 					trpc.settings.researchKey.queryKey(),
 				],
 				[],
+				options,
+			),
+
+		currency: (options) =>
+			run(
+				[trpc.currency.settings.queryKey()],
+				[
+					...listKeys(),
+					trpc.deals.byId.queryKey(),
+					trpc.companies.byId.queryKey(),
+					trpc.dashboard.summary.queryKey(),
+				],
 				options,
 			),
 

@@ -1,4 +1,5 @@
 import { DealStage } from "@crm/db";
+import { isCurrencyCode } from "@crm/db/currency";
 import { z } from "zod";
 import { listInput } from "../trpc/list-input";
 
@@ -31,7 +32,12 @@ export const dealCreateInput = z.object({
 	ownerId: z.string().min(1, "A deal needs an owner."),
 	stage: stageEnum.optional(),
 	amountCents: z.number().int().min(0).nullable().optional(),
-	currency: z.string().length(3).optional(),
+	currency: z
+		.string()
+		.trim()
+		.length(3, "A currency code is three letters, like USD.")
+		.refine(isCurrencyCode, "That is not a currency this CRM can convert.")
+		.optional(),
 	expectedCloseDate: z.string().nullable().optional(),
 });
 
@@ -39,10 +45,16 @@ export type DealCreateInput = z.infer<typeof dealCreateInput>;
 
 const dealUpdateInput = z.object({
 	name: z.string().trim().min(1).optional(),
+	description: z.string().nullable().optional(),
 	companyId: z.string().optional(),
 	ownerId: z.string().optional(),
 	amountCents: z.number().int().min(0).nullable().optional(),
-	currency: z.string().length(3).optional(),
+	currency: z
+		.string()
+		.trim()
+		.length(3, "A currency code is three letters, like USD.")
+		.refine(isCurrencyCode, "That is not a currency this CRM can convert.")
+		.optional(),
 	expectedCloseDate: z.string().nullable().optional(),
 });
 

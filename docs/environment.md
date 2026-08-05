@@ -348,7 +348,7 @@ nothing, and Calendar reads from `now` onwards.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `CRON_SECRET` | in deployed environments | Bearer guard on `POST /internal/sync/google`. Vercel sends it automatically as `Authorization: Bearer $CRON_SECRET`. Minimum 16 characters; the route **fails closed** if unset, so locally the cron simply never runs. |
+| `CRON_SECRET` | in deployed environments | Bearer guard on `POST /internal/sync/google` **and `POST /internal/sync/rates`**. Vercel sends it automatically as `Authorization: Bearer $CRON_SECRET`. Minimum 16 characters; both routes **fail closed** if unset, so locally the crons simply never run. |
 
 The absences are deliberate:
 
@@ -361,6 +361,12 @@ The absences are deliberate:
   internal, and it is seeded into the sync's "us" set alongside the `User`
   table. Two sources for one fact is how a colleague becomes a lead.
 - **No `GMAIL_BACKFILL_DAYS`.** There is no backfill.
+- **No exchange-rate provider variable.** The rate feed is a constant in
+  `apps/api/src/currency/rates.service.ts` and needs no key; an install that
+  cannot reach it types its own rates on Settings → Currencies instead. See
+  [the currency rules](./api.md#a-deal-is-sold-in-one-currency-and-reported-in-another).
+  `POST /internal/sync/rates` wants a **daily** schedule beside the five-minute
+  Google one.
 
 Two things to do in Google Cloud before this works:
 

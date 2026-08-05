@@ -1,6 +1,7 @@
 import { ActivityType, type Db, DealStage } from "@crm/db";
 import { Injectable } from "@nestjs/common";
 import { toCents } from "../crm/values";
+import { ConversionService } from "../currency/conversion.service";
 import { InjectDatabase } from "../database/database.constants";
 import { OPEN_DEAL_STAGES } from "../deals/deal-stage";
 import type { DashboardSummaryInput } from "./dashboard.contracts";
@@ -30,7 +31,10 @@ function monthKey(date: Date): number {
 
 @Injectable()
 export class DashboardService {
-	constructor(@InjectDatabase() private readonly db: Db) {}
+	constructor(
+		@InjectDatabase() private readonly db: Db,
+		private readonly conversion: ConversionService,
+	) {}
 
 	async summary(actingUserId: string, input: DashboardSummaryInput) {
 		const mine = input.scope === "me";
@@ -50,12 +54,14 @@ export class DashboardService {
 			biggestOpen,
 			overdueTasks,
 			recentActivity,
+			reportingCurrency,
+			unconverted,
 		] = await Promise.all([
 			this.db.deal.groupBy({
 				by: ["stage"],
 				where: { ...owned, stage: { in: [...OPEN_DEAL_STAGES] } },
 				_count: { _all: true },
-				_sum: { amount: true },
+				_sum: { baseAmount: true },
 			}),
 			this.db.deal.findMany({
 				where: {
@@ -66,7 +72,7 @@ export class DashboardService {
 					],
 				},
 				select: {
-					amount: true,
+					baseAmount: true,
 					stage: true,
 					createdAt: true,
 					closedAt: true,
@@ -79,12 +85,12 @@ export class DashboardService {
 					expectedCloseDate: { gte: startOfMonth, lt: startOfNextMonth },
 				},
 				_count: { _all: true },
-				_sum: { amount: true },
+				_sum: { baseAmount: true },
 			}),
 			this.db.deal.findMany({
 				where: { ...owned, stage: { in: [...OPEN_DEAL_STAGES] } },
 				orderBy: [
-					{ amount: { sort: "desc", nulls: "last" } },
+					{ baseAmount: { sort: "desc", nulls: "last" } },
 					{ expectedCloseDate: "asc" },
 				],
 				take: 6,
@@ -94,6 +100,7 @@ export class DashboardService {
 					stage: true,
 					amount: true,
 					currency: true,
+					baseAmount: true,
 					expectedCloseDate: true,
 					stageChangedAt: true,
 					company: {
@@ -141,6 +148,8 @@ export class DashboardService {
 					deal: { select: { id: true, name: true } },
 				},
 			}),
+			this.conversion.reportingCurrency(),
+			this.conversion.unconverted(owned),
 		]);
 
 		const stages = OPEN_DEAL_STAGES.map((stage) => {
@@ -148,7 +157,7 @@ export class DashboardService {
 			return {
 				stage: stage as DealStage,
 				count: group?._count._all ?? 0,
-				valueCents: toCents(group?._sum.amount ?? null) ?? 0,
+				valueCents: toCents(group?._sum.baseAmount ?? null) ?? 0,
 			};
 		});
 
@@ -167,7 +176,7 @@ export class DashboardService {
 		let cycleDays = 0;
 
 		for (const deal of recentDeals) {
-			const cents = toCents(deal.amount) ?? 0;
+			const cents = toCents(deal.baseAmount) ?? 0;
 
 			const created = trend[monthKey(deal.createdAt) - firstBucket];
 			if (created) created.created += cents;
@@ -203,6 +212,8 @@ export class DashboardService {
 
 		return {
 			scope: input.scope,
+			reportingCurrency,
+			unconverted,
 			pipeline: {
 				stages,
 				totalCents: stages.reduce((total, s) => total + s.valueCents, 0),
@@ -221,12 +232,19 @@ export class DashboardService {
 			trend,
 			closingThisMonthTotal: {
 				count: closingThisMonthTotals._count._all,
-				valueCents: toCents(closingThisMonthTotals._sum.amount) ?? 0,
+				valueCents: toCents(closingThisMonthTotals._sum.baseAmount) ?? 0,
 			},
 			biggestOpen: biggestOpen.map(
-				({ amount, expectedCloseDate, stageChangedAt, ...deal }) => ({
+				({
+					amount,
+					baseAmount,
+					expectedCloseDate,
+					stageChangedAt,
+					...deal
+				}) => ({
 					...deal,
 					amountCents: toCents(amount),
+					baseAmountCents: toCents(baseAmount),
 					expectedCloseDate: expectedCloseDate?.toISOString() ?? null,
 					stageChangedAt: stageChangedAt.toISOString(),
 				}),

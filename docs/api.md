@@ -535,6 +535,113 @@ reconnection recomputes it. The delete itself is still translated: a record
 removed between the pre-check and the delete is the documented 404, not a P2025
 escaping as a 500.
 
+## A deal is sold in one currency and reported in another
+
+A deal has always carried a `currency`, and every place that printed *one* deal
+honoured it. What did not was every place that printed a **total**: `_sum:
+{ amount: true }` added the decimals column across whatever currencies happened
+to be in the rows, and the dashboard then rendered the result through
+`formatMoneyCompact(cents)` with no currency argument at all — which defaults to
+`usd`. A €1M deal beside a $1M deal read **`$2.0M`**. Nothing errored, nothing
+logged, and the number was wrong in the one direction a sales dashboard is never
+questioned in.
+
+So there are now two amounts on a deal, and only one of them is ever summed.
+
+- **`amount` + `currency` is what the customer is paying.** It is what a rep
+  types, what the deal sheet shows, and it is never converted in place.
+- **`baseAmount` is that figure in the workspace's reporting currency, and it is
+  the only column any total, chart, average or sort may touch.** `fxRate` and
+  `fxRateAt` sit beside it saying how it got there, so a quarter's number can be
+  explained a year later.
+
+**The rate is resolved once, at the moment the amount is set, and then frozen.**
+`DealsService.create` and `.update` call `ConversionService.dealFields` whenever
+`amount` *or* `currency` changes — and an update that changes only one of them
+reads the other back inside the same call, because converting a new amount
+against a stale currency is how you get a figure that matches neither. Freezing
+is the point: rates move daily, and a closed-won quarter that changes value
+every morning is not a report. Converting on read was the simpler schema and it
+is wrong for exactly that reason.
+
+- **A missing rate is a null, and a null is disclosed rather than counted as
+  zero.** `baseAmount` stays null when nothing can convert the currency, which
+  keeps it out of every `_sum` automatically — and `ConversionService.unconverted`
+  counts those rows so the dashboard, the deals list and the company sheet can
+  say *3 deals in CHF are not included*. A total that silently drops rows is the
+  same class of bug as the one above, wearing a nicer hat.
+- **The work is recovered from the record, not held in a queue.** A deal written
+  with no rate is not retried by anything; it is simply a row with a null
+  `baseAmount`, which is what `fillMissing()` looks for the moment a rate
+  arrives — from the cron or from somebody typing one in. Same shape as a
+  `PENDING` company waiting on a research key.
+- **`fillMissing()` never touches a deal that already converted**, which is what
+  keeps the freeze true when the daily cron brings in new rates.
+  `rerateAll()` is the one thing that overwrites a locked rate, and it runs only
+  when the reporting currency changes — because at that point every stored
+  `baseAmount` is denominated in a currency the workspace no longer reports in,
+  so leaving them would be worse than moving them. Settings says so before you
+  change it.
+
+**Rates live in `ExchangeRate`, and `rate` means one thing only: how many units
+of `baseCurrency` one unit of `quoteCurrency` buys.** So `baseAmount = amount ×
+rate`, in that direction, everywhere. The public feed quotes the opposite way (1
+USD = 0.8655 EUR), so `RatesService` inverts on ingest rather than at every
+call site — one place to be wrong instead of six.
+
+- **Two sources, and by-hand wins.** The unique key is
+  `(baseCurrency, quoteCurrency, source)`, so a `FETCHED` row and a `MANUAL` row
+  coexist and `resolveRate` prefers the manual one. That is what makes the
+  fetcher optional rather than load-bearing: an install behind a firewall, or
+  one dealing in a currency the ECB does not publish, types its own rates on
+  **Settings → Currencies** and everything downstream is identical.
+- **`resolveRate` refuses a rate of zero or less** instead of converting with
+  it. A `baseAmount` of 0 is indistinguishable from a free deal.
+- **The reporting currency is a row, not a variable** —
+  `AppSetting.reportingCurrency`, read through `readReportingCurrency` in
+  [`@crm/db/settings`](../packages/db/src/settings.ts), which is the only reader
+  and falls back to `DEFAULT_REPORTING_CURRENCY`. Same reasoning as the agent's
+  model and the Context key: an admin who cannot redeploy has to be able to
+  change it.
+- **A currency code is validated against a list, not a regex.**
+  `isCurrencyCode` in [`@crm/db/currency`](../packages/db/src/currency.ts) is the
+  gate, and it is what `deals.contracts.ts` refines on. `z.string().length(3)`
+  accepted `ZZZ`, which is well-formed enough that `Intl` renders it happily as
+  `ZZZ 1,234.50` and nothing can ever convert it. Shape and membership are two
+  different questions and the module answers both separately —
+  `isWellFormedCurrency` exists because `Intl.NumberFormat` throws a
+  `RangeError` on anything that is not three letters, so a *formatter* has to
+  check shape even where membership is not its business.
+- **`minorUnitsOf` is why conversion rounds correctly.** JPY has no decimal
+  places and KWD has three; `applyRate` rounds to the *reporting* currency's
+  own units rather than to two. The `×100` cents transport across tRPC is
+  untouched and still round-trips, because it is a scaling convention and not a
+  claim about decimals — but note it cannot represent a three-decimal currency's
+  minor unit, and neither can `Decimal(14, 2)`. A KWD deal is stored to the
+  fils, not the fils-tenth.
+
+**The fetcher is in the API, and that is a deliberate exception to the rule at
+the top of this file.** A daily rate is not intelligence: it decides nothing
+about a person or a company, there is no confidence model, no identity to match
+and no judgement to drift. It is the same category as `FaviconService`, which
+also makes an outbound request from Nest. The load-bearing reason is timing —
+`DealsService` needs a rate *synchronously* to write `baseAmount` in the same
+transaction as the amount, and routing that through the agent's task queue would
+make a rep's pipeline total wrong for the seconds it took a session to start. If
+this ever grows a judgement — deciding *which* provider to trust, or whether a
+rate looks wrong — that part belongs in `apps/agent`.
+
+- **`POST /internal/sync/rates`** is the cron entry, guarded by `CRON_SECRET`
+  through the same `timingSafeEquals` check as the Google sync, and it **fails
+  closed when the secret is unset**. It refreshes and then calls
+  `fillMissing()`, so one daily hit both updates the rates and rescues the deals
+  that were waiting on them.
+- **An unreachable provider is not an error.** `RatesService.refresh` warns and
+  returns `{ ok: false }`; nothing throws, no deal changes, and the manual rates
+  keep working. Only the *interactive* refresh on the settings page turns that
+  into a `BadRequestException`, because there a person is standing there waiting
+  to be told.
+
 ## Freshness: invalidate the query, don't disable the cache
 
 There is no HTTP response cache in front of tRPC. Freshness is TanStack Query's

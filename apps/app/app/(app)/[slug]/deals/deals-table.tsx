@@ -159,6 +159,8 @@ export function DealsTable() {
 	];
 
 	const openValueCents = deals.data?.openValueCents;
+	const reportingCurrency = deals.data?.reportingCurrency;
+	const unconverted = deals.data?.unconverted;
 
 	return (
 		<DataTable
@@ -186,8 +188,17 @@ export function DealsTable() {
 				openValueCents === null || openValueCents === undefined ? undefined : (
 					<span>
 						{deals.data?.total ?? 0} deals ·{" "}
-						<span className="tabular-nums">{formatMoney(openValueCents)}</span>{" "}
+						<span className="tabular-nums">
+							{formatMoney(openValueCents, reportingCurrency)}
+						</span>{" "}
 						open pipeline
+						{unconverted && unconverted.count > 0 ? (
+							<span className="text-muted-foreground">
+								{" "}
+								· {unconverted.count} not counted (no{" "}
+								{unconverted.currencies.join(", ")} rate)
+							</span>
+						) : null}
 					</span>
 				)
 			}

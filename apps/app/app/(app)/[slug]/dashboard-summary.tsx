@@ -83,7 +83,7 @@ export function DashboardSummary() {
 	const { biggestOpen, overdueTasks, recentActivity } = summary;
 
 	const mine = scope === "me";
-	const largestOpenCents = biggestOpen[0]?.amountCents ?? 0;
+	const largestOpenCents = biggestOpen[0]?.baseAmountCents ?? 0;
 
 	const openColumns: SimpleTableColumn[] = [
 		{ header: "Deal" },
@@ -154,7 +154,8 @@ export function DashboardSummary() {
 											<ValueMeter
 												share={
 													largestOpenCents > 0
-														? ((deal.amountCents ?? 0) / largestOpenCents) * 100
+														? ((deal.baseAmountCents ?? 0) / largestOpenCents) *
+															100
 														: 0
 												}
 												color={dealStageColor(deal.stage)}
