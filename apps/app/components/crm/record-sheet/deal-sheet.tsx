@@ -54,6 +54,17 @@ const CURRENCY_OPTIONS = CURRENCIES.map((entry) => ({
 	label: `${entry.code} · ${entry.name}`,
 }));
 
+function currencyOptions(currency: string) {
+	if (CURRENCY_OPTIONS.some((option) => option.value === currency)) {
+		return CURRENCY_OPTIONS;
+	}
+
+	return [
+		{ value: currency, label: `${currency} — no longer supported` },
+		...CURRENCY_OPTIONS,
+	];
+}
+
 function ReportedValue({ deal }: { deal: Deal }) {
 	if (deal.currency === deal.reportingCurrency) return null;
 	if (deal.amountCents === null) return null;
@@ -255,8 +266,7 @@ function DealOverview({ deal }: { deal: Deal }) {
 					<InlineSelectField
 						label="Currency"
 						value={deal.currency}
-						options={CURRENCY_OPTIONS}
-						placeholder={`${deal.currency} — no longer supported`}
+						options={currencyOptions(deal.currency)}
 						onSave={(currency) => save({ currency })}
 					/>
 					<ReportedValue deal={deal} />

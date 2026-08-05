@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db, RateSource } from "@crm/db";
+import { normalizeCurrency } from "@crm/db/currency";
 import { SETTINGS_ID, writeReportingCurrency } from "@crm/db/settings";
 import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
@@ -326,6 +327,11 @@ describe("a converted figure knows which currency it is in", () => {
 			),
 		);
 
+		const pending = await conversion.unconverted();
+		expect(pending.currencies.filter((code) => code === "USD")).toEqual([
+			"USD",
+		]);
+
 		const rerated = await conversion.rerateAll();
 
 		const written = await db.deal.findMany({
@@ -338,12 +344,73 @@ describe("a converted figure knows which currency it is in", () => {
 			expect(row.baseAmount?.toNumber()).toBe(1000);
 		}
 
-		expect(rerated.converted).toBe(
-			await db.deal.count({ where: { amount: { not: null } } }),
-		);
+		const groups = await db.deal.groupBy({
+			by: ["currency"],
+			where: { amount: { not: null } },
+			_count: { _all: true },
+		});
+
+		const convertible = groups
+			.filter(
+				(group) => !rerated.missing.includes(normalizeCurrency(group.currency)),
+			)
+			.reduce((total, group) => total + group._count._all, 0);
+
+		expect(rerated.converted).toBe(convertible);
 
 		await db.deal.deleteMany({
 			where: { id: { in: rows.map((row) => row.id) } },
 		});
+	});
+
+	it("keeps a converted deal when the rate behind it has gone away", async () => {
+		await writeReportingCurrency(db, "USD");
+		await conversion.rerateAll();
+
+		const deal = await deals.create({
+			name: `Frozen ${suffix}`,
+			companyId,
+			ownerId: userId,
+			amountCents: MILLION,
+			currency: "EUR",
+		});
+
+		const frozen = await db.deal.findUnique({
+			where: { id: deal.id },
+			select: { baseAmount: true },
+		});
+		expect(frozen?.baseAmount).not.toBeNull();
+
+		const before = await pipelineCents();
+
+		await clearRates();
+
+		const stranded = await db.deal.create({
+			data: {
+				name: `Stranded ${suffix}`,
+				companyId,
+				ownerId: userId,
+				amount: 1000,
+				currency: "EUR",
+			},
+			select: { id: true },
+		});
+
+		const filled = await conversion.fillMissing();
+		expect(filled.missing).toContain("EUR");
+		expect(filled.cleared).toBe(0);
+
+		const kept = await db.deal.findUnique({
+			where: { id: deal.id },
+			select: { baseAmount: true, baseCurrency: true },
+		});
+		expect(kept?.baseCurrency).toBe("USD");
+		expect(kept?.baseAmount?.toNumber()).toBe(frozen?.baseAmount?.toNumber());
+		expect(await pipelineCents()).toBe(before);
+
+		await db.deal.deleteMany({
+			where: { id: { in: [deal.id, stranded.id] } },
+		});
+		await rate("EUR", "1.10", RateSource.FETCHED);
 	});
 });

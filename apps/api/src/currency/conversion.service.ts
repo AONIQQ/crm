@@ -146,7 +146,9 @@ export class ConversionService {
 			if (!rate) {
 				missing.push(code);
 
-				cleared += await this.clear(code);
+				if (!onlyMissing) {
+					cleared += await this.clear(code);
+				}
 
 				continue;
 			}
