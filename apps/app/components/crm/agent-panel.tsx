@@ -146,7 +146,7 @@ function ThreadWithHistory({
 	const archive = useQuery({
 		...trpc.conversations.events.queryOptions({ id: conversation?.id ?? "" }),
 		enabled: conversation !== null && offline,
-		staleTime: Number.POSITIVE_INFINITY,
+		staleTime: SETTLED_TTL_MS,
 	});
 
 	if (conversation && (thread.isPending || (offline && archive.isPending)))
