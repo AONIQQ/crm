@@ -16,6 +16,7 @@ import {
 	ActivityStampService,
 	type StampTargets,
 } from "../crm/activity-stamp.service";
+import { type BulkResult, requireOwner, runBulk } from "../crm/bulk";
 import {
 	blankToNull,
 	decimalFromCents,
@@ -24,6 +25,7 @@ import {
 } from "../crm/values";
 import { ConversionService } from "../currency/conversion.service";
 import { InjectDatabase } from "../database/database.constants";
+import { FieldsService } from "../fields/fields.service";
 import {
 	countsByKey,
 	FACET_ALL,
@@ -40,7 +42,12 @@ import {
 } from "./deal-stage";
 import type {
 	ClosingWindow,
+	DealAttachContactInput,
+	DealBulkOwnerInput,
+	DealBulkStageInput,
+	DealContactRoleInput,
 	DealCreateInput,
+	DealDetachContactInput,
 	DealListInput,
 	DealUpdateInput,
 	SetStageInput,
@@ -62,6 +69,15 @@ const COMPANY_SELECT = {
 	iconDarkUrl: true,
 	iconTone: true,
 	logoUrl: true,
+} as const;
+
+const CONTACT_SELECT = {
+	id: true,
+	firstName: true,
+	lastName: true,
+	email: true,
+	title: true,
+	imageUrl: true,
 } as const;
 
 const LOSING = new Set<DealStage>(LOSING_DEAL_STAGES);
@@ -88,6 +104,7 @@ export class DealsService {
 		@InjectDatabase() private readonly db: Db,
 		private readonly stamp: ActivityStampService,
 		private readonly conversion: ConversionService,
+		private readonly fields: FieldsService,
 	) {}
 
 	async list(input: DealListInput) {
@@ -128,6 +145,11 @@ export class DealsService {
 				this.conversion.unconverted(openWhere),
 			]);
 
+		const tableFields = await this.fields.tableValuesFor(
+			"DEAL",
+			rows.map((row) => row.id),
+		);
+
 		return {
 			rows: rows.map(
 				({
@@ -146,6 +168,7 @@ export class DealsService {
 					closedAt: closedAt?.toISOString() ?? null,
 					lastActivityAt: lastActivityAt?.toISOString() ?? null,
 					createdAt: createdAt.toISOString(),
+					fields: tableFields.get(row.id) ?? {},
 				}),
 			),
 			total,
@@ -181,19 +204,8 @@ export class DealsService {
 				company: { select: { ...COMPANY_SELECT, industry: true } },
 				owner: { select: OWNER_SELECT },
 				contacts: {
-					select: {
-						role: true,
-						contact: {
-							select: {
-								id: true,
-								firstName: true,
-								lastName: true,
-								email: true,
-								title: true,
-								imageUrl: true,
-							},
-						},
-					},
+					select: { role: true, contact: { select: CONTACT_SELECT } },
+					orderBy: { contact: { firstName: "asc" } },
 				},
 			},
 		});
@@ -206,6 +218,7 @@ export class DealsService {
 
 		return {
 			...rest,
+			fields: await this.fields.valuesFor("DEAL", id),
 			amountCents: toCents(amount),
 			baseAmountCents: toCents(baseAmount),
 			reportingCurrency: await this.conversion.reportingCurrency(),
@@ -258,6 +271,10 @@ export class DealsService {
 	}
 
 	async update(id: string, input: DealUpdateInput) {
+		if (input.fields) {
+			await this.fields.applyValues(this.db, "DEAL", id, input.fields);
+		}
+
 		const data: Prisma.DealUpdateInput = {};
 
 		if (input.name !== undefined) data.name = input.name.trim();
@@ -407,6 +424,156 @@ export class DealsService {
 		return { ...updated, changed: true };
 	}
 
+	async contactOptions(dealId: string) {
+		const deal = await this.db.deal.findUnique({
+			where: { id: dealId },
+			select: { companyId: true, contacts: { select: { contactId: true } } },
+		});
+
+		if (!deal) {
+			throw new NotFoundException(`No deal with id ${dealId}.`);
+		}
+
+		return this.db.contact.findMany({
+			where: {
+				companyId: deal.companyId,
+				id: { notIn: deal.contacts.map((row) => row.contactId) },
+			},
+			select: CONTACT_SELECT,
+			orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+			take: 100,
+		});
+	}
+
+	async attachContact(input: DealAttachContactInput) {
+		const company = await this.companyOf(input.dealId);
+		const contact = await this.db.contact.findUnique({
+			where: { id: input.contactId },
+			select: { companyId: true },
+		});
+
+		if (!contact) {
+			throw new NotFoundException(`No contact with id ${input.contactId}.`);
+		}
+
+		if (contact.companyId !== company.id) {
+			throw new BadRequestException(
+				`That contact does not work at ${company.name}.`,
+			);
+		}
+
+		const role = roleOrNull(input.role ?? null);
+
+		await this.db.dealContact.upsert({
+			where: {
+				dealId_contactId: {
+					dealId: input.dealId,
+					contactId: input.contactId,
+				},
+			},
+			create: { dealId: input.dealId, contactId: input.contactId, role },
+			update: role === null ? {} : { role },
+		});
+
+		this.logger.log({
+			message: "Contact attached to deal",
+			dealId: input.dealId,
+			contactId: input.contactId,
+		});
+
+		return { dealId: input.dealId, contactId: input.contactId };
+	}
+
+	async detachContact(input: DealDetachContactInput) {
+		const { count } = await this.db.dealContact.deleteMany({
+			where: { dealId: input.dealId, contactId: input.contactId },
+		});
+
+		if (count === 0) {
+			throw new NotFoundException("That contact is not on this deal.");
+		}
+
+		this.logger.log({
+			message: "Contact detached from deal",
+			dealId: input.dealId,
+			contactId: input.contactId,
+		});
+
+		return { dealId: input.dealId, contactId: input.contactId };
+	}
+
+	async setContactRole(input: DealContactRoleInput) {
+		const role = roleOrNull(input.role);
+
+		const { count } = await this.db.dealContact.updateMany({
+			where: { dealId: input.dealId, contactId: input.contactId },
+			data: { role },
+		});
+
+		if (count === 0) {
+			throw new NotFoundException("That contact is not on this deal.");
+		}
+
+		return { dealId: input.dealId, contactId: input.contactId, role };
+	}
+
+	async bulkAssignOwner(input: DealBulkOwnerInput): Promise<BulkResult> {
+		await requireOwner(this.db, input.ownerId);
+
+		const ids = [...new Set(input.ids)];
+		const { count } = await this.db.deal.updateMany({
+			where: { id: { in: ids } },
+			data: { ownerId: input.ownerId },
+		});
+
+		this.logger.log({
+			message: "Deals reassigned",
+			count,
+			ownerId: input.ownerId,
+		});
+
+		return {
+			requested: ids.length,
+			succeeded: count,
+			failed: ids.length - count,
+			message: null,
+		};
+	}
+
+	async bulkSetStage(
+		input: DealBulkStageInput,
+		actingUserId: string,
+	): Promise<BulkResult> {
+		const closedReason = input.closedReason?.trim();
+
+		if (LOSING.has(input.stage) && !closedReason) {
+			throw new BadRequestException(
+				"Say why they were lost — a closed-lost deal with no reason teaches nobody anything.",
+			);
+		}
+
+		return runBulk(input.ids, (id) =>
+			this.setStage({ id, stage: input.stage, closedReason }, actingUserId),
+		);
+	}
+
+	async bulkDelete(ids: string[]): Promise<BulkResult> {
+		return runBulk(ids, (id) => this.delete(id));
+	}
+
+	private async companyOf(dealId: string) {
+		const deal = await this.db.deal.findUnique({
+			where: { id: dealId },
+			select: { company: { select: { id: true, name: true } } },
+		});
+
+		if (!deal) {
+			throw new NotFoundException(`No deal with id ${dealId}.`);
+		}
+
+		return deal.company;
+	}
+
 	private searchFilter(q: string): Prisma.DealWhereInput {
 		const term = q.trim();
 		if (!term) return {};
@@ -526,6 +693,10 @@ function closingFilter(window: ClosingWindow): Prisma.DealWhereInput {
 		case "none":
 			return { expectedCloseDate: null };
 	}
+}
+
+function roleOrNull(value: string | null): string | null {
+	return value === null ? null : blankToNull(value);
 }
 
 function parseDate(value: string | null | undefined): Date | null {

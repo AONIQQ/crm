@@ -11,7 +11,14 @@ import type { z } from "zod";
 import type { AuthedTrpcContext } from "../trpc/context.types";
 import { AuthMiddleware } from "../trpc/middlewares/auth.middleware";
 import {
+	dealAttachContactInput,
+	dealBulkInput,
+	dealBulkOwnerInput,
+	dealBulkStageInput,
+	dealContactRoleInput,
+	dealContactsInput,
 	dealCreateInput,
+	dealDetachContactInput,
 	dealIdInput,
 	dealListInput,
 	dealUpdateArgs,
@@ -55,5 +62,43 @@ export class DealsRouter {
 		@Input() input: z.infer<typeof setStageInput>,
 	) {
 		return this.deals.setStage(input, ctx.user.id);
+	}
+
+	@Query({ input: dealContactsInput })
+	async contactOptions(@Input("dealId") dealId: string) {
+		return this.deals.contactOptions(dealId);
+	}
+
+	@Mutation({ input: dealAttachContactInput })
+	async attachContact(@Input() input: z.infer<typeof dealAttachContactInput>) {
+		return this.deals.attachContact(input);
+	}
+
+	@Mutation({ input: dealDetachContactInput })
+	async detachContact(@Input() input: z.infer<typeof dealDetachContactInput>) {
+		return this.deals.detachContact(input);
+	}
+
+	@Mutation({ input: dealContactRoleInput })
+	async setContactRole(@Input() input: z.infer<typeof dealContactRoleInput>) {
+		return this.deals.setContactRole(input);
+	}
+
+	@Mutation({ input: dealBulkOwnerInput })
+	async bulkAssignOwner(@Input() input: z.infer<typeof dealBulkOwnerInput>) {
+		return this.deals.bulkAssignOwner(input);
+	}
+
+	@Mutation({ input: dealBulkStageInput })
+	async bulkSetStage(
+		@Ctx() ctx: AuthedTrpcContext,
+		@Input() input: z.infer<typeof dealBulkStageInput>,
+	) {
+		return this.deals.bulkSetStage(input, ctx.user.id);
+	}
+
+	@Mutation({ input: dealBulkInput })
+	async bulkDelete(@Input("ids") ids: string[]) {
+		return this.deals.bulkDelete(ids);
 	}
 }

@@ -31,10 +31,12 @@ import {
 	EnrichmentIndicator,
 	isEnriching,
 } from "@/components/crm/enrichment-status";
+import { FieldsCog, RecordFields } from "@/components/crm/fields/record-fields";
 import {
 	InlineField,
 	InlineSelectField,
 	savingField,
+	savingValue,
 } from "@/components/crm/inline-field";
 import { OwnerCell } from "@/components/crm/owner-cell";
 import { CompanySocials, hasCompanyLinks } from "@/components/crm/social-links";
@@ -60,6 +62,7 @@ import type { RouterOutputs } from "@/lib/trpc/types";
 import { QuickAddContact, QuickAddDeal } from "./quick-add";
 import { RecordActions } from "./record-actions";
 import {
+	AddRow,
 	DealAmount,
 	DomainLink,
 	MetaLine,
@@ -130,32 +133,6 @@ function nextClose(deals: CompanyDeal[]): string | null {
 		.filter((date): date is string => date !== null)
 		.sort();
 	return dates[0] ?? null;
-}
-
-function AddRow({
-	label,
-	columns,
-	onClick,
-}: {
-	label: string;
-	columns: number;
-	onClick: () => void;
-}) {
-	return (
-		<SimpleTableRow>
-			<TableCell colSpan={columns} className="p-0">
-				<Button
-					variant="ghost"
-					size="sm"
-					onClick={onClick}
-					className="h-9 w-full justify-start px-5 font-normal text-muted-foreground"
-				>
-					<Icon icon={Add} data-icon="inline-start" />
-					{label}
-				</Button>
-			</TableCell>
-		</SimpleTableRow>
-	);
 }
 
 export function CompanySheet({ companyId }: { companyId: string }) {
@@ -358,7 +335,11 @@ function CompanyOverview({
 	const save = (data: Record<string, string | null>) =>
 		update.mutate({ id: company.id, data });
 
+	const saveFields = (fields: Record<string, unknown>) =>
+		update.mutate({ id: company.id, data: { fields } });
+
 	const isSaving = savingField(update);
+	const isSavingField = savingValue(update);
 
 	return (
 		<DetailSheetBody>
@@ -381,7 +362,10 @@ function CompanyOverview({
 				</DetailSheetMain>
 
 				<DetailSheetRail>
-					<DetailSheetSection title="Details">
+					<DetailSheetSection
+						title="Details"
+						action={<FieldsCog kind="company" />}
+					>
 						<DetailSheetProperties columns={1}>
 							<InlineField
 								label="Name"
@@ -444,6 +428,11 @@ function CompanyOverview({
 								onSave={(ownerId) =>
 									save({ ownerId: ownerId === UNASSIGNED ? null : ownerId })
 								}
+							/>
+							<RecordFields
+								fields={company.fields}
+								saving={isSavingField}
+								onSave={saveFields}
 							/>
 						</DetailSheetProperties>
 					</DetailSheetSection>
