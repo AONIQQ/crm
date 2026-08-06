@@ -4,6 +4,7 @@ import Add from "@carbon/icons-react/es/Add";
 import Close from "@carbon/icons-react/es/Close";
 import UserMultiple from "@carbon/icons-react/es/UserMultiple";
 import { CURRENCIES, normalizeCurrency } from "@crm/db/currency";
+import type { FieldValueJson } from "@crm/db/fields";
 import { Button } from "@crm/ui/components/button";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
 import {
@@ -256,7 +257,7 @@ function DealOverview({ deal }: { deal: Deal }) {
 		}),
 	);
 
-	const saveFields = (fields: Record<string, unknown>) =>
+	const saveFields = (fields: Record<string, FieldValueJson>) =>
 		update.mutate({ id: deal.id, data: { fields } });
 
 	const isSavingField = savingValue(update);
