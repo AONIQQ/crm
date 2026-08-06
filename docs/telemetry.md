@@ -46,8 +46,16 @@ a fork somewhere else by editing that file. Nothing is sent while `NODE_ENV` is
 
 ### `install_daily`
 
-Once per install per day, from `POST /internal/telemetry/rollup` on the API's cron. Counts and
-distributions from grouped queries. Never a value from a row.
+Once per install per day, from the API itself. Counts and distributions from grouped queries.
+Never a value from a row.
+
+**It runs in-process and needs no cron.** `TelemetryService` rolls up on boot and then hourly,
+and the day claim below makes all but the first of those a no-op. That covers both shapes an
+install comes in: a serverless deployment rolls up on a cold start, a long-running container on
+the timer. `POST /internal/telemetry/rollup` still exists for a platform cron that would rather
+drive it, and still refuses without `CRON_SECRET` — it is an anonymous route, so an unauthenticated
+one would let a stranger drive any install's aggregation. Nothing depends on it: an install that
+never sets `CRON_SECRET` reports exactly the same.
 
 The day is claimed under a row lock on `install` before anything is gathered, so two crons that
 fire at once produce one event rather than two — and the second does not find the counters
@@ -258,7 +266,7 @@ actually drops it. See `adrs/telemetry.md`.
 | `telemetryMilestone` table | Which funnel steps have fired |
 | `telemetryCounter` table | The one runtime number no other row records — `budget_exhausted` — drained by each rollup and put back if the send fails |
 | `packages/telemetry/src/project.ts` | The key, the ingest host and the UI host. Three constants, no imports, so the browser can read them too |
-| `apps/api/src/telemetry` | The daily rollup, the funnel sweep, the cron route |
+| `apps/api/src/telemetry` | The daily rollup, the funnel sweep, the boot-and-hourly timer, the optional cron route |
 | `apps/agent/agent/hooks/telemetry.ts` | Tool, turn and session failures |
 | `apps/app/lib/analytics.ts` | The two hostnames the landing page may report from |
 | `apps/app/components/landing/analytics.tsx` | The only `posthog-js` import in the repo, behind that gate and a dynamic `import()`. `init` on mount, `captureLanding` for the two CTA events |
