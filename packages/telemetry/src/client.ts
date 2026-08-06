@@ -104,8 +104,9 @@ export async function captureNow(
 	event: string,
 	properties: Properties = {},
 	at?: Date,
+	uuid?: string,
 ): Promise<boolean> {
-	return send(event, properties, true, at);
+	return send(event, properties, true, at, uuid);
 }
 
 async function send(
@@ -113,6 +114,7 @@ async function send(
 	properties: Properties,
 	immediate = false,
 	at?: Date,
+	uuid?: string,
 ): Promise<boolean> {
 	try {
 		if (telemetryDisabled()) return false;
@@ -127,11 +129,18 @@ async function send(
 			...message,
 			event,
 			...(at ? { timestamp: at } : {}),
+			...(uuid ? { uuid } : {}),
 		} as Parameters<PostHog["capture"]>[0];
 
 		if (immediate) {
 			const before = failures;
-			await posted.captureImmediate(full);
+			posted.capture(full);
+
+			try {
+				await posted.flush();
+			} catch {
+				return false;
+			}
 
 			return failures === before;
 		}

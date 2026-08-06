@@ -62,6 +62,23 @@ fire at once produce one event rather than two — and the second does not find 
 already drained. A rollup that fails to send hands the day and the counters back, so tomorrow's
 run is not suppressed by a send that never happened.
 
+**The event carries a deterministic `uuid`**, `stableUuid(install.uuid, "install_daily", day)` — a
+SHA-256 digest in a v8 UUID — and PostHog ingests a repeat of one it has already seen only once.
+RFC 4122 defines v5 as SHA-1, and CodeQL rightly refuses to see a hash of the install identity
+and a weak algorithm in the same expression. Nothing here needs v5, so it is v8, the slot RFC 9562
+leaves for a derivation of one's own. The lock
+stops two processes racing; the id stops the *same* process sending twice, which the release path
+can otherwise cause. Counting installs survives a duplicate either way, because PostHog's unique
+math is per install per day, but `tool_calls_total` and the other summed properties would be
+counted twice, and now are not.
+
+**A send reports failure conservatively.** `posthog-node` does not reject on a failed send — its
+`sendImmediate` catches the error and emits it on the client instead — so `client.ts` enqueues and
+awaits `flush()`, which does throw, and additionally checks the client's error counter, which any
+capture in flight can move. Either signal is treated as a failure. That errs toward re-sending a
+rollup that actually landed, which the deterministic id makes free, rather than consuming a day
+whose event never arrived, which cannot be recovered.
+
 #### The install
 
 | Property | What it is |
@@ -166,11 +183,20 @@ the cron, so an install that arrives configured is stamped on its first boot.
 applied and later superseded still count — being replaced later does not make the first
 application not have happened.
 
-A step is only recorded as reached once the event has actually left, so a failed send is tried
-again on the next sweep rather than being consumed and lost forever. The cost of that ordering
-is that a crash between the send and the write — or two processes sweeping at the same instant
-— can repeat a step. A one-shot event that arrives twice is a rounding error in a funnel; one
-that never arrives cannot be recovered. Nothing is recorded at all while telemetry is off.
+**The step is claimed before it is sent, and handed back if the send fails.** The claim is the
+insert itself — `telemetryMilestone.step` is the primary key, so of two processes sweeping at the
+same instant exactly one is told it landed the row, and only that one sends. A failed send deletes
+the row, so the next sweep tries again rather than losing the step forever.
+
+This is the opposite of the ordering the funnel shipped with, which sent first and recorded after.
+That was chosen on the grounds that a duplicate is a rounding error while a lost step cannot be
+recovered — but it made a duplicate the *likely* outcome rather than a rare one, because both the
+boot sweep and the rollup call `sweep()`. One install sent `first_fact_applied` six times.
+Claiming first costs the case the old ordering was protecting against: a crash between the claim
+and the send drops the step. Each event also carries a deterministic `uuid`,
+`stableUuid(install.uuid, step)`, so a step that is genuinely sent twice is still ingested once.
+
+Nothing is recorded at all while telemetry is off.
 
 ### Errors
 

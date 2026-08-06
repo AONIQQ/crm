@@ -1,5 +1,6 @@
 import "@crm/env/load";
 
+import { createHash } from "node:crypto";
 import { db } from "@crm/db";
 import { crmVersion } from "./version";
 
@@ -95,6 +96,12 @@ export async function reachMilestone(step: Milestone): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+export async function forgetMilestone(step: Milestone): Promise<void> {
+	try {
+		await db.telemetryMilestone.delete({ where: { step } });
+	} catch {}
 }
 
 export async function reachedMilestones(): Promise<Milestone[]> {
@@ -208,6 +215,28 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function daysSince(from: Date, now = new Date()): number {
 	return Math.max(0, Math.floor((now.getTime() - from.getTime()) / DAY_MS));
+}
+
+export function utcDay(at: Date): string {
+	return at.toISOString().slice(0, 10);
+}
+
+export function stableUuid(...parts: string[]): string {
+	const digest = createHash("sha256").update(parts.join(":")).digest();
+	const bytes = Uint8Array.from(digest.subarray(0, 16));
+
+	bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x80;
+	bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+
+	const hex = Buffer.from(bytes).toString("hex");
+
+	return [
+		hex.slice(0, 8),
+		hex.slice(8, 12),
+		hex.slice(12, 16),
+		hex.slice(16, 20),
+		hex.slice(20, 32),
+	].join("-");
 }
 
 export function sameUtcDay(a: Date | null, b: Date): boolean {

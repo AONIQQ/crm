@@ -9,7 +9,14 @@ import {
 } from "./allowlist";
 import { capture, captureNow } from "./client";
 import { telemetryDisabled } from "./disabled";
-import { type Milestone, reachMilestone } from "./install";
+import {
+	forgetMilestone,
+	type Milestone,
+	reachMilestone,
+	readInstall,
+	stableUuid,
+	utcDay,
+} from "./install";
 
 export const INSTALL_DAILY = "install_daily";
 
@@ -21,17 +28,37 @@ export const API_ERROR = "api_error";
 
 export const MODEL_ERROR = "model_error";
 
-export async function installDaily(properties: Properties): Promise<boolean> {
-	return captureNow(INSTALL_DAILY, properties);
+export async function installDaily(
+	properties: Properties,
+	at = new Date(),
+): Promise<boolean> {
+	const install = await readInstall();
+
+	return captureNow(
+		INSTALL_DAILY,
+		properties,
+		undefined,
+		install ? stableUuid(install.uuid, INSTALL_DAILY, utcDay(at)) : undefined,
+	);
 }
 
 export async function milestone(step: Milestone, at?: Date): Promise<boolean> {
 	if (telemetryDisabled()) return false;
+	if (!(await reachMilestone(step))) return false;
 
-	const sent = await captureNow(step, {}, at);
-	if (!sent) return false;
+	const install = await readInstall();
 
-	await reachMilestone(step);
+	const sent = await captureNow(
+		step,
+		{},
+		at,
+		install ? stableUuid(install.uuid, step) : undefined,
+	);
+
+	if (!sent) {
+		await forgetMilestone(step);
+		return false;
+	}
 
 	return true;
 }

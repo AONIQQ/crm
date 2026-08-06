@@ -81,7 +81,7 @@ export class RollupService {
 			const gathered = await this.gather(since);
 			counters = gathered.counters;
 
-			if (!(await installDaily(gathered.properties))) {
+			if (!(await installDaily(gathered.properties, now))) {
 				await this.giveBack(claim.previous, counters);
 
 				return { sent: false, reason: "not delivered", milestones };
