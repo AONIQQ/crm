@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AuthModule as BetterAuthModule } from "@thallesp/nestjs-better-auth";
 import { ActivitiesModule } from "./activities/activities.module";
+import { AgentModule } from "./agent/agent.module";
 import { AuthModule } from "./auth/auth.module";
 import { BackfillModule } from "./backfill/backfill.module";
 import { AppCacheModule } from "./cache/cache.module";
@@ -51,6 +52,7 @@ import { WorkspaceModule } from "./workspace/workspace.module";
 		DealsModule,
 		FieldsModule,
 		ActivitiesModule,
+		AgentModule,
 		DashboardModule,
 		SearchModule,
 		GoogleModule,
