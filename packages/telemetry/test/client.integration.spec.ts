@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@crm/db";
 import { captureNow, resetTelemetryClient } from "../src/client";
 import { milestone } from "../src/events";
-import { forgetInstall, readInstall } from "../src/install";
+import { forgetInstall, readInstall, stableUuid } from "../src/install";
 import { POSTHOG_HOST } from "../src/project";
 
 const real = {
@@ -201,6 +201,33 @@ describe("milestone", () => {
 		expect(await db.telemetryMilestone.count({ where: { step } })).toBe(1);
 	});
 
+	it("sends once when two processes sweep at the same instant", async () => {
+		const [first, second] = await Promise.all([
+			milestone(step),
+			milestone(step),
+		]);
+
+		expect([first, second].filter(Boolean).length).toBe(1);
+		expect(sentSteps()).toEqual([step]);
+		expect(await db.telemetryMilestone.count({ where: { step } })).toBe(1);
+	});
+
+	it("carries an id that stays the same across a resent step", async () => {
+		globalThis.fetch = (async () => {
+			throw new Error("network is down");
+		}) as typeof fetch;
+
+		await milestone(step);
+
+		stubFetch();
+		resetTelemetryClient();
+		await milestone(step);
+
+		const resent = eventOf(calls[0]?.body);
+		expect(resent.event).toBe(step);
+		expect(resent.uuid).toBe(stableUuid(await installUuid(), step));
+	});
+
 	it("leaves the step unreached when telemetry is off", async () => {
 		process.env.CRM_TELEMETRY_DISABLED = "1";
 		resetTelemetryClient();
@@ -214,6 +241,7 @@ describe("milestone", () => {
 type Captured = {
 	event: string;
 	distinct_id: string;
+	uuid?: string;
 	properties: Record<string, unknown>;
 };
 
@@ -224,6 +252,18 @@ function eventOf(body: unknown): Captured {
 	return {
 		event: event?.event,
 		distinct_id: event?.distinct_id,
+		uuid: event?.uuid,
 		properties: event?.properties ?? {},
 	};
+}
+
+function sentSteps(): string[] {
+	return calls.map((call) => eventOf(call.body).event).filter(Boolean);
+}
+
+async function installUuid(): Promise<string> {
+	const install = await readInstall();
+	if (!install) throw new Error("no install row");
+
+	return install.uuid;
 }
