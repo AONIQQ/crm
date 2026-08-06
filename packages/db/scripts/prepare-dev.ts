@@ -25,7 +25,7 @@ const drift = await execute([
 
 if (drift === 2) {
 	console.error(
-		"The Prisma schema is ahead of the database. Create a migration with `bun run db:migrate` before starting dev.",
+		"The database and Prisma schema differ. Reconcile the migration history with `bun run db:migrate` before starting dev.",
 	);
 	process.exit(1);
 }

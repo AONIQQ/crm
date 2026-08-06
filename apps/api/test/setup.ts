@@ -1,6 +1,7 @@
 import { afterAll } from "bun:test";
-import { db } from "@crm/db";
 
 afterAll(async () => {
+	if (!process.env.DATABASE_URL) return;
+	const { db } = await import("@crm/db");
 	await db.$disconnect();
 });

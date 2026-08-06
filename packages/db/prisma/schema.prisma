@@ -9,6 +9,7 @@ generator client {
   moduleFormat           = "esm"
   generatedFileExtension = "ts"
   importFileExtension    = ""
+  previewFeatures        = ["partialIndexes"]
 }
 
 model User {
@@ -465,10 +466,10 @@ model AgentConversation {
   lastAssistantAt DateTime?
   lastReadAt      DateTime?
 
-  shares          AgentConversationShare[]
-  submissions     AgentConversationSubmission[]
-  feedback        AgentConversationFeedback[]
-  createdVersions AgentVersion[]                @relation("AgentVersionSourceConversation")
+  shares           AgentConversationShare[]
+  submissions      AgentConversationSubmission[]
+  feedback         AgentConversationFeedback[]
+  createdVersions  AgentVersion[]                @relation("AgentVersionSourceConversation")
   builderArtifacts AgentBuilderArtifact[]
 
   @@index([contactId, lastMessageAt])
@@ -515,6 +516,7 @@ model AgentConversationShare {
   expiresAt DateTime?
   revokedAt DateTime?
 
+  @@unique([conversationId], map: "agentConversationShare_one_active_per_conversation", where: { revokedAt: null })
   @@index([conversationId, revokedAt])
   @@map("agentConversationShare")
 }
@@ -544,9 +546,9 @@ model AgentConversationSubmission {
 
   attachments AgentConversationAttachment[]
 
+  @@unique([conversationId, inputRequestId])
   @@index([conversationId, createdAt])
   @@index([status, createdAt])
-  @@unique([conversationId, inputRequestId])
   @@map("agentConversationSubmission")
 }
 
@@ -560,10 +562,11 @@ model AgentConversationAttachment {
   mediaType String
   size      Int
   content   Bytes
+  position  Int
 
   createdAt DateTime @default(now())
 
-  @@index([submissionId, createdAt])
+  @@index([submissionId, position])
   @@map("agentConversationAttachment")
 }
 
@@ -578,7 +581,7 @@ model AgentDefinition {
   createdBy   User   @relation("AgentDefinitionCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   currentVersionId String?       @unique
-  currentVersion   AgentVersion? @relation("CurrentAgentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  currentVersion   AgentVersion? @relation("CurrentAgentVersion", fields: [currentVersionId, id], references: [id, agentId], onDelete: Restrict)
 
   versions      AgentVersion[]      @relation("AgentVersions")
   triggers      AgentTrigger[]
@@ -592,6 +595,7 @@ model AgentDefinition {
   archivedAt DateTime?
   deletedAt  DateTime?
 
+  @@unique([currentVersionId, id])
   @@index([status, updatedAt])
   @@index([createdById, createdAt])
   @@map("agentDefinition")
@@ -623,13 +627,14 @@ model AgentVersion {
   deployedAt   DateTime?
   createdAt    DateTime  @default(now())
 
-  currentFor  AgentDefinition?  @relation("CurrentAgentVersion")
-  triggers    AgentTrigger[]
-  runs        AgentRun[]
-  auditEvents AgentAuditEvent[]
+  currentFor       AgentDefinition?       @relation("CurrentAgentVersion")
+  triggers         AgentTrigger[]
+  runs             AgentRun[]
+  auditEvents      AgentAuditEvent[]
   builderArtifacts AgentBuilderArtifact[]
 
   @@unique([agentId, number])
+  @@unique([id, agentId])
   @@index([agentId, createdAt])
   @@index([status, createdAt])
   @@map("agentVersion")
@@ -652,7 +657,8 @@ model AgentBuilderArtifact {
   status          AgentBuilderArtifactStatus @default(WRITING)
   createdAt       DateTime                   @default(now())
 
-  @@unique([conversationId, path, revision])
+  @@unique([conversationId, path, revision], map: "agentBuilderArtifact_conversation_path_revision_key", where: { conversationId: { not: null } })
+  @@unique([versionId, path, revision], map: "agentBuilderArtifact_version_path_revision_key", where: { versionId: { not: null } })
   @@index([conversationId, createdAt])
   @@index([versionId, path])
   @@map("agentBuilderArtifact")
@@ -665,7 +671,7 @@ model AgentTrigger {
   agent   AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   versionId String
-  version   AgentVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  version   AgentVersion @relation(fields: [versionId, agentId], references: [id, agentId], onDelete: Restrict)
 
   type   AgentTriggerType
   name   String
@@ -682,6 +688,7 @@ model AgentTrigger {
 
   runs AgentRun[]
 
+  @@unique([id, agentId])
   @@index([agentId, enabled])
   @@index([enabled, nextRunAt])
   @@index([versionId])
@@ -695,10 +702,10 @@ model AgentRun {
   agent   AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   versionId String
-  version   AgentVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  version   AgentVersion @relation(fields: [versionId, agentId], references: [id, agentId], onDelete: Restrict)
 
   triggerId String?
-  trigger   AgentTrigger? @relation(fields: [triggerId], references: [id], onDelete: Restrict)
+  trigger   AgentTrigger? @relation(fields: [triggerId, agentId], references: [id, agentId], onDelete: Restrict)
 
   initiatedById String?
   initiatedBy   User?   @relation("AgentRunInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
@@ -731,6 +738,7 @@ model AgentRun {
   events  AgentRunEvent[]
   actions AgentAction[]
 
+  @@unique([id, agentId])
   @@index([agentId, createdAt])
   @@index([versionId, createdAt])
   @@index([status, createdAt])
@@ -761,7 +769,7 @@ model AgentAction {
   agent   AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   runId String
-  run   AgentRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  run   AgentRun @relation(fields: [runId, agentId], references: [id, agentId], onDelete: Restrict)
 
   type        String
   provider    String
@@ -799,7 +807,7 @@ model AgentAuditEvent {
   agent   AgentDefinition @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   versionId String?
-  version   AgentVersion? @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  version   AgentVersion? @relation(fields: [versionId, agentId], references: [id, agentId], onDelete: Restrict)
 
   actorUserId String?
   actorUser   User?   @relation("AgentAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)

@@ -35,7 +35,7 @@ export class ConversationAttachmentsController {
 			? attachment.mediaType
 			: "application/octet-stream";
 
-		response.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+		response.setHeader("Cache-Control", "private, no-store");
 		response.setHeader("Content-Length", content.byteLength.toString());
 		response.setHeader("Content-Type", mediaType);
 		response.setHeader(

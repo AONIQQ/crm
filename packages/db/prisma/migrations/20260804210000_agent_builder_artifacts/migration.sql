@@ -15,7 +15,8 @@ CREATE TABLE "agentBuilderArtifact" (
     CONSTRAINT "agentBuilderArtifact_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "agentBuilderArtifact_conversationId_path_revision_key" ON "agentBuilderArtifact"("conversationId", "path", "revision");
+CREATE UNIQUE INDEX "agentBuilderArtifact_conversation_path_revision_key" ON "agentBuilderArtifact"("conversationId", "path", "revision") WHERE "conversationId" IS NOT NULL;
+CREATE UNIQUE INDEX "agentBuilderArtifact_version_path_revision_key" ON "agentBuilderArtifact"("versionId", "path", "revision") WHERE "versionId" IS NOT NULL;
 CREATE INDEX "agentBuilderArtifact_conversationId_createdAt_idx" ON "agentBuilderArtifact"("conversationId", "createdAt");
 CREATE INDEX "agentBuilderArtifact_versionId_path_idx" ON "agentBuilderArtifact"("versionId", "path");
 

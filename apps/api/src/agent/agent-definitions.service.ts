@@ -128,10 +128,10 @@ export class AgentDefinitionsService {
 	}
 
 	async update(input: AgentUpdateInput, userId: string) {
-		await this.access.assertCanManage(input.id, userId);
 		const description = input.description?.trim() || null;
 
 		const updated = await this.db.$transaction(async (tx) => {
+			await this.access.assertCanManageInTransaction(tx, input.id, userId);
 			const agent = await this.lockAgent(tx, input.id);
 			const row = await tx.agentDefinition.update({
 				where: { id: input.id },
@@ -159,8 +159,8 @@ export class AgentDefinitionsService {
 	}
 
 	async deploy(input: AgentDeployInput, userId: string) {
-		await this.access.assertCanManage(input.id, userId);
 		return this.db.$transaction(async (tx) => {
+			await this.access.assertCanManageInTransaction(tx, input.id, userId);
 			const agent = await this.lockAgent(tx, input.id);
 			const existing = await tx.agentAuditEvent.findFirst({
 				where: {
@@ -306,10 +306,10 @@ export class AgentDefinitionsService {
 	}
 
 	async remove(id: string, userId: string) {
-		await this.access.assertCanManage(id, userId);
 		const now = new Date();
 
 		return this.db.$transaction(async (tx) => {
+			await this.access.assertCanManageInTransaction(tx, id, userId);
 			const [current] = await tx.$queryRaw<
 				Array<{ id: string; status: string }>
 			>`
@@ -406,9 +406,8 @@ export class AgentDefinitionsService {
 		invalidStatusMessage: string,
 		extra: Prisma.AgentDefinitionUpdateInput = {},
 	) {
-		await this.access.assertCanManage(id, userId);
-
 		return this.db.$transaction(async (tx) => {
+			await this.access.assertCanManageInTransaction(tx, id, userId);
 			const before = await this.lockAgent(tx, id);
 			if (!allowedFrom.includes(before.status)) {
 				throw new BadRequestException(invalidStatusMessage);

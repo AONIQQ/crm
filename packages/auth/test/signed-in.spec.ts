@@ -30,4 +30,19 @@ describe("the signed-in registry", () => {
 		await expect(notifySignedIn(USER)).resolves.toBeUndefined();
 		expect(after).toEqual(["still ran"]);
 	});
+
+	it("waits for handlers in registration order", async () => {
+		const order: string[] = [];
+		onSignedIn(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			order.push("first");
+		});
+		onSignedIn(() => {
+			order.push("second");
+		});
+
+		await notifySignedIn(USER);
+
+		expect(order).toEqual(["first", "second"]);
+	});
 });

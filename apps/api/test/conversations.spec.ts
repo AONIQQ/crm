@@ -299,6 +299,15 @@ describe("ConversationsService", () => {
 				emittedAt: new Date(),
 			},
 		});
+		await db.agentBuilderArtifact.create({
+			data: {
+				conversationId: conversation.id,
+				path: "agent/instructions.md",
+				language: "markdown",
+				content: "Temporary draft",
+				revision: 1,
+			},
+		});
 
 		await service.remove(conversation.id, userId);
 
@@ -308,6 +317,11 @@ describe("ConversationsService", () => {
 		expect(
 			await db.agentEvent.count({
 				where: { sessionId },
+			}),
+		).toBe(0);
+		expect(
+			await db.agentBuilderArtifact.count({
+				where: { conversationId: conversation.id },
 			}),
 		).toBe(0);
 	});

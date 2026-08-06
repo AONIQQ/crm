@@ -110,6 +110,7 @@ export class ConversationsService {
 	}
 
 	async listBuilder(userId: string): Promise<BuilderConversationSummary[]> {
+		await this.assertWorkspaceMember(userId);
 		const rows = await this.db.agentConversation.findMany({
 			where: { userId, kind: "BUILDER" },
 			orderBy: { lastMessageAt: "desc" },
@@ -244,6 +245,7 @@ export class ConversationsService {
 	}
 
 	async builderById(id: string, userId: string) {
+		await this.assertWorkspaceMember(userId);
 		const row = await this.db.agentConversation.findFirst({
 			where: { id, userId, kind: "BUILDER" },
 			select: {
@@ -335,7 +337,7 @@ export class ConversationsService {
 						sentAt: true,
 						acceptedAt: true,
 						attachments: {
-							orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+							orderBy: { position: "asc" },
 							select: {
 								id: true,
 								name: true,
@@ -395,6 +397,7 @@ export class ConversationsService {
 		input: BuilderConversationCreateInput,
 		userId: string,
 	): Promise<{ id: string }> {
+		await this.assertWorkspaceMember(userId);
 		const existing = await this.requestByClientId(input.clientRequestId);
 
 		if (existing) {
@@ -439,6 +442,7 @@ export class ConversationsService {
 		input: BuilderConversationSubmitInput,
 		userId: string,
 	): Promise<{ id: string }> {
+		await this.assertWorkspaceMember(userId);
 		const existing = await this.requestByClientId(input.clientRequestId);
 
 		if (existing) {
@@ -498,6 +502,7 @@ export class ConversationsService {
 		input: BuilderQuestionResponseInput,
 		userId: string,
 	): Promise<{ id: string }> {
+		await this.assertWorkspaceMember(userId);
 		const existing = await this.requestByClientId(input.clientRequestId);
 
 		if (existing) {
@@ -639,6 +644,7 @@ export class ConversationsService {
 	}
 
 	async markRead(id: string, userId: string): Promise<{ id: string }> {
+		await this.assertWorkspaceMember(userId);
 		const updated = await this.db.agentConversation.updateMany({
 			where: { id, userId, kind: "BUILDER" },
 			data: { lastReadAt: new Date() },
@@ -708,6 +714,7 @@ export class ConversationsService {
 		input: { id: string; messageId: string; rating: "UP" | "DOWN" | null },
 		userId: string,
 	) {
+		await this.assertWorkspaceMember(userId);
 		const conversation = await this.db.agentConversation.findFirst({
 			where: { id: input.id, userId, kind: "BUILDER" },
 			select: { id: true },
@@ -856,11 +863,14 @@ export class ConversationsService {
 	async events(input: ConversationEventsInput, userId: string) {
 		const conversation = await this.db.agentConversation.findUnique({
 			where: { id: input.id },
-			select: { sessionId: true, userId: true },
+			select: { kind: true, sessionId: true, userId: true },
 		});
 
 		if (!conversation || conversation.userId !== userId) {
 			throw new NotFoundException(`No conversation with id ${input.id}.`);
+		}
+		if (conversation.kind === "BUILDER") {
+			await this.assertWorkspaceMember(userId);
 		}
 
 		if (!conversation.sessionId) return [];
@@ -884,6 +894,7 @@ export class ConversationsService {
 			where: { id },
 			select: {
 				id: true,
+				kind: true,
 				userId: true,
 				sessionId: true,
 			},
@@ -892,8 +903,14 @@ export class ConversationsService {
 		if (!conversation || conversation.userId !== userId) {
 			throw new NotFoundException(`No conversation with id ${id}.`);
 		}
+		if (conversation.kind === "BUILDER") {
+			await this.assertWorkspaceMember(userId);
+		}
 
 		await this.db.$transaction(async (tx) => {
+			await tx.agentBuilderArtifact.deleteMany({
+				where: { conversationId: id, versionId: null },
+			});
 			if (conversation.sessionId) {
 				await tx.agentEvent.deleteMany({
 					where: { sessionId: conversation.sessionId },
@@ -948,11 +965,12 @@ export class ConversationsService {
 	private attachmentWrites(
 		attachments: BuilderConversationCreateInput["attachments"],
 	) {
-		return attachments.map((attachment) => ({
+		return attachments.map((attachment, position) => ({
 			name: attachment.name,
 			mediaType: attachment.type,
 			size: attachment.size,
 			content: Buffer.from(attachment.contentBase64, "base64"),
+			position,
 		}));
 	}
 
@@ -989,13 +1007,14 @@ export class ConversationsService {
 			);
 		}
 
-		return input.attachments.map((attachment) => {
+		return input.attachments.map((attachment, position) => {
 			if ("contentBase64" in attachment) {
 				return {
 					name: attachment.name,
 					mediaType: attachment.type,
 					size: attachment.size,
 					content: Buffer.from(attachment.contentBase64, "base64"),
+					position,
 				};
 			}
 
@@ -1010,6 +1029,7 @@ export class ConversationsService {
 				mediaType: stored.mediaType,
 				size: stored.size,
 				content: stored.content,
+				position,
 			};
 		});
 	}

@@ -87,6 +87,7 @@ beforeAll(async () => {
 					mediaType: "image/png",
 					size: 4,
 					content: Buffer.from([1, 2, 3, 4]),
+					position: 0,
 				},
 			},
 		},

@@ -4,7 +4,7 @@ import {
 	WORKSPACE_ID,
 	type WorkspaceRole,
 } from "@crm/auth";
-import type { Db } from "@crm/db";
+import type { Db, Prisma } from "@crm/db";
 import {
 	ForbiddenException,
 	Injectable,
@@ -46,6 +46,52 @@ export class AgentAccessService {
 				},
 			}),
 		]);
+
+		if (!agent) {
+			throw new NotFoundException(`No agent with id ${agentId}.`);
+		}
+
+		if (isPrivateAgentDraft(agent.status) && agent.createdById !== userId) {
+			throw new NotFoundException(`No agent with id ${agentId}.`);
+		}
+
+		if (agent.createdById !== userId && !isWorkspaceAdmin(role)) {
+			throw new ForbiddenException(
+				"Only the creator or a workspace admin can change this agent.",
+			);
+		}
+
+		return agent;
+	}
+
+	async assertCanManageInTransaction(
+		tx: Prisma.TransactionClient,
+		agentId: string,
+		userId: string,
+	) {
+		const [member] = await tx.$queryRaw<Array<{ role: string }>>`
+			SELECT role
+			FROM "member"
+			WHERE "organizationId" = ${WORKSPACE_ID}
+				AND "userId" = ${userId}
+			FOR SHARE
+		`;
+
+		if (!member) {
+			throw new ForbiddenException("You are not a member of this workspace.");
+		}
+
+		const role = isWorkspaceRole(member.role) ? member.role : "member";
+		const agent = await tx.agentDefinition.findFirst({
+			where: { id: agentId, status: { not: "DELETED" } },
+			select: {
+				id: true,
+				createdById: true,
+				status: true,
+				name: true,
+				description: true,
+			},
+		});
 
 		if (!agent) {
 			throw new NotFoundException(`No agent with id ${agentId}.`);

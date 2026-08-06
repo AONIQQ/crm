@@ -120,7 +120,7 @@ export class ConversationSharingService {
 								errorMessage: true,
 								createdAt: true,
 								attachments: {
-									orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+									orderBy: { position: "asc" },
 									select: {
 										id: true,
 										name: true,

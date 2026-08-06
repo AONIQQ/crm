@@ -5,13 +5,14 @@ CREATE TABLE "agentConversationAttachment" (
     "mediaType" TEXT NOT NULL,
     "size" INTEGER NOT NULL,
     "content" BYTEA NOT NULL,
+    "position" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "agentConversationAttachment_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "agentConversationAttachment_submissionId_createdAt_idx"
-ON "agentConversationAttachment"("submissionId", "createdAt");
+CREATE INDEX "agentConversationAttachment_submissionId_position_idx"
+ON "agentConversationAttachment"("submissionId", "position");
 
 ALTER TABLE "agentConversationAttachment"
 ADD CONSTRAINT "agentConversationAttachment_submissionId_fkey"
@@ -42,7 +43,8 @@ INSERT INTO "agentConversationAttachment" (
     "name",
     "mediaType",
     "size",
-    "content"
+    "content",
+    "position"
 )
 SELECT
     id,
@@ -50,37 +52,34 @@ SELECT
     left(COALESCE(NULLIF(value ->> 'name', ''), 'attachment'), 180),
     left(COALESCE(NULLIF(value ->> 'type', ''), 'application/octet-stream'), 120),
     octet_length(decode(value ->> 'contentBase64', 'base64')),
-    decode(value ->> 'contentBase64', 'base64')
+    decode(value ->> 'contentBase64', 'base64'),
+    ordinality - 1
 FROM legacy_attachments;
-
-WITH attachment_metadata AS (
-    SELECT
-        attachment."submissionId",
-        jsonb_agg(
-            jsonb_build_object(
-                'id', attachment.id,
-                'name', attachment.name,
-                'type', attachment."mediaType",
-                'size', attachment.size
-            )
-            ORDER BY attachment."createdAt", attachment.id
-        ) AS attachments
-    FROM "agentConversationAttachment" AS attachment
-    GROUP BY attachment."submissionId"
-)
-UPDATE "agentConversationSubmission" AS submission
-SET message = jsonb_set(submission.message, '{attachments}', metadata.attachments)
-FROM attachment_metadata AS metadata
-WHERE submission.id = metadata."submissionId";
 
 UPDATE "agentConversationSubmission" AS submission
 SET message = jsonb_set(
     submission.message,
     '{attachments}',
     (
-        SELECT COALESCE(jsonb_agg(attachment.value - 'contentBase64' ORDER BY attachment.ordinality), '[]'::jsonb)
+        SELECT COALESCE(
+            jsonb_agg(
+                CASE
+                    WHEN stored.id IS NOT NULL THEN jsonb_build_object(
+                        'id', stored.id,
+                        'name', stored.name,
+                        'type', stored."mediaType",
+                        'size', stored.size
+                    )
+                    ELSE attachment.value - 'contentBase64'
+                END
+                ORDER BY attachment.ordinality
+            ),
+            '[]'::jsonb
+        )
         FROM jsonb_array_elements(submission.message -> 'attachments')
         WITH ORDINALITY AS attachment(value, ordinality)
+        LEFT JOIN "agentConversationAttachment" AS stored
+            ON stored.id = 'legacy_' || md5(submission.id || ':' || attachment.ordinality::text)
     )
 )
 WHERE jsonb_typeof(submission.message -> 'attachments') = 'array';

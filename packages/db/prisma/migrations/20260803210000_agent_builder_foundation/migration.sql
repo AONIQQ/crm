@@ -203,16 +203,19 @@ CREATE TABLE "agentConversationFeedback" (
 );
 
 CREATE UNIQUE INDEX "agentDefinition_currentVersionId_key" ON "agentDefinition"("currentVersionId");
+CREATE UNIQUE INDEX "agentDefinition_currentVersionId_id_key" ON "agentDefinition"("currentVersionId", "id");
 CREATE INDEX "agentDefinition_status_updatedAt_idx" ON "agentDefinition"("status", "updatedAt");
 CREATE INDEX "agentDefinition_createdById_createdAt_idx" ON "agentDefinition"("createdById", "createdAt");
 
 CREATE UNIQUE INDEX "agentVersion_agentId_number_key" ON "agentVersion"("agentId", "number");
+CREATE UNIQUE INDEX "agentVersion_id_agentId_key" ON "agentVersion"("id", "agentId");
 CREATE INDEX "agentVersion_agentId_createdAt_idx" ON "agentVersion"("agentId", "createdAt");
 CREATE INDEX "agentVersion_status_createdAt_idx" ON "agentVersion"("status", "createdAt");
 
 CREATE INDEX "agentTrigger_agentId_enabled_idx" ON "agentTrigger"("agentId", "enabled");
 CREATE INDEX "agentTrigger_enabled_nextRunAt_idx" ON "agentTrigger"("enabled", "nextRunAt");
 CREATE INDEX "agentTrigger_versionId_idx" ON "agentTrigger"("versionId");
+CREATE UNIQUE INDEX "agentTrigger_id_agentId_key" ON "agentTrigger"("id", "agentId");
 
 CREATE UNIQUE INDEX "agentRun_sessionId_key" ON "agentRun"("sessionId");
 CREATE UNIQUE INDEX "agentRun_idempotencyKey_key" ON "agentRun"("idempotencyKey");
@@ -221,6 +224,7 @@ CREATE INDEX "agentRun_agentId_createdAt_idx" ON "agentRun"("agentId", "createdA
 CREATE INDEX "agentRun_versionId_createdAt_idx" ON "agentRun"("versionId", "createdAt");
 CREATE INDEX "agentRun_status_createdAt_idx" ON "agentRun"("status", "createdAt");
 CREATE INDEX "agentRun_triggerId_createdAt_idx" ON "agentRun"("triggerId", "createdAt");
+CREATE UNIQUE INDEX "agentRun_id_agentId_key" ON "agentRun"("id", "agentId");
 
 CREATE UNIQUE INDEX "agentRunEvent_runId_sequence_key" ON "agentRunEvent"("runId", "sequence");
 CREATE INDEX "agentRunEvent_runId_emittedAt_idx" ON "agentRunEvent"("runId", "emittedAt");
@@ -253,7 +257,7 @@ CREATE INDEX "agentConversation_userId_kind_lastMessageAt_idx" ON "agentConversa
 CREATE INDEX "agentConversation_agentId_lastMessageAt_idx" ON "agentConversation"("agentId", "lastMessageAt");
 
 ALTER TABLE "agentDefinition" ADD CONSTRAINT "agentDefinition_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agentDefinition" ADD CONSTRAINT "agentDefinition_currentVersionId_fkey" FOREIGN KEY ("currentVersionId") REFERENCES "agentVersion"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "agentDefinition" ADD CONSTRAINT "agentDefinition_currentVersionId_id_fkey" FOREIGN KEY ("currentVersionId", "id") REFERENCES "agentVersion"("id", "agentId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "agentVersion" ADD CONSTRAINT "agentVersion_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "agentDefinition"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "agentVersion" ADD CONSTRAINT "agentVersion_sourceConversationId_fkey" FOREIGN KEY ("sourceConversationId") REFERENCES "agentConversation"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -262,21 +266,21 @@ ALTER TABLE "agentVersion" ADD CONSTRAINT "agentVersion_createdById_fkey" FOREIG
 ALTER TABLE "agentConversation" ADD CONSTRAINT "agentConversation_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "agentDefinition"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE "agentTrigger" ADD CONSTRAINT "agentTrigger_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "agentDefinition"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agentTrigger" ADD CONSTRAINT "agentTrigger_versionId_fkey" FOREIGN KEY ("versionId") REFERENCES "agentVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agentTrigger" ADD CONSTRAINT "agentTrigger_versionId_agentId_fkey" FOREIGN KEY ("versionId", "agentId") REFERENCES "agentVersion"("id", "agentId") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "agentTrigger" ADD CONSTRAINT "agentTrigger_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "agentRun" ADD CONSTRAINT "agentRun_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "agentDefinition"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agentRun" ADD CONSTRAINT "agentRun_versionId_fkey" FOREIGN KEY ("versionId") REFERENCES "agentVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agentRun" ADD CONSTRAINT "agentRun_triggerId_fkey" FOREIGN KEY ("triggerId") REFERENCES "agentTrigger"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agentRun" ADD CONSTRAINT "agentRun_versionId_agentId_fkey" FOREIGN KEY ("versionId", "agentId") REFERENCES "agentVersion"("id", "agentId") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agentRun" ADD CONSTRAINT "agentRun_triggerId_agentId_fkey" FOREIGN KEY ("triggerId", "agentId") REFERENCES "agentTrigger"("id", "agentId") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "agentRun" ADD CONSTRAINT "agentRun_initiatedById_fkey" FOREIGN KEY ("initiatedById") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE "agentRunEvent" ADD CONSTRAINT "agentRunEvent_runId_fkey" FOREIGN KEY ("runId") REFERENCES "agentRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "agentAction" ADD CONSTRAINT "agentAction_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "agentDefinition"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agentAction" ADD CONSTRAINT "agentAction_runId_fkey" FOREIGN KEY ("runId") REFERENCES "agentRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agentAction" ADD CONSTRAINT "agentAction_runId_agentId_fkey" FOREIGN KEY ("runId", "agentId") REFERENCES "agentRun"("id", "agentId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "agentAuditEvent" ADD CONSTRAINT "agentAuditEvent_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "agentDefinition"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agentAuditEvent" ADD CONSTRAINT "agentAuditEvent_versionId_fkey" FOREIGN KEY ("versionId") REFERENCES "agentVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agentAuditEvent" ADD CONSTRAINT "agentAuditEvent_versionId_agentId_fkey" FOREIGN KEY ("versionId", "agentId") REFERENCES "agentVersion"("id", "agentId") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "agentAuditEvent" ADD CONSTRAINT "agentAuditEvent_actorUserId_fkey" FOREIGN KEY ("actorUserId") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE "agentConversationShare" ADD CONSTRAINT "agentConversationShare_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "agentConversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;

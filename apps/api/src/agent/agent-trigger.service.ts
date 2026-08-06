@@ -270,7 +270,13 @@ export class AgentTriggerService {
 				method: "POST",
 				headers: { authorization: `Bearer ${agent.secret}` },
 				signal: AbortSignal.timeout(POKE_TIMEOUT_MS),
-			}).catch(missed);
+			})
+				.then((response) => {
+					if (!response.ok) {
+						throw new Error(`Agent poke returned ${response.status}.`);
+					}
+				})
+				.catch(missed);
 		} catch (error) {
 			missed(error);
 		}
