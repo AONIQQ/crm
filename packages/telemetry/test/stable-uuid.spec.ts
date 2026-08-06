@@ -6,7 +6,7 @@ const INSTALL = "cdf04e64-7722-4921-8b28-be936ce36353";
 const OTHER = "c4b8d582-ec43-44f1-9a73-7b331eec90c7";
 
 const UUID_SHAPE =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+	/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 describe("utcDay", () => {
 	it("is the same string across a whole utc day", () => {
@@ -20,7 +20,7 @@ describe("utcDay", () => {
 });
 
 describe("stableUuid", () => {
-	it("is a well formed v5 uuid", () => {
+	it("is a well formed v8 uuid", () => {
 		expect(stableUuid(INSTALL, "install_daily", "2026-08-05")).toMatch(
 			UUID_SHAPE,
 		);

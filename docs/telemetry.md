@@ -63,7 +63,10 @@ already drained. A rollup that fails to send hands the day and the counters back
 run is not suppressed by a send that never happened.
 
 **The event carries a deterministic `uuid`**, `stableUuid(install.uuid, "install_daily", day)` — a
-v5-shaped digest — and PostHog ingests a repeat of one it has already seen only once. The lock
+SHA-256 digest in a v8 UUID — and PostHog ingests a repeat of one it has already seen only once.
+RFC 4122 defines v5 as SHA-1, and CodeQL rightly refuses to see a hash of the install identity
+and a weak algorithm in the same expression. Nothing here needs v5, so it is v8, the slot RFC 9562
+leaves for a derivation of one's own. The lock
 stops two processes racing; the id stops the *same* process sending twice, which the release path
 can otherwise cause. Counting installs survives a duplicate either way, because PostHog's unique
 math is per install per day, but `tool_calls_total` and the other summed properties would be

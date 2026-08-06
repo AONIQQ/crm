@@ -222,10 +222,10 @@ export function utcDay(at: Date): string {
 }
 
 export function stableUuid(...parts: string[]): string {
-	const digest = createHash("sha1").update(parts.join(":")).digest();
+	const digest = createHash("sha256").update(parts.join(":")).digest();
 	const bytes = Uint8Array.from(digest.subarray(0, 16));
 
-	bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x50;
+	bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x80;
 	bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
 
 	const hex = Buffer.from(bytes).toString("hex");
