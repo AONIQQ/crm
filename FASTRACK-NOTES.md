@@ -35,8 +35,18 @@ changes to config, branding assets, and new files, and merges stay conflict-free
 - Deploys are CLI-based from this folder (no GitHub auto-deploy):
   `VERCEL_ORG_ID=team_dZQibfVEGgwzpQGobXROKbyB VERCEL_PROJECT_ID=<id> vercel deploy --prod --yes`
   (project IDs in Vercel dashboard; run once for apps/api's project, once for apps/app's)
-- Agent service is NOT yet hosted in production (needs a long-running host; the app
-  works without it, minus the Agent tab). Candidates: Railway/Fly, or keep it local.
+- API STATUS (2026-08-06): the crm-api Vercel project builds green but the function
+  500s at runtime. Root cause, confirmed through the full error ladder: NestJS loads
+  express and friends via dynamic computed require() calls that no bundler can trace,
+  and Vercel's Bun runtime (beta) dies earlier still on read-only-filesystem writes.
+  Serverless is the wrong shape for this API. Deploy it (and the agent, same
+  constraint) on an always-on host instead: Railway or Fly, `bun install && bun run
+  start` from apps/api with the same env vars the Vercel project holds, then point
+  the crm-api.fastrack.school CNAME at that host instead of Vercel.
+  The pre-bundling pipeline (scripts/bundle-serverless.ts) stays committed; it is
+  harmless and documents what was tried.
+- Agent service is also NOT yet hosted (same always-on requirement; the app works
+  without it, minus the Agent tab). Host it beside the API when the API moves.
 - Google OAuth callback for production: https://crm-api.fastrack.school/api/auth/callback/google
   must be in the OAuth client's redirect URIs (plus the localhost:3101 one for dev).
 - AUTH_COOKIE_DOMAIN=fastrack.school is set so one session cookie covers both subdomains.
