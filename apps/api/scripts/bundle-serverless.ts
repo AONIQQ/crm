@@ -6,6 +6,7 @@ const result = await Bun.build({
 	entrypoints: ["src/serverless-entry.ts"],
 	target: "node",
 	format: "esm",
+	define: { "process.env.NODE_ENV": '"production"' },
 	plugins: [
 		{
 			name: "inline-undici",
