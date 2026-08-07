@@ -131,7 +131,16 @@ export class GoogleMatchService {
 		);
 
 		const domain = dominantDomain(external, knownDomains);
-		if (!domain) return { companyId: null, contactId: null, external };
+		if (!domain) {
+			// Fastrack: our buyers are consumers on free-mail domains. Upstream
+			// drops them because there is no company to attach; we keep them as
+			// company-less contacts, but only when we have replied (allowCreate).
+			if (!request.allowCreate) {
+				return { companyId: null, contactId: null, external };
+			}
+			const contactId = await this.createPersonalContact(external, request);
+			return { companyId: null, contactId, external };
+		}
 
 		const existing = known.find((company) => company.domain === domain);
 		if (existing) {
@@ -198,6 +207,45 @@ export class GoogleMatchService {
 		});
 
 		return { companyId, contactId, external };
+	}
+
+	private async createPersonalContact(
+		external: Participant[],
+		request: MatchRequest,
+	): Promise<string | null> {
+		const person = external[0];
+		if (!person) return null;
+
+		const { firstName, lastName } = splitName(person.name, person.email);
+
+		const existing = await this.db.contact.findUnique({
+			where: { email: person.email },
+			select: { id: true },
+		});
+
+		const contact = await this.db.contact.upsert({
+			where: { email: person.email },
+			create: {
+				firstName,
+				lastName,
+				email: person.email,
+				source: request.source,
+				ownerId: request.ownerId,
+			},
+			update: {},
+			select: { id: true },
+		});
+
+		if (!existing) {
+			await this.log.record({
+				contactId: contact.id,
+				subject: "Contact added from your inbox",
+				body: `${person.email} appeared in a ${request.source === "CALENDAR" ? "meeting" : "thread"} you replied to.`,
+				meta: { source: request.source },
+			});
+		}
+
+		return contact.id;
 	}
 
 	private async createContact(
