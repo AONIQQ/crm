@@ -35,16 +35,15 @@ changes to config, branding assets, and new files, and merges stay conflict-free
 - Deploys are CLI-based from this folder (no GitHub auto-deploy):
   `VERCEL_ORG_ID=team_dZQibfVEGgwzpQGobXROKbyB VERCEL_PROJECT_ID=<id> vercel deploy --prod --yes`
   (project IDs in Vercel dashboard; run once for apps/api's project, once for apps/app's)
-- API STATUS (2026-08-06): the crm-api Vercel project builds green but the function
-  500s at runtime. Root cause, confirmed through the full error ladder: NestJS loads
-  express and friends via dynamic computed require() calls that no bundler can trace,
-  and Vercel's Bun runtime (beta) dies earlier still on read-only-filesystem writes.
-  Serverless is the wrong shape for this API. Deploy it (and the agent, same
-  constraint) on an always-on host instead: Railway or Fly, `bun install && bun run
-  start` from apps/api with the same env vars the Vercel project holds, then point
-  the crm-api.fastrack.school CNAME at that host instead of Vercel.
-  The pre-bundling pipeline (scripts/bundle-serverless.ts) stays committed; it is
-  harmless and documents what was tried.
+- API STATUS: LIVE on Vercel serverless. It works via a pre-bundling pipeline:
+  scripts/bundle-serverless.ts produces a self-contained api/bundle.mjs at build time
+  (Node target, optional Nest peers stubbed to throw lazily, undici inlined), and
+  src/serverless-shim.ts intercepts Nest's dynamic require() calls at runtime and
+  returns the bundled express/platform-express. Never remove the shim or the bundler
+  without retesting: plain zero-config deployment of this NestJS app does NOT work
+  (dynamic requires are untraceable), and the Vercel Bun runtime (beta) fails on
+  read-only-filesystem writes. Local full-boot test before deploying API changes:
+  serve api/bundle.mjs with node http and hit /api/auth/get-session (expect 200).
 - Agent service is also NOT yet hosted (same always-on requirement; the app works
   without it, minus the Agent tab). Host it beside the API when the API moves.
 - Google OAuth callback for production: https://crm-api.fastrack.school/api/auth/callback/google
