@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import "./serverless-shim";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createApp } from "./create-app";
 
