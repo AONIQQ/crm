@@ -4,9 +4,16 @@ const OPTIONAL = /^(@nestjs\/(graphql|microservices|websockets)|@apollo\/|class-
 
 const result = await Bun.build({
 	entrypoints: ["src/serverless-entry.ts"],
-	target: "bun",
+	target: "node",
 	format: "esm",
 	plugins: [
+		{
+			name: "inline-undici",
+			setup(b) {
+				const undiciPath = `${process.cwd()}/node_modules/undici/index.js`
+				b.onResolve({ filter: /^undici$/ }, () => ({ path: undiciPath }))
+			},
+		},
 		{
 			name: "stub-optional-deps",
 			setup(b) {

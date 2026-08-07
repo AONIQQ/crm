@@ -20,6 +20,5 @@
       "destination": "/api/index"
     }
   ],
-  "bunVersion": "1.x",
   "buildCommand": "cd ../../packages/db && bunx prisma migrate deploy && cd ../../apps/api && bun scripts/bundle-serverless.ts"
 }
