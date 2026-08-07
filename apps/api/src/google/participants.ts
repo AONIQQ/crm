@@ -150,10 +150,13 @@ export function externalParticipants(
 		if (options.suppressedEmails.has(participant.email)) return false;
 		if (isMachineAddress(participant.email)) return false;
 
+		// Fastrack: consumer buyers write from free-mail addresses; keep them.
+		// Domain-level checks only apply when there is a work domain to check.
 		const domain = workDomain(participant.email);
-		if (!domain) return false;
-		if (options.ourDomains.has(domain)) return false;
-		if (options.suppressedDomains.has(domain)) return false;
+		if (domain) {
+			if (options.ourDomains.has(domain)) return false;
+			if (options.suppressedDomains.has(domain)) return false;
+		}
 		if (isAutomatedAddress(participant.email)) return false;
 
 		return true;
