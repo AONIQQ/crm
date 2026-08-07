@@ -19,5 +19,6 @@
       "source": "/(.*)",
       "destination": "/api/index"
     }
-  ]
+  ],
+  "bunVersion": "1.x"
 }
