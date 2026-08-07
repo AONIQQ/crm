@@ -53,6 +53,17 @@ changes to config, branding assets, and new files, and merges stay conflict-free
   diverge from upstream; expect small conflicts on fork sync in those three files.
 - The 502-on-sign-in class of bug: apps/app/turbo.json passThroughEnv gates which env
   vars reach the build. If a new env var seems ignored in production, add it there.
+- CONSUMER-BUYER PATCHES (load-bearing, diverge from upstream): upstream drops any
+  email participant without a work domain, twice (src/google/participants.ts
+  externalParticipants, and google-match.service.ts resolve). Both patched so
+  free-mail senders we have REPLIED TO become company-less contacts. Without these
+  patches the CRM ignores every Fastrack customer. Re-verify after any fork sync.
+- Mail rules to remember: contacts are only created from threads the connected
+  mailbox (info@fastrack.school) has replied to; mail to/from CRM users
+  (info@aoniqq.com) is internal and never becomes a contact; the sync is
+  forward-only from a Gmail history cursor (no back-import).
+- Agent enrichment requires paid Vercel AI Gateway credits; free tier rejects the
+  default model (seen as agentEvent session.failed MODEL_CALL_FAILED).
 - Google OAuth callback for production: https://crm-api.fastrack.school/api/auth/callback/google
   must be in the OAuth client's redirect URIs (plus the localhost:3101 one for dev).
 - AUTH_COOKIE_DOMAIN=fastrack.school is set so one session cookie covers both subdomains.
