@@ -44,8 +44,15 @@ changes to config, branding assets, and new files, and merges stay conflict-free
   (dynamic requires are untraceable), and the Vercel Bun runtime (beta) fails on
   read-only-filesystem writes. Local full-boot test before deploying API changes:
   serve api/bundle.mjs with node http and hit /api/auth/get-session (expect 200).
-- Agent service is also NOT yet hosted (same always-on requirement; the app works
-  without it, minus the Agent tab). Host it beside the API when the API moves.
+- Agent: LIVE on Vercel as project crm-agent (rootDirectory apps/agent, bun install,
+  eve build). Production URL https://crm-agent-seven-beta.vercel.app; the app and API
+  reach it via AGENT_URL + AGENT_BRIDGE_SECRET (unauthenticated requests get 401,
+  which is correct). eve deploy's own wrapper passes a dropped CLI flag; deploy with
+  plain `vercel deploy --prod --yes` instead.
+- Branding: Fastrack (packages/ui logo.tsx, app layout metadata, auth-shell). These
+  diverge from upstream; expect small conflicts on fork sync in those three files.
+- The 502-on-sign-in class of bug: apps/app/turbo.json passThroughEnv gates which env
+  vars reach the build. If a new env var seems ignored in production, add it there.
 - Google OAuth callback for production: https://crm-api.fastrack.school/api/auth/callback/google
   must be in the OAuth client's redirect URIs (plus the localhost:3101 one for dev).
 - AUTH_COOKIE_DOMAIN=fastrack.school is set so one session cookie covers both subdomains.
